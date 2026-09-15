@@ -1,24 +1,37 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from '@tanstack/react-router';
+import { AppShell } from '@/components/uos/AppShell';
+import { ReceptionModule } from '@/components/uos/ReceptionModule';
+import { AccountsModule } from '@/components/uos/AccountsModule';
+import { ReservationsModule } from '@/components/uos/ReservationsModule';
+import { GovernanceModule } from '@/components/uos/GovernanceModule';
+import { PmsProvider, usePms } from '@/lib/pms-store';
+import { Toaster } from 'sonner';
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute('/')({
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
 function Index() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
+    <PmsProvider>
+      <Toaster richColors position="top-right" />
+      <AppShell>
+        <ModuleSwitch />
+      </AppShell>
+    </PmsProvider>
   );
+}
+
+function ModuleSwitch() {
+  const { module } = usePms();
+  switch (module) {
+    case 'contas':
+      return <AccountsModule />;
+    case 'reservas':
+      return <ReservationsModule />;
+    case 'governanca':
+      return <GovernanceModule />;
+    default:
+      return <ReceptionModule />;
+  }
 }

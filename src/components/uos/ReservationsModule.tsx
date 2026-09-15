@@ -147,6 +147,7 @@ export function ReservationsModule() {
             />
           ) : selected ? (
             <ReservationDetail
+              key={selected.id}
               res={selected}
               rooms={rooms}
               onSave={(res) => {
@@ -206,8 +207,6 @@ function ReservationDetail({
   onOpenAccount: () => void;
 }) {
   const [draft, setDraft] = useState(res);
-  // sync when selection changes
-  if (draft.id !== res.id) setDraft(res);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">

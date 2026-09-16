@@ -258,7 +258,7 @@ export function ReservationModal({
       )}
 
       <Overlay onClose={onClose}>
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-3 shrink-0">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-indigo-500">Reserva · {draft.code}</p>
@@ -285,51 +285,185 @@ export function ReservationModal({
 
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             {tab === 'geral' && (
-              <>
-                <Section title="Período e acomodação">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <Field label="Check-in"><input type="date" disabled={!editable || isInHouse} value={draft.checkIn} onChange={(e) => setDraft({ ...draft, checkIn: e.target.value })} className={inputCls} /></Field>
-                    <Field label="Check-out"><input type="date" disabled={!editable} value={draft.checkOut} onChange={(e) => setDraft({ ...draft, checkOut: e.target.value })} className={inputCls} /></Field>
-                    <Field label="Adultos"><input type="number" min={1} disabled={!editable} value={draft.adults} onChange={(e) => setDraft({ ...draft, adults: Number(e.target.value) })} className={inputCls} /></Field>
-                    <Field label="Crianças"><input type="number" min={0} disabled={!editable} value={draft.children} onChange={(e) => setDraft({ ...draft, children: Number(e.target.value) })} className={inputCls} /></Field>
-                    <Field label="Tipo de UH">
-                      <select disabled={!editable || isInHouse} value={draft.roomType} onChange={(e) => setDraft({ ...draft, roomType: e.target.value as RoomType })} className={inputCls}>
-                        {ROOM_TYPES.map((t) => <option key={t}>{t}</option>)}
-                      </select>
-                    </Field>
-                    <Field label="UH">
-                      <select disabled={!editable || isInHouse} value={draft.roomId || ''} onChange={(e) => { const rm = rooms.find((r) => r.id === e.target.value); setDraft({ ...draft, roomId: rm?.id, roomNumber: rm?.number, roomType: (rm?.type as RoomType) || draft.roomType }); }} className={inputCls}>
-                        <option value="">Sem UH</option>
-                        {rooms.map((r) => <option key={r.id} value={r.id}>{r.number} · {r.type} ({OCCUPANCY_LABEL[r.occupancy]})</option>)}
-                      </select>
-                    </Field>
-                    <Field label="Canal / origem">
-                      <select disabled={!editable} value={draft.origin} onChange={(e) => setDraft({ ...draft, origin: e.target.value as Reservation['origin'] })} className={inputCls}>
-                        {ORIGINS.map((o) => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    </Field>
-                    <Field label="Status"><div className="h-10 flex items-center text-[13px] font-medium text-slate-700">{RES_STATUS_LABEL[draft.status]}</div></Field>
-                  </div>
-                </Section>
-                <Section title="Hóspede">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field label="Nome"><input disabled={!editable} value={draft.guestName} onChange={(e) => setDraft({ ...draft, guestName: e.target.value })} className={inputCls} /></Field>
-                    <Field label="Documento"><input disabled value={guest?.document || '—'} className={inputCls} /></Field>
-                    <Field label="Telefone"><input disabled value={guest?.phone || '—'} className={inputCls} /></Field>
-                    <Field label="E-mail"><input disabled value={guest?.email || '—'} className={inputCls} /></Field>
-                  </div>
-                </Section>
-                {room && (
-                  <Section title="Status da UH">
-                    <div className="flex flex-wrap gap-3 text-[13px]">
-                      <Info label="Ocupação" value={OCCUPANCY_LABEL[room.occupancy]} />
-                      <Info label="Governança" value={GOVERNANCE_LABEL[room.governance]} />
-                      <Info label="Camareira" value={room.housekeeper || '—'} />
-                      <Info label="NDP" value={room.dnd ? 'Ativo' : 'Não'} />
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                <div className="lg:col-span-8 space-y-4">
+                  <Section title="Dados gerais">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <Field label="Número"><input disabled value={draft.code} className={inputCls} /></Field>
+                      <Field label="Status"><div className="h-10 flex items-center text-[13px] font-medium text-slate-700">{RES_STATUS_LABEL[draft.status]}</div></Field>
+                      <Field label="Check-in"><input type="date" disabled={!editable || isInHouse} value={draft.checkIn} onChange={(e) => setDraft({ ...draft, checkIn: e.target.value })} className={inputCls} /></Field>
+                      <Field label="Horário CI"><input disabled={!editable || isInHouse} defaultValue="15:00" className={inputCls} /></Field>
+                      <Field label="Check-out"><input type="date" disabled={!editable} value={draft.checkOut} onChange={(e) => setDraft({ ...draft, checkOut: e.target.value })} className={inputCls} /></Field>
+                      <Field label="Horário CO"><input disabled={!editable} defaultValue="11:00" className={inputCls} /></Field>
+                      <Field label="Grupo"><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
+                      <Field label="Evento"><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
                     </div>
                   </Section>
-                )}
-              </>
+
+                  <Section title="Hóspede">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Field label="Nome"><input disabled={!editable} value={draft.guestName} onChange={(e) => setDraft({ ...draft, guestName: e.target.value })} className={inputCls} /></Field>
+                      <Field label="Documento / CPF"><input disabled value={guest?.document || '—'} className={inputCls} /></Field>
+                      <Field label="Cidade"><input disabled value="—" className={inputCls} /></Field>
+                      <Field label="CEP"><input disabled defaultValue="—" className={inputCls} /></Field>
+                    </div>
+                  </Section>
+
+                  <Section title="Reservante">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Field label="Nome"><input disabled={!editable} value={draft.guestName} className={inputCls} /></Field>
+                      <Field label="CPF"><input disabled value={guest?.document || '—'} className={inputCls} /></Field>
+                      <Field label="Fone 1"><input disabled value={guest?.phone || '—'} className={inputCls} /></Field>
+                      <Field label="Fone 2"><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
+                      <Field label="E-mail"><input disabled value={guest?.email || '—'} className={inputCls} /></Field>
+                    </div>
+                  </Section>
+
+                  <Section title="Acomodações">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <Field label="Tipo UH">
+                        <select disabled={!editable || isInHouse} value={draft.roomType} onChange={(e) => setDraft({ ...draft, roomType: e.target.value as RoomType })} className={inputCls}>
+                          {ROOM_TYPES.map((t) => <option key={t}>{t}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="UH">
+                        <select disabled={!editable || isInHouse} value={draft.roomId || ''} onChange={(e) => { const rm = rooms.find((r) => r.id === e.target.value); setDraft({ ...draft, roomId: rm?.id, roomNumber: rm?.number, roomType: (rm?.type as RoomType) || draft.roomType }); }} className={inputCls}>
+                          <option value="">Sem UH</option>
+                          {rooms.map((r) => <option key={r.id} value={r.id}>{r.number} · {r.type} ({OCCUPANCY_LABEL[r.occupancy]})</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Adultos"><input type="number" min={1} disabled={!editable} value={draft.adults} onChange={(e) => setDraft({ ...draft, adults: Number(e.target.value) })} className={inputCls} /></Field>
+                      <Field label="Crianças"><input type="number" min={0} disabled={!editable} value={draft.children} onChange={(e) => setDraft({ ...draft, children: Number(e.target.value) })} className={inputCls} /></Field>
+                    </div>
+                    {room && (
+                      <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
+                        <Info label="Ocupação" value={OCCUPANCY_LABEL[room.occupancy]} />
+                        <Info label="Governança" value={GOVERNANCE_LABEL[room.governance]} />
+                        <Info label="Andar" value={room.floor === 0 ? 'Térreo' : `${room.floor}º`} />
+                        <Info label="Bloco" value={room.block || '—'} />
+                        <Info label="NDP" value={room.dnd ? 'Ativo' : 'Não'} />
+                      </div>
+                    )}
+                  </Section>
+
+                  <Section title="Acompanhantes">
+                    <div className="rounded-xl border border-slate-200 overflow-hidden">
+                      <table className="w-full text-[12px]">
+                        <thead className="bg-slate-50 border-b border-slate-100">
+                          <tr className="text-left text-[10px] uppercase text-slate-400">
+                            <th className="px-3 py-2 font-semibold">Nome</th>
+                            <th className="px-3 py-2 font-semibold">Faixa etária</th>
+                            <th className="px-3 py-2 font-semibold">Incógnito</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          <tr>
+                            <td className="px-3 py-2 font-medium">{draft.guestName}</td>
+                            <td className="px-3 py-2 text-slate-500">Adulto</td>
+                            <td className="px-3 py-2 text-slate-400">N</td>
+                          </tr>
+                          {draft.adults > 1 && (
+                            <tr>
+                              <td className="px-3 py-2 text-slate-600">Acompanhante adulto</td>
+                              <td className="px-3 py-2 text-slate-500">Adulto</td>
+                              <td className="px-3 py-2 text-slate-400">N</td>
+                            </tr>
+                          )}
+                          {draft.children > 0 && (
+                            <tr>
+                              <td className="px-3 py-2 text-slate-600">Acompanhante criança</td>
+                              <td className="px-3 py-2 text-slate-500">Criança</td>
+                              <td className="px-3 py-2 text-slate-400">N</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Section>
+
+                  <Section title="Mais informações">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <Field label="Segmento mercado">
+                        <select disabled={!editable} defaultValue="particular" className={inputCls}>
+                          <option value="particular">Particular</option>
+                          <option value="corporativo">Corporativo</option>
+                          <option value="evento">Evento</option>
+                        </select>
+                      </Field>
+                      <Field label="Origem / canal">
+                        <select disabled={!editable} value={draft.origin} onChange={(e) => setDraft({ ...draft, origin: e.target.value as Reservation['origin'] })} className={inputCls}>
+                          {ORIGINS.map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Tipo hóspede">
+                        <select disabled={!editable} defaultValue="particular" className={inputCls}>
+                          <option value="particular">Particular</option>
+                          <option value="vip">VIP</option>
+                          <option value="staff">Staff</option>
+                        </select>
+                      </Field>
+                      <Field label="Meio comunicação">
+                        <select disabled={!editable} defaultValue="balcao" className={inputCls}>
+                          <option value="balcao">Balcão do hotel</option>
+                          <option value="telefone">Telefone</option>
+                          <option value="email">E-mail</option>
+                          <option value="site">Site</option>
+                          <option value="ota">OTA</option>
+                        </select>
+                      </Field>
+                    </div>
+                  </Section>
+                </div>
+
+                <div className="lg:col-span-4 space-y-4">
+                  <Section title="Tarifário / valor previsto">
+                    <div className="space-y-3">
+                      <Field label="Valor total (R$)">
+                        <input type="number" disabled={!editable} value={draft.totalAmount} onChange={(e) => setDraft({ ...draft, totalAmount: Number(e.target.value) })} className={inputCls} />
+                      </Field>
+                      <Field label="Já pago (R$)">
+                        <input type="number" disabled={!editable} value={draft.paidAmount} onChange={(e) => setDraft({ ...draft, paidAmount: Number(e.target.value) })} className={inputCls} />
+                      </Field>
+                      <Field label="Saldo">
+                        <div className={cn('h-10 flex items-center text-[13px] font-semibold', balance > 0.01 ? 'text-rose-600' : 'text-emerald-600')}>{formatBRL(balance)}</div>
+                      </Field>
+                      <Field label="Pensão">
+                        <select disabled={!editable} defaultValue="meia_almoco" className={inputCls}>
+                          <option value="apenas">Apenas hospedagem</option>
+                          <option value="cafe">Café da manhã</option>
+                          <option value="meia_almoco">Meia pensão — almoço</option>
+                          <option value="meia_jantar">Meia pensão — jantar</option>
+                          <option value="completa">Pensão completa</option>
+                          <option value="ai">All inclusive</option>
+                        </select>
+                      </Field>
+                      <Field label="Desconto (%)">
+                        <input type="number" disabled={!editable} defaultValue={0} className={inputCls} />
+                      </Field>
+                      <label className="flex items-center gap-2 text-[13px] text-slate-700">
+                        <input type="checkbox" disabled={!editable} defaultChecked className="rounded border-slate-300" />
+                        Garante no-show
+                      </label>
+                      <label className="flex items-center gap-2 text-[13px] text-slate-700">
+                        <input type="checkbox" disabled={!editable} className="rounded border-slate-300" />
+                        Cobrar taxa de turismo
+                      </label>
+                    </div>
+                  </Section>
+
+                  <Section title="Empresa / agente">
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-2 text-[13px] text-slate-700">
+                        <input type="checkbox" disabled={!editable} className="rounded border-slate-300" />
+                        Hospedagem por empresa
+                      </label>
+                      <Field label="Empresa"><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
+                      <Field label="Agente"><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
+                      <Field label="Voucher empr."><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
+                    </div>
+                  </Section>
+                </div>
+              </div>
             )}
 
             {tab === 'valores' && (
@@ -366,28 +500,11 @@ export function ReservationModal({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-[13px] font-semibold text-slate-800">Voucher do hóspede</p>
-                    <p className="text-[12px] text-slate-500">Documento oficial da reserva — abrir ou salvar como PDF</p>
+                    <p className="text-[12px] text-slate-500">Documento oficial da reserva</p>
                   </div>
                   <button type="button" onClick={openVoucherPdf} className="h-9 px-3 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5">
                     <Ticket className="w-3.5 h-3.5" /> Abrir voucher (PDF)
                   </button>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm text-[13px]">
-                  <div className="flex justify-between items-start border-b border-slate-100 pb-3 mb-3">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">{hotel.name}</p>
-                      <p className="text-lg font-semibold text-slate-900">VOUCHER DE HOSPEDAGEM</p>
-                    </div>
-                    <p className="font-mono text-[12px] text-slate-500">{draft.code}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><p className="text-[10px] uppercase text-slate-400">Hóspede</p><p className="font-medium">{draft.guestName}</p></div>
-                    <div><p className="text-[10px] uppercase text-slate-400">Documento</p><p className="font-medium">{guest?.document || '—'}</p></div>
-                    <div><p className="text-[10px] uppercase text-slate-400">Check-in</p><p className="font-medium">{formatDateBR(draft.checkIn)}</p></div>
-                    <div><p className="text-[10px] uppercase text-slate-400">Check-out</p><p className="font-medium">{formatDateBR(draft.checkOut)}</p></div>
-                    <div><p className="text-[10px] uppercase text-slate-400">UH / Tipo</p><p className="font-medium">{draft.roomNumber || '—'} · {draft.roomType}</p></div>
-                    <div><p className="text-[10px] uppercase text-slate-400">Valor</p><p className="font-medium">{formatBRL(draft.totalAmount)}</p></div>
-                  </div>
                 </div>
               </div>
             )}
@@ -396,7 +513,7 @@ export function ReservationModal({
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-[13px] font-semibold text-slate-800">Documentos da reserva</p>
-                  <button type="button" onClick={() => toast.message('Upload de documento (em breve)')} className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50">
+                  <button type="button" onClick={() => toast.message('Upload (em breve)')} className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] font-medium inline-flex items-center gap-1.5">
                     <Paperclip className="w-3.5 h-3.5" /> Anexar
                   </button>
                 </div>
@@ -412,23 +529,12 @@ export function ReservationModal({
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {docs.map((d) => (
-                        <tr key={d.id} className="hover:bg-slate-50/80">
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-slate-400 shrink-0" />
-                              <div>
-                                <p className="font-medium text-slate-800">{d.name}</p>
-                                <p className="text-[10px] text-slate-400">{d.size}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5 text-slate-600">{d.type}</td>
+                        <tr key={d.id}>
+                          <td className="px-3 py-2.5"><div className="flex items-center gap-2"><FileText className="w-4 h-4 text-slate-400" /><div><p className="font-medium">{d.name}</p><p className="text-[10px] text-slate-400">{d.size}</p></div></div></td>
+                          <td className="px-3 py-2.5">{d.type}</td>
                           <td className="px-3 py-2.5 text-slate-500"><p>{d.uploadedAt}</p><p className="text-[10px]">{d.uploadedBy}</p></td>
                           <td className="px-3 py-2.5 text-right">
-                            <div className="inline-flex gap-1">
-                              <button type="button" onClick={() => (d.type === 'Voucher' ? openVoucherPdf() : toast.message(`Visualizar ${d.name} (mock)`))} className="h-7 w-7 rounded-lg border border-slate-200 inline-flex items-center justify-center hover:bg-white"><Eye className="w-3.5 h-3.5" /></button>
-                              <button type="button" onClick={() => toast.message(`Download ${d.name} (mock)`)} className="h-7 w-7 rounded-lg border border-slate-200 inline-flex items-center justify-center hover:bg-white"><Download className="w-3.5 h-3.5" /></button>
-                            </div>
+                            <button type="button" onClick={() => (d.type === 'Voucher' ? openVoucherPdf() : toast.message(d.name))} className="h-7 w-7 rounded-lg border inline-flex items-center justify-center"><Eye className="w-3.5 h-3.5" /></button>
                           </td>
                         </tr>
                       ))}
@@ -451,8 +557,8 @@ export function ReservationModal({
                       <div className="absolute left-[-13px] top-1.5 h-2.5 w-2.5 rounded-full bg-indigo-500 ring-2 ring-white" />
                       <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
                         <div className="flex flex-wrap items-baseline justify-between gap-1">
-                          <p className="text-[13px] font-semibold text-slate-800">{l.action}</p>
-                          <p className="text-[11px] text-slate-400 tabular-nums">{l.at}</p>
+                          <p className="text-[13px] font-semibold">{l.action}</p>
+                          <p className="text-[11px] text-slate-400">{l.at}</p>
                         </div>
                         <p className="text-[12px] text-slate-600 mt-0.5">{l.detail}</p>
                         <p className="text-[11px] text-slate-400 mt-1">por {l.user}</p>
@@ -466,17 +572,17 @@ export function ReservationModal({
 
           <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex flex-wrap gap-2 shrink-0">
             {editable && (
-              <button type="button" onClick={save} className="h-9 px-3 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-indigo-500">
+              <button type="button" onClick={save} className="h-9 px-3 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5">
                 <Save className="w-3.5 h-3.5" /> Salvar
               </button>
             )}
-            <button type="button" onClick={() => setShowAccount(true)} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50">
+            <button type="button" onClick={() => setShowAccount(true)} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5">
               <Wallet className="w-3.5 h-3.5" /> Conta
             </button>
-            <button type="button" onClick={openVoucherPdf} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50">
+            <button type="button" onClick={openVoucherPdf} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5">
               <Ticket className="w-3.5 h-3.5" /> Voucher
             </button>
-            <button type="button" onClick={() => { markFnrh(draft.id); setDraft({ ...draft, fnrhFilled: true }); toast.success('FNRH marcada'); }} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50">
+            <button type="button" onClick={() => { markFnrh(draft.id); setDraft({ ...draft, fnrhFilled: true }); toast.success('FNRH marcada'); }} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5" /> FNRH
             </button>
             {canCheckIn && (
@@ -490,11 +596,11 @@ export function ReservationModal({
               </button>
             )}
             {editable && !isInHouse && (
-              <button type="button" onClick={() => { if (window.confirm('Cancelar esta reserva?')) { cancelReservation(draft.id); toast.message('Reserva cancelada'); onClose(); } }} className="h-9 px-3 rounded-lg border border-rose-200 text-rose-700 text-[13px] hover:bg-rose-50 ml-auto">
+              <button type="button" onClick={() => { if (window.confirm('Cancelar esta reserva?')) { cancelReservation(draft.id); toast.message('Reserva cancelada'); onClose(); } }} className="h-9 px-3 rounded-lg border border-rose-200 text-rose-700 text-[13px] ml-auto">
                 Cancelar
               </button>
             )}
-            <button type="button" onClick={onClose} className="h-9 px-3 rounded-lg text-[13px] text-slate-600 hover:bg-slate-100">Fechar</button>
+            <button type="button" onClick={onClose} className="h-9 px-3 rounded-lg text-[13px] text-slate-600">Fechar</button>
           </div>
         </div>
       </Overlay>
@@ -504,17 +610,14 @@ export function ReservationModal({
 
 function buildVoucherHtml(r: Reservation, hotelName: string, document?: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Voucher ${r.code}</title>
-<style>body{font-family:system-ui,sans-serif;padding:32px;color:#0f172a;max-width:640px;margin:0 auto}h1{font-size:20px;margin:0 0 4px}.muted{color:#64748b;font-size:12px}.box{border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-top:16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.lbl{font-size:10px;text-transform:uppercase;color:#94a3b8}.val{font-size:14px;font-weight:600;margin-top:2px}</style></head><body>
+<style>body{font-family:system-ui,sans-serif;padding:32px;color:#0f172a;max-width:640px;margin:0 auto}h1{font-size:20px}.muted{color:#64748b;font-size:12px}.box{border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-top:16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.lbl{font-size:10px;text-transform:uppercase;color:#94a3b8}.val{font-size:14px;font-weight:600}</style></head><body>
 <p class="muted">${hotelName}</p><h1>Voucher de hospedagem</h1><p class="muted">Reserva ${r.code}</p>
 <div class="box"><div class="grid">
 <div><div class="lbl">Hóspede</div><div class="val">${r.guestName}</div></div>
 <div><div class="lbl">Documento</div><div class="val">${document || '—'}</div></div>
 <div><div class="lbl">Check-in</div><div class="val">${formatDateBR(r.checkIn)}</div></div>
 <div><div class="lbl">Check-out</div><div class="val">${formatDateBR(r.checkOut)}</div></div>
-<div><div class="lbl">UH / Tipo</div><div class="val">${r.roomNumber || '—'} · ${r.roomType}</div></div>
-<div><div class="lbl">Valor</div><div class="val">${formatBRL(r.totalAmount)}</div></div>
-</div></div>
-<p class="muted" style="margin-top:24px">UOS PMS · ${new Date().toLocaleString('pt-BR')}</p></body></html>`;
+</div></div></body></html>`;
 }
 
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {

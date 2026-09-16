@@ -44,6 +44,7 @@ export function ReceptionModule() {
   const [chartDays, setChartDays] = useState(14);
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferRoomId, setTransferRoomId] = useState('');
+  const [onlyPreCI, setOnlyPreCI] = useState(false);
   const today = hotel.operationalDate;
 
   const arrivals = useMemo(
@@ -65,17 +66,22 @@ export function ReceptionModule() {
   const occupied = rooms.filter((r) => r.occupancy === 'ocupado').length;
   const sellable = rooms.filter((r) => r.occupancy !== 'bloqueado').length;
   const occPct = sellable > 0 ? ((occupied / sellable) * 100).toFixed(2) : '0.00';
+  const arrivalAdults = arrivals.reduce((s, r) => s + r.adults, 0);
+  const arrivalChildren = arrivals.reduce((s, r) => s + r.children, 0);
+  const totalPax = inHouse.reduce((s, r) => s + r.adults + r.children, 0);
 
   const filteredArrivals = useMemo(() => {
+    let list = arrivals;
+    if (onlyPreCI) list = list.filter((r) => r.fnrhFilled);
     const query = q.trim().toLowerCase();
-    if (!query) return arrivals;
-    return arrivals.filter(
+    if (!query) return list;
+    return list.filter(
       (r) =>
         r.guestName.toLowerCase().includes(query) ||
         r.code.toLowerCase().includes(query) ||
         (r.roomNumber || '').toLowerCase().includes(query)
     );
-  }, [arrivals, q]);
+  }, [arrivals, q, onlyPreCI]);
 
   const filteredInHouse = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -248,42 +254,108 @@ export function ReceptionModule() {
         </div>
       </div>
 
-      {tab !== 'chart' && (
+      {tab === 'hospedados' && (
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder={tab === 'checkins' ? 'Buscar reserva…' : 'Buscar hóspede, UH ou reserva…'}
+            placeholder="Buscar hóspede, UH ou reserva…"
             className="w-full h-10 rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-[13px] outline-none focus:ring-2 focus:ring-indigo-500/20"
           />
         </div>
       )}
 
       {tab === 'checkins' && (
-        <div className="space-y-3">
+        <div className="flex flex-col pb-36 space-y-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 text-[12px]">
+              <label className="space-y-0.5">
+                <span className="text-[10px] uppercase text-slate-400 font-semibold">Reserva</span>
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Nº / hóspede / UH"
+                  className="w-full h-8 rounded-lg border border-slate-200 px-2 outline-none focus:ring-1 focus:ring-indigo-400"
+                />
+              </label>
+              <label className="space-y-0.5">
+                <span className="text-[10px] uppercase text-slate-400 font-semibold">Período CI</span>
+                <input
+                  type="date"
+                  value={today}
+                  disabled
+                  className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-slate-50 text-slate-600"
+                />
+              </label>
+              <label className="space-y-0.5">
+                <span className="text-[10px] uppercase text-slate-400 font-semibold">UH</span>
+                <select className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white">
+                  <option>Todos</option>
+                  {rooms.map((r) => (
+                    <option key={r.id}>{r.number}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-0.5">
+                <span className="text-[10px] uppercase text-slate-400 font-semibold">Tipo UH</span>
+                <select className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white">
+                  <option>Todos</option>
+                  <option>Standard</option>
+                  <option>Superior</option>
+                  <option>Suite</option>
+                </select>
+              </label>
+              <label className="space-y-0.5">
+                <span className="text-[10px] uppercase text-slate-400 font-semibold">Canal</span>
+                <select className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white">
+                  <option>Todos</option>
+                  <option>direto</option>
+                  <option>booking</option>
+                  <option>expedia</option>
+                  <option>telefone</option>
+                  <option>walkin</option>
+                </select>
+              </label>
+              <div className="flex items-end">
+                <label className="inline-flex items-center gap-2 h-8 text-[12px] text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={onlyPreCI}
+                    onChange={(e) => setOnlyPreCI(e.target.checked)}
+                    className="rounded border-slate-300"
+                  />
+                  Somente com Pré-CI
+                </label>
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/80 text-[12px] font-semibold text-slate-600">
-              Check-ins previstos · {filteredArrivals.length}
+              Check-ins previstos e pré-check-ins · {filteredArrivals.length}
             </div>
-            <div className="overflow-x-auto max-h-[380px]">
-              <table className="w-full text-[12px]">
+            <div className="overflow-x-auto max-h-[calc(100vh-420px)]">
+              <table className="w-full text-[12px] min-w-max">
                 <thead className="sticky top-0 bg-white z-10">
                   <tr className="text-left text-[10px] uppercase tracking-wider text-slate-400 border-b">
-                    <th className="px-3 py-2">Reserva</th>
-                    <th className="px-3 py-2">Hóspede</th>
-                    <th className="px-3 py-2">UH</th>
-                    <th className="px-3 py-2">Pré-CI</th>
-                    <th className="px-3 py-2">AD/CH</th>
-                    <th className="px-3 py-2">Período</th>
-                    <th className="px-3 py-2">Gov.</th>
-                    <th className="px-3 py-2 text-right">Ações</th>
+                    <th className="px-3 py-2 whitespace-nowrap">Reserva</th>
+                    <th className="px-3 py-2 whitespace-nowrap">Nome hóspede</th>
+                    <th className="px-3 py-2 whitespace-nowrap">Tipo UH</th>
+                    <th className="px-3 py-2 whitespace-nowrap">UH</th>
+                    <th className="px-3 py-2 whitespace-nowrap">Pré-CI</th>
+                    <th className="px-3 py-2 whitespace-nowrap">AD/CH</th>
+                    <th className="px-3 py-2 whitespace-nowrap">Check-in</th>
+                    <th className="px-3 py-2 whitespace-nowrap">Check-out</th>
+                    <th className="px-3 py-2 whitespace-nowrap">Canal</th>
+                    <th className="px-3 py-2 whitespace-nowrap">Governança</th>
+                    <th className="px-3 py-2 text-right whitespace-nowrap">Check-in</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {filteredArrivals.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                      <td colSpan={11} className="px-4 py-12 text-center text-slate-400">
                         Nenhum check-in previsto para hoje
                       </td>
                     </tr>
@@ -300,15 +372,28 @@ export function ReceptionModule() {
                           onDoubleClick={() => setModalResId(r.id)}
                           className={cn('cursor-pointer', active ? 'bg-indigo-50' : 'hover:bg-slate-50')}
                         >
-                          <td className="px-3 py-2 font-mono text-[11px]">{r.code.replace('RSV-', '')}</td>
-                          <td className="px-3 py-2 font-medium max-w-[160px] truncate">{r.guestName}</td>
-                          <td className="px-3 py-2 font-semibold">{r.roomNumber || '—'}</td>
-                          <td className="px-3 py-2">{r.fnrhFilled ? 'SIM' : 'NÃO'}</td>
-                          <td className="px-3 py-2">{r.adults}/{r.children}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {formatDateBR(r.checkIn)} → {formatDateBR(r.checkOut)}
+                          <td className="px-3 py-2 font-mono text-[11px] whitespace-nowrap">
+                            {r.code.replace('RSV-', '')}
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-2 font-medium whitespace-nowrap max-w-[200px] truncate">
+                            {r.guestName}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-slate-600">{r.roomType}</td>
+                          <td className="px-3 py-2 font-semibold whitespace-nowrap">{r.roomNumber || '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {r.fnrhFilled ? (
+                              <span className="text-emerald-600 font-semibold">SIM</span>
+                            ) : (
+                              <span className="text-slate-400">NÃO</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {r.adults}/{r.children}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">{formatDateBR(r.checkIn)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{formatDateBR(r.checkOut)}</td>
+                          <td className="px-3 py-2 capitalize whitespace-nowrap text-slate-500">{r.origin}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">
                             {room ? (
                               <span className={!ready ? 'text-rose-600 font-semibold' : 'text-emerald-600'}>
                                 {GOVERNANCE_LABEL[room.governance]}
@@ -335,51 +420,76 @@ export function ReceptionModule() {
               </table>
             </div>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-            <div className="lg:col-span-5 rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 p-4 text-[13px] space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Previsões do dia · {formatDateBR(today)}
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <span className="text-slate-400">Check-in</span>
-                <span className="font-semibold text-right">{arrivals.length}</span>
-                <span className="text-slate-400">Check-out</span>
-                <span className="font-semibold text-right">{departures.length}</span>
-                <span className="text-slate-400">In-house</span>
-                <span className="font-semibold text-right">{inHouse.length}</span>
-                <span className="text-slate-400">Ocupação</span>
-                <span className="font-semibold text-right text-indigo-300">
-                  {occupied}/{sellable} · {occPct}%
-                </span>
-              </div>
-            </div>
-            <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Reserva selecionada</p>
-              {selectedRes && selectedRes.status !== 'checkin' ? (
-                <div className="text-[13px] space-y-2">
-                  <p className="font-semibold">{selectedRes.guestName}</p>
-                  <p className="text-slate-500">
-                    {selectedRes.code} · {selectedRes.roomNumber || selectedRes.roomType} ·{' '}
-                    {formatDateBR(selectedRes.checkIn)} → {formatDateBR(selectedRes.checkOut)}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setModalResId(selectedRes.id)}
-                      className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] font-medium"
-                    >
-                      Abrir reserva
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => doCheckIn(selectedRes.id)}
-                      className="h-8 px-3 rounded-lg bg-indigo-600 text-white text-[12px] font-semibold"
-                    >
-                      Check-in
-                    </button>
-                  </div>
+
+          <div className="fixed bottom-0 left-[232px] right-0 z-30 border-t border-slate-700 bg-slate-900 text-slate-100 text-[12px] shadow-[0_-8px_30px_rgba(0,0,0,0.25)]">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-slate-700">
+              <div className="lg:col-span-3 p-3 space-y-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Previsões do dia</p>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                  <span className="text-slate-400">Check-in · UHs</span>
+                  <span className="font-semibold text-right">{arrivals.length}</span>
+                  <span className="text-slate-400">Adultos</span>
+                  <span className="font-semibold text-right">{arrivalAdults}</span>
+                  <span className="text-slate-400">Crianças</span>
+                  <span className="font-semibold text-right">{arrivalChildren}</span>
+                  <span className="text-slate-400">Check-out · UHs</span>
+                  <span className="font-semibold text-right">{departures.length}</span>
                 </div>
-              ) : null}
+              </div>
+              <div className="lg:col-span-3 p-3 space-y-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ocupação</p>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                  <span className="text-slate-400">Qtd UHs</span>
+                  <span className="font-semibold text-right">{sellable}</span>
+                  <span className="text-slate-400">Ocupadas</span>
+                  <span className="font-semibold text-right">{occupied} · {occPct}%</span>
+                  <span className="text-slate-400">In-house</span>
+                  <span className="font-semibold text-right">{inHouse.length}</span>
+                  <span className="text-slate-400">Total pax</span>
+                  <span className="font-semibold text-right">{totalPax}</span>
+                </div>
+              </div>
+              <div className="lg:col-span-6 p-3 space-y-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Observação da reserva selecionada
+                </p>
+                {selectedRes && selectedRes.status !== 'checkin' ? (
+                  <div className="space-y-1">
+                    <p className="font-semibold">
+                      {selectedRes.guestName}{' '}
+                      <span className="font-mono font-normal text-slate-400">
+                        · {selectedRes.code.replace('RSV-', '')}
+                      </span>
+                    </p>
+                    <p className="text-slate-300">
+                      {selectedRes.roomNumber || selectedRes.roomType} · {formatDateBR(selectedRes.checkIn)} →{' '}
+                      {formatDateBR(selectedRes.checkOut)} · {selectedRes.adults} AD / {selectedRes.children} CH ·
+                      Canal <span className="capitalize">{selectedRes.origin}</span>
+                    </p>
+                    <p className="text-slate-400 line-clamp-2">
+                      {selectedRes.notes || 'Sem observações registradas.'}
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setModalResId(selectedRes.id)}
+                        className="h-7 px-2.5 rounded-lg bg-white text-slate-900 text-[11px] font-semibold"
+                      >
+                        Abrir reserva
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => doCheckIn(selectedRes.id)}
+                        className="h-7 px-2.5 rounded-lg bg-indigo-500 text-white text-[11px] font-semibold"
+                      >
+                        Check-in
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-slate-500">Selecione uma reserva na lista</p>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -474,19 +584,13 @@ export function ReceptionModule() {
                             active ? 'bg-indigo-50' : 'hover:bg-slate-50'
                           )}
                         >
-                          <td className="px-3 py-2 font-semibold whitespace-nowrap">
-                            {r.roomNumber || '—'}
-                          </td>
+                          <td className="px-3 py-2 font-semibold whitespace-nowrap">{r.roomNumber || '—'}</td>
                           <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{r.roomType}</td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             {room ? (room.floor === 0 ? 'Térreo' : `${room.floor}º`) : '—'}
                           </td>
-                          <td className="px-3 py-2 text-slate-600 whitespace-nowrap">
-                            {room?.block || '—'}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-blue-700 font-medium">
-                            Ocupada
-                          </td>
+                          <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{room?.block || '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-blue-700 font-medium">Ocupada</td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             {room ? GOVERNANCE_LABEL[room.governance] : '—'}
                           </td>
@@ -510,14 +614,10 @@ export function ReceptionModule() {
                           <td className="px-3 py-2 whitespace-nowrap">
                             {formatDateBR(r.checkOut)}
                             {r.checkOut === today && (
-                              <span className="ml-1 text-amber-600 font-semibold text-[10px]">
-                                HOJE
-                              </span>
+                              <span className="ml-1 text-amber-600 font-semibold text-[10px]">HOJE</span>
                             )}
                           </td>
-                          <td className="px-3 py-2 capitalize text-slate-500 whitespace-nowrap">
-                            {r.origin}
-                          </td>
+                          <td className="px-3 py-2 capitalize text-slate-500 whitespace-nowrap">{r.origin}</td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             {room?.dnd ? (
                               <span className="text-rose-600 font-semibold">S</span>
@@ -525,9 +625,7 @@ export function ReceptionModule() {
                               <span className="text-slate-300">N</span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-slate-500 whitespace-nowrap text-[11px]">
-                            {empresa}
-                          </td>
+                          <td className="px-3 py-2 text-slate-500 whitespace-nowrap text-[11px]">{empresa}</td>
                         </tr>
                       );
                     })
@@ -562,9 +660,7 @@ export function ReceptionModule() {
                       </p>
                       <p>
                         <span className="text-slate-400">Nº reserva:</span>{' '}
-                        <span className="font-semibold">
-                          {selectedRes.code.replace('RSV-', '')}
-                        </span>
+                        <span className="font-semibold">{selectedRes.code.replace('RSV-', '')}</span>
                       </p>
                       <p>
                         <span className="text-slate-400">UH:</span>{' '}
@@ -575,9 +671,7 @@ export function ReceptionModule() {
                       <p>
                         <span className="text-slate-400">Andar / bloco:</span>{' '}
                         {room
-                          ? `${room.floor === 0 ? 'Térreo' : room.floor + 'º'} · ${
-                              room.block || '—'
-                            }`
+                          ? `${room.floor === 0 ? 'Térreo' : room.floor + 'º'} · ${room.block || '—'}`
                           : '—'}
                       </p>
                       <p>
@@ -686,16 +780,11 @@ export function ReceptionModule() {
             <table className="border-collapse text-[10px] min-w-max">
               <thead className="sticky top-0 z-20 bg-slate-900 text-slate-200">
                 <tr>
-                  <th className="sticky left-0 z-30 bg-slate-900 px-3 py-2 text-left min-w-[120px]">
-                    UH
-                  </th>
+                  <th className="sticky left-0 z-30 bg-slate-900 px-3 py-2 text-left min-w-[120px]">UH</th>
                   {chartDates.map((d) => {
                     const [, m, day] = d.split('-');
                     return (
-                      <th
-                        key={d}
-                        className="px-1 py-2 text-center min-w-[34px] border-l border-white/10"
-                      >
+                      <th key={d} className="px-1 py-2 text-center min-w-[34px] border-l border-white/10">
                         {day}/{m}
                       </th>
                     );
@@ -707,19 +796,14 @@ export function ReceptionModule() {
                   .sort((a, b) => a.number.localeCompare(b.number, 'pt-BR', { numeric: true }))
                   .map((room) => (
                     <tr key={room.id} className="border-t border-slate-100">
-                      <td className="sticky left-0 bg-white px-3 py-1 font-medium border-r">
-                        {room.number}
-                      </td>
+                      <td className="sticky left-0 bg-white px-3 py-1 font-medium border-r">{room.number}</td>
                       {chartDates.map((d) => {
                         const cell = cellInfo(room, d);
                         return (
                           <td
                             key={d}
                             title={cell.title}
-                            className={cn(
-                              'px-0.5 py-1 text-center font-bold min-w-[34px]',
-                              cell.cls
-                            )}
+                            className={cn('px-0.5 py-1 text-center font-bold min-w-[34px]', cell.cls)}
                           >
                             {cell.label}
                           </td>

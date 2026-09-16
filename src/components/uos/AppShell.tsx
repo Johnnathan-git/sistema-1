@@ -19,7 +19,7 @@ const NAV: {
   {
     section: 'Recepção',
     items: [
-      { id: 'recepcao', label: 'Front Desk', icon: DoorOpen },
+      { id: 'recepcao', label: 'Recepção', icon: DoorOpen },
       { id: 'contas', label: 'Contas', icon: Wallet },
     ],
   },
@@ -47,7 +47,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const titles: Record<ModuleId, { title: string; subtitle: string }> = {
     recepcao: {
-      title: 'Front Desk',
+      title: 'Recepção',
       subtitle: 'Operação do dia · chegadas, hospedados e saídas',
     },
     contas: {

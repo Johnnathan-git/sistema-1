@@ -36,8 +36,8 @@ const NAV: {
 export function AppShell({ children }: { children: ReactNode }) {
   const { hotel, module, setModule, rooms, reservations } = usePms();
 
-  const occupied = rooms.filter((r) => r.status === 'ocupado').length;
-  const sellable = rooms.filter((r) => r.status !== 'interditado' && r.status !== 'manutencao').length;
+  const occupied = rooms.filter((r) => r.occupancy === 'ocupado').length;
+  const sellable = rooms.filter((r) => r.occupancy !== 'bloqueado').length;
   const occPct = sellable > 0 ? Math.round((occupied / sellable) * 100) : 0;
   const arrivalsToday = reservations.filter(
     (r) =>
@@ -60,13 +60,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     },
     governanca: {
       title: 'Governança',
-      subtitle: 'Status de UH · limpeza, interdição e manutenção',
+      subtitle: 'Ocupação · arrumação · camareira · bloqueio e histórico',
     },
   };
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f4f5f7] text-slate-900 antialiased">
-      {/* Sidebar — estilo cloud PMS */}
       <aside className="w-[232px] shrink-0 bg-[#0f172a] text-slate-300 flex flex-col">
         <div className="px-4 py-5 border-b border-white/5">
           <div className="flex items-center gap-3">
@@ -158,7 +157,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-[56px] shrink-0 bg-white border-b border-slate-200/80 px-5 flex items-center gap-4">
           <div className="flex-1 max-w-lg relative">

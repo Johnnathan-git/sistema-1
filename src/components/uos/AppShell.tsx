@@ -66,16 +66,16 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#eef1f6] text-slate-900 antialiased">
-      {/* Sidebar neutra — azul ficou no rodapé operacional */}
-      <aside className="w-[232px] shrink-0 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800">
+      {/* Cinza neutro puro — sem tom azul (azul só no rodapé operacional) */}
+      <aside className="w-[232px] shrink-0 bg-[#1a1a1a] text-neutral-300 flex flex-col border-r border-neutral-800">
         <div className="px-4 py-5 border-b border-white/5">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-slate-700 text-white flex items-center justify-center font-bold text-[13px] tracking-tight">
+            <div className="h-9 w-9 rounded-lg bg-neutral-700 text-white flex items-center justify-center font-bold text-[13px] tracking-tight">
               UOS
             </div>
             <div className="leading-tight min-w-0">
               <p className="font-semibold text-white text-sm tracking-tight">UOS</p>
-              <p className="text-[10px] text-slate-500 uppercase tracking-[0.12em]">
+              <p className="text-[10px] text-neutral-500 uppercase tracking-[0.12em]">
                 Property Management
               </p>
             </div>
@@ -85,21 +85,21 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="px-3 py-3 border-b border-white/5">
           <div className="rounded-xl bg-white/5 border border-white/5 px-3 py-2.5">
             <div className="flex items-center gap-2">
-              <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <Building2 className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
               <div className="min-w-0">
-                <p className="text-[9px] uppercase tracking-[0.14em] text-slate-500 font-medium">
+                <p className="text-[9px] uppercase tracking-[0.14em] text-neutral-500 font-medium">
                   Propriedade
                 </p>
                 <p className="text-[13px] font-medium text-white truncate">{hotel.name}</p>
               </div>
             </div>
             <div className="mt-2.5 flex items-center justify-between text-[11px]">
-              <span className="text-slate-500">Ocupação</span>
-              <span className="font-semibold text-slate-200">{occPct}%</span>
+              <span className="text-neutral-500">Ocupação</span>
+              <span className="font-semibold text-neutral-200">{occPct}%</span>
             </div>
             <div className="mt-1 h-1 rounded-full bg-white/10 overflow-hidden">
               <div
-                className="h-full rounded-full bg-slate-400 transition-all"
+                className="h-full rounded-full bg-neutral-400 transition-all"
                 style={{ width: `${occPct}%` }}
               />
             </div>
@@ -109,7 +109,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-5">
           {NAV.map((group) => (
             <div key={group.section}>
-              <p className="px-2.5 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              <p className="px-2.5 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">
                 {group.section}
               </p>
               <ul className="space-y-0.5">
@@ -124,8 +124,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                         className={cn(
                           'w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-all text-left',
                           active
-                            ? 'bg-slate-700 text-white font-medium'
-                            : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                            ? 'bg-neutral-700 text-white font-medium'
+                            : 'text-neutral-400 hover:bg-white/5 hover:text-neutral-200'
                         )}
                       >
                         <Icon className="w-4 h-4 shrink-0 opacity-90" />
@@ -146,14 +146,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <div className="p-3 border-t border-white/5">
           <div className="flex items-center gap-2 px-2 py-1.5">
-            <div className="h-7 w-7 rounded-full bg-slate-700 text-slate-200 flex items-center justify-center text-[11px] font-bold">
+            <div className="h-7 w-7 rounded-full bg-neutral-700 text-neutral-200 flex items-center justify-center text-[11px] font-bold">
               JH
             </div>
             <div className="min-w-0">
               <p className="text-[12px] text-white font-medium truncate">Operador</p>
-              <p className="text-[10px] text-slate-500">Recepção</p>
+              <p className="text-[10px] text-neutral-500">Recepção</p>
             </div>
-            <Settings className="w-3.5 h-3.5 text-slate-500 ml-auto" />
+            <Settings className="w-3.5 h-3.5 text-neutral-500 ml-auto" />
           </div>
         </div>
       </aside>

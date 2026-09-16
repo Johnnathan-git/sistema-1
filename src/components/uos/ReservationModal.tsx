@@ -23,8 +23,11 @@ import {
   LogIn,
   LogOut,
   Paperclip,
+  Pencil,
+  Plus,
   Save,
   Ticket,
+  Trash2,
   Wallet,
   X,
 } from 'lucide-react';
@@ -36,6 +39,7 @@ const inputCls =
   'w-full h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px] outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 disabled:bg-slate-50 disabled:text-slate-500';
 
 type ModalTab = 'geral' | 'valores' | 'obs' | 'pensoes' | 'voucher' | 'documentos' | 'logs';
+type Companion = { id: string; name: string; ageGroup: 'Adulto' | 'Criança' | 'Bebê'; incognito: boolean };
 
 function mockDocs(res: Reservation) {
   return [
@@ -67,26 +71,30 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
   const [showAccount, setShowAccount] = useState(false);
   const [showFicha, setShowFicha] = useState(false);
   const [vehiclePlate, setVehiclePlate] = useState('');
+  const [companions, setCompanions] = useState<Companion[]>([]);
+  const [editingCompId, setEditingCompId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (res) setDraft({ ...res });
+    if (res) {
+      setDraft({ ...res });
+      const list: Companion[] = [];
+      for (let i = 1; i < res.adults; i++) list.push({ id: `a${i}`, name: `Acompanhante adulto ${i}`, ageGroup: 'Adulto', incognito: false });
+      for (let i = 1; i <= res.children; i++) list.push({ id: `c${i}`, name: `Acompanhante criança ${i}`, ageGroup: 'Criança', incognito: false });
+      setCompanions(list);
+    }
   }, [res]);
 
   if (!res || !draft) {
     return (
       <Overlay onClose={onClose}>
-        <div className="bg-white rounded-2xl p-8 shadow-xl">
-          <p className="text-slate-500">Reserva não encontrada</p>
-        </div>
+        <div className="bg-white rounded-2xl p-8 shadow-xl"><p className="text-slate-500">Reserva não encontrada</p></div>
       </Overlay>
     );
   }
 
   const room = rooms.find((r) => r.id === draft.roomId);
   const guest = guests.find((g) => g.id === draft.guestId);
-  const account = draft.accountId
-    ? accounts.find((a) => a.id === draft.accountId)
-    : accounts.find((a) => a.reservationId === draft.id);
+  const account = draft.accountId ? accounts.find((a) => a.id === draft.accountId) : accounts.find((a) => a.reservationId === draft.id);
   const balance = account ? accountBalance(account) : draft.totalAmount - draft.paidAmount;
   const isInHouse = draft.status === 'checkin';
   const canCheckIn = draft.status === 'confirmada' || draft.status === 'pendente';
@@ -96,11 +104,16 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
   const logs = mockLogs(draft);
 
   const save = () => {
-    upsertReservation(draft);
+    const adults = 1 + companions.filter((c) => c.ageGroup === 'Adulto').length;
+    const children = companions.filter((c) => c.ageGroup === 'Criança' || c.ageGroup === 'Bebê').length;
+    const next = { ...draft, adults, children };
+    setDraft(next);
+    upsertReservation(next);
     toast.success('Alterações salvas');
   };
+
   const doCheckIn = () => {
-    upsertReservation(draft);
+    save();
     const r = checkIn(draft.id);
     if (r.ok) {
       toast.success(r.message);
@@ -157,43 +170,23 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                 <Field label="Data nascimento"><input type="date" className={inputCls} /></Field>
                 <Field label="Nacionalidade"><input className={inputCls} defaultValue="Brasileira" /></Field>
                 <Field label="Profissão"><input className={inputCls} /></Field>
-                <Field label="Estado civil">
-                  <select className={inputCls}><option>Solteiro(a)</option><option>Casado(a)</option><option>Outro</option></select>
-                </Field>
+                <Field label="Estado civil"><select className={inputCls}><option>Solteiro(a)</option><option>Casado(a)</option><option>Outro</option></select></Field>
                 <Field label="Telefone"><input className={inputCls} defaultValue={guest?.phone || ''} /></Field>
                 <Field label="E-mail"><input className={inputCls} defaultValue={guest?.email || ''} /></Field>
                 <Field label="Endereço"><input className={inputCls} /></Field>
                 <Field label="Cidade / UF"><input className={inputCls} /></Field>
                 <Field label="CEP"><input className={inputCls} /></Field>
-                <Field label="Placa veículo">
-                  <input className={inputCls} value={vehiclePlate} onChange={(e) => setVehiclePlate(e.target.value.toUpperCase())} />
-                </Field>
-                <Field label="Motivo da viagem">
-                  <select className={inputCls}><option>Lazer</option><option>Negócios</option><option>Evento</option><option>Outro</option></select>
-                </Field>
+                <Field label="Placa veículo"><input className={inputCls} value={vehiclePlate} onChange={(e) => setVehiclePlate(e.target.value.toUpperCase())} /></Field>
+                <Field label="Motivo da viagem"><select className={inputCls}><option>Lazer</option><option>Negócios</option><option>Evento</option><option>Outro</option></select></Field>
                 <Field label="Próximo destino"><input className={inputCls} /></Field>
               </div>
               <label className="flex items-center gap-2 text-[13px]">
-                <input type="checkbox" className="rounded" defaultChecked={draft.fnrhFilled} />
-                Confirmo o preenchimento da FNRH
+                <input type="checkbox" className="rounded" defaultChecked={draft.fnrhFilled} /> Confirmo o preenchimento da FNRH
               </label>
             </div>
             <div className="px-5 py-3 border-t bg-slate-50 flex gap-2 justify-end">
-              <button type="button" onClick={() => setShowFicha(false)} className="h-9 px-3 rounded-lg border text-[13px]">
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  markFnrh(draft.id);
-                  setDraft({ ...draft, fnrhFilled: true });
-                  setShowFicha(false);
-                  toast.success('Ficha de hospedagem salva');
-                }}
-                className="h-9 px-4 rounded-lg bg-[#1d4ed8] text-white text-[13px] font-semibold"
-              >
-                Salvar ficha
-              </button>
+              <button type="button" onClick={() => setShowFicha(false)} className="h-9 px-3 rounded-lg border text-[13px]">Cancelar</button>
+              <button type="button" onClick={() => { markFnrh(draft.id); setDraft({ ...draft, fnrhFilled: true }); setShowFicha(false); toast.success('Ficha de hospedagem salva'); }} className="h-9 px-4 rounded-lg bg-[#1d4ed8] text-white text-[13px] font-semibold">Salvar ficha</button>
             </div>
           </div>
         </div>
@@ -206,49 +199,16 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
               <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-sky-300">Reserva · {draft.code}</p>
               <h2 className="text-lg font-semibold text-white leading-tight mt-0.5">{draft.guestName}</h2>
               <div className="flex flex-wrap gap-1.5 mt-1.5">
-                <span
-                  className={cn(
-                    'inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold',
-                    isInHouse ? 'bg-emerald-500 text-white' : draft.status === 'confirmada' ? 'bg-white/15 text-white' : 'bg-amber-400 text-amber-950'
-                  )}
-                >
-                  {RES_STATUS_LABEL[draft.status]}
-                </span>
-                {draft.roomNumber && (
-                  <span className="text-[11px] text-sky-200/80 font-medium">
-                    {draft.roomNumber} · {draft.roomType}
-                  </span>
-                )}
+                <span className={cn('inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold', isInHouse ? 'bg-emerald-500 text-white' : draft.status === 'confirmada' ? 'bg-white/15 text-white' : 'bg-amber-400 text-amber-950')}>{RES_STATUS_LABEL[draft.status]}</span>
+                {draft.roomNumber && <span className="text-[11px] text-sky-200/80 font-medium">{draft.roomNumber} · {draft.roomType}</span>}
               </div>
             </div>
-            <button type="button" onClick={onClose} className="h-8 w-8 rounded-lg border border-white/20 flex items-center justify-center text-white/80 hover:bg-white/10">
-              <X className="w-4 h-4" />
-            </button>
+            <button type="button" onClick={onClose} className="h-8 w-8 rounded-lg border border-white/20 flex items-center justify-center text-white/80 hover:bg-white/10"><X className="w-4 h-4" /></button>
           </div>
 
           <div className="px-3 sm:px-5 border-b border-slate-200 bg-white flex gap-0.5 overflow-x-auto shrink-0">
-            {(
-              [
-                ['geral', 'Geral'],
-                ['valores', 'Tarifa'],
-                ['pensoes', 'Pensões'],
-                ['obs', 'Observação'],
-                ['voucher', 'Voucher'],
-                ['documentos', 'Documentos'],
-                ['logs', 'Logs'],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setTab(id)}
-                className={cn(
-                  'px-3 py-2.5 text-[13px] border-b-2 -mb-px whitespace-nowrap',
-                  tab === id ? 'border-blue-600 text-blue-700 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-800'
-                )}
-              >
-                {label}
-              </button>
+            {([['geral', 'Geral'], ['valores', 'Tarifa'], ['pensoes', 'Pensões'], ['obs', 'Observação'], ['voucher', 'Voucher'], ['documentos', 'Documentos'], ['logs', 'Logs']] as const).map(([id, label]) => (
+              <button key={id} type="button" onClick={() => setTab(id)} className={cn('px-3 py-2.5 text-[13px] border-b-2 -mb-px whitespace-nowrap', tab === id ? 'border-blue-600 text-blue-700 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-800')}>{label}</button>
             ))}
           </div>
 
@@ -259,37 +219,22 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                   <Section title="Dados gerais">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                       <Field label="Número"><input disabled value={draft.code} className={inputCls} /></Field>
-                      <Field label="Status">
-                        <div className="h-9 flex items-center text-[13px] font-medium text-slate-700">{RES_STATUS_LABEL[draft.status]}</div>
-                      </Field>
-                      <Field label="Check-in">
-                        <input type="date" disabled={!editable || isInHouse} value={draft.checkIn} onChange={(e) => setDraft({ ...draft, checkIn: e.target.value })} className={inputCls} />
-                      </Field>
+                      <Field label="Status"><div className="h-9 flex items-center text-[13px] font-medium text-slate-700">{RES_STATUS_LABEL[draft.status]}</div></Field>
+                      <Field label="Check-in"><input type="date" disabled={!editable || isInHouse} value={draft.checkIn} onChange={(e) => setDraft({ ...draft, checkIn: e.target.value })} className={inputCls} /></Field>
                       <Field label="Horário CI"><input disabled={!editable || isInHouse} defaultValue="15:00" className={inputCls} /></Field>
-                      <Field label="Check-out">
-                        <input type="date" disabled={!editable} value={draft.checkOut} onChange={(e) => setDraft({ ...draft, checkOut: e.target.value })} className={inputCls} />
-                      </Field>
+                      <Field label="Check-out"><input type="date" disabled={!editable} value={draft.checkOut} onChange={(e) => setDraft({ ...draft, checkOut: e.target.value })} className={inputCls} /></Field>
                       <Field label="Horário CO"><input disabled={!editable} defaultValue="11:00" className={inputCls} /></Field>
                       <Field label="Grupo"><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
                       <Field label="Evento"><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
                     </div>
                   </Section>
 
-                  <Section
-                    title="Hóspede"
-                    action={
-                      <button type="button" onClick={() => setShowFicha(true)} className="h-7 px-2 rounded-md bg-[#1d4ed8] text-white text-[11px] font-semibold inline-flex items-center gap-1 hover:bg-blue-700" title="Abrir ficha de hospedagem (FNRH)">
-                        <IdCard className="w-3.5 h-3.5" /> Ficha
-                      </button>
-                    }
-                  >
+                  <Section title="Hóspede" action={<button type="button" onClick={() => setShowFicha(true)} className="h-7 px-2 rounded-md bg-[#1d4ed8] text-white text-[11px] font-semibold inline-flex items-center gap-1 hover:bg-blue-700" title="Ficha de hospedagem (FNRH)"><IdCard className="w-3.5 h-3.5" /> Ficha</button>}>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <Field label="Nome">
                         <div className="flex gap-1.5">
                           <input disabled={!editable} value={draft.guestName} onChange={(e) => setDraft({ ...draft, guestName: e.target.value })} className={inputCls} />
-                          <button type="button" onClick={() => setShowFicha(true)} className="h-9 w-9 shrink-0 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-[#1d4ed8] hover:bg-blue-50" title="Ficha de hospedagem">
-                            <ClipboardList className="w-4 h-4" />
-                          </button>
+                          <button type="button" onClick={() => setShowFicha(true)} className="h-9 w-9 shrink-0 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-[#1d4ed8] hover:bg-blue-50" title="Ficha de hospedagem"><ClipboardList className="w-4 h-4" /></button>
                         </div>
                       </Field>
                       <Field label="Documento / CPF"><input disabled value={guest?.document || '—'} className={inputCls} /></Field>
@@ -316,35 +261,15 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
 
                   <Section title="Acomodações">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                      <Field label="Tipo UH">
-                        <select disabled={!editable || isInHouse} value={draft.roomType} onChange={(e) => setDraft({ ...draft, roomType: e.target.value as RoomType })} className={inputCls}>
-                          {ROOM_TYPES.map((t) => <option key={t}>{t}</option>)}
-                        </select>
-                      </Field>
+                      <Field label="Tipo UH"><select disabled={!editable || isInHouse} value={draft.roomType} onChange={(e) => setDraft({ ...draft, roomType: e.target.value as RoomType })} className={inputCls}>{ROOM_TYPES.map((t) => <option key={t}>{t}</option>)}</select></Field>
                       <Field label="UH">
-                        <select
-                          disabled={!editable || isInHouse}
-                          value={draft.roomId || ''}
-                          onChange={(e) => {
-                            const rm = rooms.find((r) => r.id === e.target.value);
-                            setDraft({ ...draft, roomId: rm?.id, roomNumber: rm?.number, roomType: (rm?.type as RoomType) || draft.roomType });
-                          }}
-                          className={inputCls}
-                        >
+                        <select disabled={!editable || isInHouse} value={draft.roomId || ''} onChange={(e) => { const rm = rooms.find((r) => r.id === e.target.value); setDraft({ ...draft, roomId: rm?.id, roomNumber: rm?.number, roomType: (rm?.type as RoomType) || draft.roomType }); }} className={inputCls}>
                           <option value="">Sem UH</option>
-                          {rooms.map((r) => (
-                            <option key={r.id} value={r.id}>
-                              {r.number} · {r.type} ({OCCUPANCY_LABEL[r.occupancy]})
-                            </option>
-                          ))}
+                          {rooms.map((r) => <option key={r.id} value={r.id}>{r.number} · {r.type} ({OCCUPANCY_LABEL[r.occupancy]})</option>)}
                         </select>
                       </Field>
-                      <Field label="Adultos">
-                        <input type="number" min={1} disabled={!editable} value={draft.adults} onChange={(e) => setDraft({ ...draft, adults: Number(e.target.value) })} className={inputCls} />
-                      </Field>
-                      <Field label="Crianças">
-                        <input type="number" min={0} disabled={!editable} value={draft.children} onChange={(e) => setDraft({ ...draft, children: Number(e.target.value) })} className={inputCls} />
-                      </Field>
+                      <Field label="Adultos"><input type="number" min={1} disabled value={1 + companions.filter((c) => c.ageGroup === 'Adulto').length} className={inputCls} title="Atualizado pelos acompanhantes" /></Field>
+                      <Field label="Crianças"><input type="number" min={0} disabled value={companions.filter((c) => c.ageGroup === 'Criança' || c.ageGroup === 'Bebê').length} className={inputCls} title="Atualizado pelos acompanhantes" /></Field>
                     </div>
                     {room && (
                       <div className="mt-2.5 flex flex-wrap gap-2 text-[12px]">
@@ -356,7 +281,15 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                     )}
                   </Section>
 
-                  <Section title="Acompanhantes">
+                  <Section
+                    title="Acompanhantes"
+                    action={editable ? (
+                      <button type="button" onClick={() => { const id = `n${Date.now()}`; setCompanions((c) => [...c, { id, name: '', ageGroup: 'Adulto', incognito: false }]); setEditingCompId(id); }} className="h-7 px-2 rounded-md border border-slate-200 bg-white text-[11px] font-semibold inline-flex items-center gap-1 hover:bg-slate-50">
+                        <Plus className="w-3.5 h-3.5" /> Adicionar
+                      </button>
+                    ) : undefined}
+                  >
+                    <p className="text-[11px] text-slate-500 mb-2">Titular: <span className="font-medium text-slate-700">{draft.guestName}</span> (dados na ficha FNRH). Abaixo somente acompanhantes.</p>
                     <div className="rounded-lg border border-slate-200 overflow-hidden">
                       <table className="w-full text-[12px]">
                         <thead className="bg-slate-100 border-b border-slate-200">
@@ -364,28 +297,41 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                             <th className="px-3 py-2 font-semibold">Nome</th>
                             <th className="px-3 py-2 font-semibold">Faixa etária</th>
                             <th className="px-3 py-2 font-semibold">Incógnito</th>
+                            {editable && <th className="px-3 py-2 font-semibold text-right">Ações</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 bg-white">
-                          <tr>
-                            <td className="px-3 py-2 font-medium">{draft.guestName}</td>
-                            <td className="px-3 py-2 text-slate-500">Adulto</td>
-                            <td className="px-3 py-2 text-slate-400">N</td>
-                          </tr>
-                          {draft.adults > 1 && (
-                            <tr>
-                              <td className="px-3 py-2 text-slate-600">Acompanhante adulto</td>
-                              <td className="px-3 py-2 text-slate-500">Adulto</td>
-                              <td className="px-3 py-2 text-slate-400">N</td>
+                          {companions.length === 0 ? (
+                            <tr><td colSpan={editable ? 4 : 3} className="px-3 py-6 text-center text-slate-400">Nenhum acompanhante · clique em Adicionar</td></tr>
+                          ) : companions.map((c) => (
+                            <tr key={c.id}>
+                              <td className="px-3 py-1.5">
+                                {editingCompId === c.id && editable ? (
+                                  <input autoFocus value={c.name} onChange={(e) => setCompanions((list) => list.map((x) => (x.id === c.id ? { ...x, name: e.target.value } : x)))} onBlur={() => setEditingCompId(null)} onKeyDown={(e) => e.key === 'Enter' && setEditingCompId(null)} className="w-full h-8 rounded border border-slate-200 px-2 text-[12px]" placeholder="Nome do acompanhante" />
+                                ) : (
+                                  <span className="font-medium">{c.name || '—'}</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-1.5">
+                                {editable ? (
+                                  <select value={c.ageGroup} onChange={(e) => setCompanions((list) => list.map((x) => (x.id === c.id ? { ...x, ageGroup: e.target.value as Companion['ageGroup'] } : x)))} className="h-8 rounded border border-slate-200 px-1 text-[12px]">
+                                    <option>Adulto</option><option>Criança</option><option>Bebê</option>
+                                  </select>
+                                ) : c.ageGroup}
+                              </td>
+                              <td className="px-3 py-1.5">
+                                {editable ? (
+                                  <input type="checkbox" checked={c.incognito} onChange={(e) => setCompanions((list) => list.map((x) => (x.id === c.id ? { ...x, incognito: e.target.checked } : x)))} />
+                                ) : c.incognito ? 'S' : 'N'}
+                              </td>
+                              {editable && (
+                                <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                                  <button type="button" onClick={() => setEditingCompId(c.id)} className="h-7 w-7 inline-flex items-center justify-center rounded border border-slate-200 mr-1" title="Alterar"><Pencil className="w-3.5 h-3.5" /></button>
+                                  <button type="button" onClick={() => setCompanions((list) => list.filter((x) => x.id !== c.id))} className="h-7 w-7 inline-flex items-center justify-center rounded border border-rose-200 text-rose-600" title="Remover"><Trash2 className="w-3.5 h-3.5" /></button>
+                                </td>
+                              )}
                             </tr>
-                          )}
-                          {draft.children > 0 && (
-                            <tr>
-                              <td className="px-3 py-2 text-slate-600">Acompanhante criança</td>
-                              <td className="px-3 py-2 text-slate-500">Criança</td>
-                              <td className="px-3 py-2 text-slate-400">N</td>
-                            </tr>
-                          )}
+                          ))}
                         </tbody>
                       </table>
                     </div>
@@ -393,36 +339,10 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
 
                   <Section title="Mais informações">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                      <Field label="Segmento mercado">
-                        <select disabled={!editable} defaultValue="particular" className={inputCls}>
-                          <option value="particular">Particular</option>
-                          <option value="corporativo">Corporativo</option>
-                          <option value="evento">Evento</option>
-                        </select>
-                      </Field>
-                      <Field label="Origem / canal">
-                        <select disabled={!editable} value={draft.origin} onChange={(e) => setDraft({ ...draft, origin: e.target.value as Reservation['origin'] })} className={inputCls}>
-                          {ORIGINS.map((o) => (
-                            <option key={o} value={o}>{o}</option>
-                          ))}
-                        </select>
-                      </Field>
-                      <Field label="Tipo hóspede">
-                        <select disabled={!editable} defaultValue="particular" className={inputCls}>
-                          <option value="particular">Particular</option>
-                          <option value="vip">VIP</option>
-                          <option value="staff">Staff</option>
-                        </select>
-                      </Field>
-                      <Field label="Meio comunicação">
-                        <select disabled={!editable} defaultValue="balcao" className={inputCls}>
-                          <option value="balcao">Balcão do hotel</option>
-                          <option value="telefone">Telefone</option>
-                          <option value="email">E-mail</option>
-                          <option value="site">Site</option>
-                          <option value="ota">OTA</option>
-                        </select>
-                      </Field>
+                      <Field label="Segmento mercado"><select disabled={!editable} defaultValue="particular" className={inputCls}><option value="particular">Particular</option><option value="corporativo">Corporativo</option><option value="evento">Evento</option></select></Field>
+                      <Field label="Origem / canal"><select disabled={!editable} value={draft.origin} onChange={(e) => setDraft({ ...draft, origin: e.target.value as Reservation['origin'] })} className={inputCls}>{ORIGINS.map((o) => <option key={o} value={o}>{o}</option>)}</select></Field>
+                      <Field label="Tipo hóspede"><select disabled={!editable} defaultValue="particular" className={inputCls}><option value="particular">Particular</option><option value="vip">VIP</option><option value="staff">Staff</option></select></Field>
+                      <Field label="Meio comunicação"><select disabled={!editable} defaultValue="balcao" className={inputCls}><option value="balcao">Balcão do hotel</option><option value="telefone">Telefone</option><option value="email">E-mail</option><option value="site">Site</option><option value="ota">OTA</option></select></Field>
                     </div>
                   </Section>
                 </div>
@@ -430,39 +350,17 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                 <div className="lg:col-span-4 space-y-3">
                   <Section title="Tarifário / valor previsto">
                     <div className="space-y-2.5">
-                      <Field label="Valor total (R$)">
-                        <input type="number" disabled={!editable} value={draft.totalAmount} onChange={(e) => setDraft({ ...draft, totalAmount: Number(e.target.value) })} className={inputCls} />
-                      </Field>
-                      <Field label="Já pago (R$)">
-                        <input type="number" disabled={!editable} value={draft.paidAmount} onChange={(e) => setDraft({ ...draft, paidAmount: Number(e.target.value) })} className={inputCls} />
-                      </Field>
-                      <Field label="Saldo">
-                        <div className={cn('h-9 flex items-center text-[13px] font-semibold', balance > 0.01 ? 'text-rose-600' : 'text-emerald-600')}>{formatBRL(balance)}</div>
-                      </Field>
-                      <Field label="Pensão">
-                        <select disabled={!editable} defaultValue="meia_almoco" className={inputCls}>
-                          <option value="apenas">Apenas hospedagem</option>
-                          <option value="cafe">Café da manhã</option>
-                          <option value="meia_almoco">Meia pensão — almoço</option>
-                          <option value="meia_jantar">Meia pensão — jantar</option>
-                          <option value="completa">Pensão completa</option>
-                          <option value="ai">All inclusive</option>
-                        </select>
-                      </Field>
-                      <label className="flex items-center gap-2 text-[12px] text-slate-700">
-                        <input type="checkbox" disabled={!editable} defaultChecked className="rounded border-slate-300" /> Garante no-show
-                      </label>
-                      <label className="flex items-center gap-2 text-[12px] text-slate-700">
-                        <input type="checkbox" disabled={!editable} className="rounded border-slate-300" /> Cobrar taxa de turismo
-                      </label>
+                      <Field label="Valor total (R$)"><input type="number" disabled={!editable} value={draft.totalAmount} onChange={(e) => setDraft({ ...draft, totalAmount: Number(e.target.value) })} className={inputCls} /></Field>
+                      <Field label="Já pago (R$)"><input type="number" disabled={!editable} value={draft.paidAmount} onChange={(e) => setDraft({ ...draft, paidAmount: Number(e.target.value) })} className={inputCls} /></Field>
+                      <Field label="Saldo"><div className={cn('h-9 flex items-center text-[13px] font-semibold', balance > 0.01 ? 'text-rose-600' : 'text-emerald-600')}>{formatBRL(balance)}</div></Field>
+                      <Field label="Pensão"><select disabled={!editable} defaultValue="meia_almoco" className={inputCls}><option value="apenas">Apenas hospedagem</option><option value="cafe">Café da manhã</option><option value="meia_almoco">Meia pensão — almoço</option><option value="meia_jantar">Meia pensão — jantar</option><option value="completa">Pensão completa</option><option value="ai">All inclusive</option></select></Field>
+                      <label className="flex items-center gap-2 text-[12px] text-slate-700"><input type="checkbox" disabled={!editable} defaultChecked className="rounded border-slate-300" /> Garante no-show</label>
+                      <label className="flex items-center gap-2 text-[12px] text-slate-700"><input type="checkbox" disabled={!editable} className="rounded border-slate-300" /> Cobrar taxa de turismo</label>
                     </div>
                   </Section>
-
                   <Section title="Empresa / agente">
                     <div className="space-y-2.5">
-                      <label className="flex items-center gap-2 text-[12px] text-slate-700">
-                        <input type="checkbox" disabled={!editable} className="rounded border-slate-300" /> Hospedagem por empresa
-                      </label>
+                      <label className="flex items-center gap-2 text-[12px] text-slate-700"><input type="checkbox" disabled={!editable} className="rounded border-slate-300" /> Hospedagem por empresa</label>
                       <Field label="Empresa"><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
                       <Field label="Agente"><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
                       <Field label="Voucher empr."><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
@@ -475,25 +373,10 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
             {tab === 'valores' && (
               <Section title="Tarifário e valores">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <Field label="Valor total (R$)">
-                    <input type="number" disabled={!editable} value={draft.totalAmount} onChange={(e) => setDraft({ ...draft, totalAmount: Number(e.target.value) })} className={inputCls} />
-                  </Field>
-                  <Field label="Já pago (R$)">
-                    <input type="number" disabled={!editable} value={draft.paidAmount} onChange={(e) => setDraft({ ...draft, paidAmount: Number(e.target.value) })} className={inputCls} />
-                  </Field>
-                  <Field label="Saldo">
-                    <div className={cn('h-9 flex items-center text-[13px] font-semibold', balance > 0.01 ? 'text-rose-600' : 'text-emerald-600')}>{formatBRL(balance)}</div>
-                  </Field>
+                  <Field label="Valor total (R$)"><input type="number" disabled={!editable} value={draft.totalAmount} onChange={(e) => setDraft({ ...draft, totalAmount: Number(e.target.value) })} className={inputCls} /></Field>
+                  <Field label="Já pago (R$)"><input type="number" disabled={!editable} value={draft.paidAmount} onChange={(e) => setDraft({ ...draft, paidAmount: Number(e.target.value) })} className={inputCls} /></Field>
+                  <Field label="Saldo"><div className={cn('h-9 flex items-center text-[13px] font-semibold', balance > 0.01 ? 'text-rose-600' : 'text-emerald-600')}>{formatBRL(balance)}</div></Field>
                 </div>
-                {account && (
-                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-[12px] space-y-1">
-                    <p className="font-semibold text-slate-700">Conta vinculada</p>
-                    <p className="text-slate-500">Status: {account.status} · Aberta em {formatDateBR(account.openedAt)}</p>
-                    <button type="button" onClick={() => setShowAccount(true)} className="mt-1 text-blue-600 font-medium hover:underline">
-                      Abrir extrato da conta →
-                    </button>
-                  </div>
-                )}
               </Section>
             )}
 
@@ -501,115 +384,35 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
 
             {tab === 'obs' && (
               <Section title="Observações da reserva">
-                <textarea disabled={!editable} value={draft.notes || ''} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} rows={8} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 min-h-[200px]" placeholder="Observações internas, pedidos do hóspede…" />
-                <div className="mt-3 flex items-center gap-2 text-[13px]">
-                  <span className="text-slate-500">FNRH / pré-check-in:</span>
-                  <span className={draft.fnrhFilled ? 'text-emerald-600 font-semibold' : 'text-amber-700 font-semibold'}>{draft.fnrhFilled ? 'Preenchida' : 'Pendente'}</span>
-                </div>
+                <textarea disabled={!editable} value={draft.notes || ''} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} rows={8} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 min-h-[200px]" placeholder="Observações internas…" />
               </Section>
             )}
 
             {tab === 'voucher' && (
-              <div className="space-y-4 min-h-[280px]">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-[13px] font-semibold text-slate-800">Voucher do hóspede</p>
-                    <p className="text-[12px] text-slate-500">Documento oficial da reserva</p>
-                  </div>
-                  <button type="button" onClick={openVoucherPdf} className="h-9 px-3 rounded-lg bg-[#1d4ed8] text-white text-[13px] font-semibold inline-flex items-center gap-1.5">
-                    <Ticket className="w-3.5 h-3.5" /> Abrir voucher (PDF)
-                  </button>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm text-[13px]">
-                  <div className="flex justify-between items-start border-b border-slate-100 pb-3 mb-3">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">{hotel.name}</p>
-                      <p className="text-lg font-semibold text-slate-900">VOUCHER DE HOSPEDAGEM</p>
-                    </div>
-                    <p className="font-mono text-[12px] text-slate-500">{draft.code}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><p className="text-[10px] uppercase text-slate-400">Hóspede</p><p className="font-medium">{draft.guestName}</p></div>
-                    <div><p className="text-[10px] uppercase text-slate-400">Documento</p><p className="font-medium">{guest?.document || '—'}</p></div>
-                    <div><p className="text-[10px] uppercase text-slate-400">Check-in</p><p className="font-medium">{formatDateBR(draft.checkIn)}</p></div>
-                    <div><p className="text-[10px] uppercase text-slate-400">Check-out</p><p className="font-medium">{formatDateBR(draft.checkOut)}</p></div>
-                    <div><p className="text-[10px] uppercase text-slate-400">UH / Tipo</p><p className="font-medium">{draft.roomNumber || '—'} · {draft.roomType}</p></div>
-                    <div><p className="text-[10px] uppercase text-slate-400">Valor</p><p className="font-medium">{formatBRL(draft.totalAmount)}</p></div>
-                  </div>
-                </div>
+              <div className="space-y-4 min-h-[200px]">
+                <button type="button" onClick={openVoucherPdf} className="h-9 px-3 rounded-lg bg-[#1d4ed8] text-white text-[13px] font-semibold inline-flex items-center gap-1.5"><Ticket className="w-3.5 h-3.5" /> Abrir voucher (PDF)</button>
               </div>
             )}
 
             {tab === 'documentos' && (
-              <div className="space-y-3 min-h-[280px]">
-                <div className="flex items-center justify-between">
-                  <p className="text-[13px] font-semibold text-slate-800">Documentos da reserva</p>
-                  <button type="button" onClick={() => toast.message('Upload (em breve)')} className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] font-medium inline-flex items-center gap-1.5">
-                    <Paperclip className="w-3.5 h-3.5" /> Anexar
-                  </button>
-                </div>
+              <div className="space-y-3 min-h-[200px]">
                 <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
                   <table className="w-full text-[12px]">
-                    <thead className="bg-slate-50 border-b border-slate-100">
-                      <tr className="text-left text-[10px] uppercase tracking-wider text-slate-400">
-                        <th className="px-3 py-2 font-semibold">Arquivo</th>
-                        <th className="px-3 py-2 font-semibold">Tipo</th>
-                        <th className="px-3 py-2 font-semibold">Enviado</th>
-                        <th className="px-3 py-2 font-semibold text-right">Ação</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {docs.map((d) => (
-                        <tr key={d.id}>
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-slate-400" />
-                              <div>
-                                <p className="font-medium">{d.name}</p>
-                                <p className="text-[10px] text-slate-400">{d.size}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5">{d.type}</td>
-                          <td className="px-3 py-2.5 text-slate-500">
-                            <p>{d.uploadedAt}</p>
-                            <p className="text-[10px]">{d.uploadedBy}</p>
-                          </td>
-                          <td className="px-3 py-2.5 text-right">
-                            <button type="button" onClick={() => (d.type === 'Voucher' ? openVoucherPdf() : toast.message(d.name))} className="h-7 w-7 rounded-lg border inline-flex items-center justify-center">
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
+                    <thead className="bg-slate-50 border-b"><tr className="text-left text-[10px] uppercase text-slate-400"><th className="px-3 py-2">Arquivo</th><th className="px-3 py-2">Tipo</th></tr></thead>
+                    <tbody className="divide-y">{docs.map((d) => <tr key={d.id}><td className="px-3 py-2 font-medium">{d.name}</td><td className="px-3 py-2">{d.type}</td></tr>)}</tbody>
                   </table>
                 </div>
               </div>
             )}
 
             {tab === 'logs' && (
-              <div className="space-y-3 min-h-[280px]">
-                <div className="flex items-center gap-2">
-                  <History className="w-4 h-4 text-slate-400" />
-                  <p className="text-[13px] font-semibold text-slate-800">Histórico da reserva</p>
-                </div>
-                <div className="relative pl-4">
-                  <div className="absolute left-[7px] top-2 bottom-2 w-px bg-slate-200" />
-                  {logs.map((l) => (
-                    <div key={l.id} className="relative pb-4 last:pb-0">
-                      <div className="absolute left-[-13px] top-1.5 h-2.5 w-2.5 rounded-full bg-blue-600 ring-2 ring-white" />
-                      <div className="rounded-xl border border-slate-100 bg-white px-3 py-2 shadow-sm">
-                        <div className="flex flex-wrap items-baseline justify-between gap-1">
-                          <p className="text-[13px] font-semibold">{l.action}</p>
-                          <p className="text-[11px] text-slate-400">{l.at}</p>
-                        </div>
-                        <p className="text-[12px] text-slate-600 mt-0.5">{l.detail}</p>
-                        <p className="text-[11px] text-slate-400 mt-1">por {l.user}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <div className="space-y-2 min-h-[200px]">
+                {logs.map((l) => (
+                  <div key={l.id} className="rounded-xl border bg-white px-3 py-2 text-[12px]">
+                    <p className="font-semibold">{l.action} <span className="text-slate-400 font-normal">{l.at}</span></p>
+                    <p className="text-slate-600">{l.detail}</p>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -620,47 +423,19 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                 <Save className="w-3.5 h-3.5" /> Salvar
               </button>
             )}
-            <button type="button" onClick={() => setShowAccount(true)} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5">
-              <Wallet className="w-3.5 h-3.5" /> Conta
-            </button>
-            <button type="button" onClick={openVoucherPdf} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5">
-              <Ticket className="w-3.5 h-3.5" /> Voucher
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowFicha(true)}
-              className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5"
-            >
-              <IdCard className="w-3.5 h-3.5" /> Ficha
-            </button>
+            <button type="button" onClick={() => setShowAccount(true)} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Conta</button>
+            <button type="button" onClick={openVoucherPdf} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5"><Ticket className="w-3.5 h-3.5" /> Voucher</button>
+            <button type="button" onClick={() => setShowFicha(true)} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5"><IdCard className="w-3.5 h-3.5" /> Ficha</button>
             {canCheckIn && (
-              <button type="button" onClick={doCheckIn} className="h-9 px-3 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5">
-                <LogIn className="w-3.5 h-3.5" /> Check-in
-              </button>
+              <button type="button" onClick={doCheckIn} className="h-9 px-3 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5"><LogIn className="w-3.5 h-3.5" /> Check-in</button>
             )}
             {canCheckOut && (
-              <button type="button" onClick={doCheckOut} className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[13px] font-semibold inline-flex items-center gap-1.5">
-                <LogOut className="w-3.5 h-3.5" /> Check-out
-              </button>
+              <button type="button" onClick={doCheckOut} className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[13px] font-semibold inline-flex items-center gap-1.5"><LogOut className="w-3.5 h-3.5" /> Check-out</button>
             )}
             {editable && !isInHouse && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm('Cancelar esta reserva?')) {
-                    cancelReservation(draft.id);
-                    toast.message('Reserva cancelada');
-                    onClose();
-                  }
-                }}
-                className="h-9 px-3 rounded-lg border border-rose-200 text-rose-700 text-[13px] ml-auto"
-              >
-                Cancelar
-              </button>
+              <button type="button" onClick={() => { if (window.confirm('Cancelar esta reserva?')) { cancelReservation(draft.id); toast.message('Reserva cancelada'); onClose(); } }} className="h-9 px-3 rounded-lg border border-rose-200 text-rose-700 text-[13px] ml-auto">Cancelar</button>
             )}
-            <button type="button" onClick={onClose} className="h-9 px-3 rounded-lg text-[13px] text-slate-600">
-              Fechar
-            </button>
+            <button type="button" onClick={onClose} className="h-9 px-3 rounded-lg text-[13px] text-slate-600">Fechar</button>
           </div>
         </div>
       </Overlay>
@@ -669,15 +444,7 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
 }
 
 function buildVoucherHtml(r: Reservation, hotelName: string, document?: string): string {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Voucher ${r.code}</title>
-<style>body{font-family:system-ui,sans-serif;padding:32px;color:#0f172a;max-width:640px;margin:0 auto}h1{font-size:20px}.muted{color:#64748b;font-size:12px}.box{border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-top:16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.lbl{font-size:10px;text-transform:uppercase;color:#94a3b8}.val{font-size:14px;font-weight:600}</style></head><body>
-<p class="muted">${hotelName}</p><h1>Voucher de hospedagem</h1><p class="muted">Reserva ${r.code}</p>
-<div class="box"><div class="grid">
-<div><div class="lbl">Hóspede</div><div class="val">${r.guestName}</div></div>
-<div><div class="lbl">Documento</div><div class="val">${document || '—'}</div></div>
-<div><div class="lbl">Check-in</div><div class="val">${formatDateBR(r.checkIn)}</div></div>
-<div><div class="lbl">Check-out</div><div class="val">${formatDateBR(r.checkOut)}</div></div>
-</div></div></body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Voucher ${r.code}</title></head><body style="font-family:system-ui;padding:32px"><p>${hotelName}</p><h1>Voucher</h1><p>${r.guestName} · ${r.code}</p><p>${formatDateBR(r.checkIn)} → ${formatDateBR(r.checkOut)}</p></body></html>`;
 }
 
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
@@ -712,7 +479,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-slate-50 border border-slate-150 px-2.5 py-1.5">
+    <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5">
       <p className="text-[10px] text-slate-400 uppercase">{label}</p>
       <p className="text-[13px] font-medium text-slate-800">{value}</p>
     </div>

@@ -11,15 +11,7 @@ import {
   type RoomType,
 } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
-import {
-  FileText,
-  LogIn,
-  LogOut,
-  Save,
-  UserRound,
-  Wallet,
-  X,
-} from 'lucide-react';
+import { FileText, LogIn, LogOut, Save, Wallet, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 const ROOM_TYPES: RoomType[] = [
@@ -38,6 +30,9 @@ const ORIGINS: Reservation['origin'][] = [
   'telefone',
   'walkin',
 ];
+
+const inputCls =
+  'w-full h-10 rounded-xl border border-slate-200 px-3 text-[13px] outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50 disabled:text-slate-500';
 
 type ModalTab = 'geral' | 'valores' | 'obs';
 
@@ -72,7 +67,9 @@ export function ReservationModal({
   if (!res || !draft) {
     return (
       <Overlay onClose={onClose}>
-        <p className="p-8 text-slate-500">Reserva não encontrada</p>
+        <div className="bg-white rounded-2xl p-8 shadow-xl">
+          <p className="text-slate-500">Reserva não encontrada</p>
+        </div>
       </Overlay>
     );
   }
@@ -85,11 +82,9 @@ export function ReservationModal({
   const balance = account ? accountBalance(account) : draft.totalAmount - draft.paidAmount;
 
   const isInHouse = draft.status === 'checkin';
-  const canCheckIn =
-    draft.status === 'confirmada' || draft.status === 'pendente';
+  const canCheckIn = draft.status === 'confirmada' || draft.status === 'pendente';
   const canCheckOut = draft.status === 'checkin';
-  const editable =
-    draft.status !== 'cancelada' && draft.status !== 'checkout';
+  const editable = draft.status !== 'cancelada' && draft.status !== 'checkout';
 
   const save = () => {
     upsertReservation(draft);
@@ -97,7 +92,6 @@ export function ReservationModal({
   };
 
   const doCheckIn = () => {
-    // salva draft de UH antes se mudou
     upsertReservation(draft);
     const r = checkIn(draft.id);
     if (r.ok) {
@@ -120,14 +114,13 @@ export function ReservationModal({
     toast.message(
       account
         ? `Conta de ${draft.guestName}`
-        : 'Abra a conta após o check-in ou pelo módulo Contas'
+        : 'Conta disponível após o check-in — abra pelo módulo Contas'
     );
   };
 
   return (
     <Overlay onClose={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
-        {/* Header */}
         <div className="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-3 shrink-0">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-indigo-500">
@@ -165,7 +158,6 @@ export function ReservationModal({
           </button>
         </div>
 
-        {/* Tabs */}
         <div className="px-5 border-b border-slate-100 flex gap-1 shrink-0">
           {(
             [
@@ -190,7 +182,6 @@ export function ReservationModal({
           ))}
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {tab === 'geral' && (
             <>
@@ -202,15 +193,16 @@ export function ReservationModal({
                       disabled={!editable || isInHouse}
                       value={draft.checkIn}
                       onChange={(e) => setDraft({ ...draft, checkIn: e.target.value })}
-                      className="input"
+                      className={inputCls}
                     />
                   </Field>
                   <Field label="Check-out">
                     <input
-                      type="date"lanco                      disabled={!editable}
+                      type="date"
+                      disabled={!editable}
                       value={draft.checkOut}
                       onChange={(e) => setDraft({ ...draft, checkOut: e.target.value })}
-                      className="input"
+                      className={inputCls}
                     />
                   </Field>
                   <Field label="Adultos">
@@ -219,10 +211,8 @@ export function ReservationModal({
                       min={1}
                       disabled={!editable}
                       value={draft.adults}
-                      onChange={(e) =>
-                        setDraft({ ...draft, adults: Number(e.target.value) })
-                      }
-                      className="input"
+                      onChange={(e) => setDraft({ ...draft, adults: Number(e.target.value) })}
+                      className={inputCls}
                     />
                   </Field>
                   <Field label="Crianças">
@@ -231,10 +221,8 @@ export function ReservationModal({
                       min={0}
                       disabled={!editable}
                       value={draft.children}
-                      onChange={(e) =>
-                        setDraft({ ...draft, children: Number(e.target.value) })
-                      }
-                      className="input"
+                      onChange={(e) => setDraft({ ...draft, children: Number(e.target.value) })}
+                      className={inputCls}
                     />
                   </Field>
                   <Field label="Tipo de UH">
@@ -244,7 +232,7 @@ export function ReservationModal({
                       onChange={(e) =>
                         setDraft({ ...draft, roomType: e.target.value as RoomType })
                       }
-                      className="input"
+                      className={inputCls}
                     >
                       {ROOM_TYPES.map((t) => (
                         <option key={t}>{t}</option>
@@ -264,7 +252,7 @@ export function ReservationModal({
                           roomType: (rm?.type as RoomType) || draft.roomType,
                         });
                       }}
-                      className="input"
+                      className={inputCls}
                     >
                       <option value="">Sem UH</option>
                       {rooms.map((r) => (
@@ -284,7 +272,7 @@ export function ReservationModal({
                           origin: e.target.value as Reservation['origin'],
                         })
                       }
-                      className="input"
+                      className={inputCls}
                     >
                       {ORIGINS.map((o) => (
                         <option key={o} value={o}>
@@ -308,29 +296,17 @@ export function ReservationModal({
                       disabled={!editable}
                       value={draft.guestName}
                       onChange={(e) => setDraft({ ...draft, guestName: e.target.value })}
-                      className="input"
+                      className={inputCls}
                     />
                   </Field>
                   <Field label="Documento">
-                    <input
-                      disabled
-                      value={guest?.document || '—'}
-                      className="input bg-slate-50"
-                    />
+                    <input disabled value={guest?.document || '—'} className={inputCls} />
                   </Field>
                   <Field label="Telefone">
-                    <input
-                      disabled
-                      value={guest?.phone || '—'}
-                      className="input bg-slate-50"
-                    />
+                    <input disabled value={guest?.phone || '—'} className={inputCls} />
                   </Field>
                   <Field label="E-mail">
-                    <input
-                      disabled
-                      value={guest?.email || '—'}
-                      className="input bg-slate-50"
-                    />
+                    <input disabled value={guest?.email || '—'} className={inputCls} />
                   </Field>
                 </div>
               </Section>
@@ -359,7 +335,7 @@ export function ReservationModal({
                     onChange={(e) =>
                       setDraft({ ...draft, totalAmount: Number(e.target.value) })
                     }
-                    className="input"
+                    className={inputCls}
                   />
                 </Field>
                 <Field label="Já pago (R$)">
@@ -370,7 +346,7 @@ export function ReservationModal({
                     onChange={(e) =>
                       setDraft({ ...draft, paidAmount: Number(e.target.value) })
                     }
-                    className="input"
+                    className={inputCls}
                   />
                 </Field>
                 <Field label="Saldo">
@@ -391,8 +367,7 @@ export function ReservationModal({
                     Status: {account.status} · Aberta em {formatDateBR(account.openedAt)}
                   </p>
                   <p className="text-slate-500">
-                    Lançamentos: {account.charges.length} · Pagamentos:{' '}
-                    {account.payments.length}
+                    Lançamentos: {account.charges.length} · Pagamentos: {account.payments.length}
                   </p>
                 </div>
               )}
@@ -406,7 +381,7 @@ export function ReservationModal({
                 value={draft.notes || ''}
                 onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
                 rows={5}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50"
                 placeholder="Observações internas, pedidos do hóspede…"
               />
               <div className="mt-3 flex items-center gap-2 text-[13px]">
@@ -425,7 +400,6 @@ export function ReservationModal({
           )}
         </div>
 
-        {/* Footer ações */}
         <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex flex-wrap gap-2 shrink-0">
           {editable && (
             <button
@@ -478,7 +452,7 @@ export function ReservationModal({
             </button>
           )}
 
-          {editable && !isInHouse && draft.status !== 'cancelada' && (
+          {editable && !isInHouse && (
             <button
               type="button"
               onClick={() => {
@@ -550,9 +524,4 @@ function Info({ label, value }: { label: string; value: string }) {
       <p className="text-[13px] font-medium text-slate-800">{value}</p>
     </div>
   );
-}
-
-/** util classes via global-ish tailwind in className */
-declare module 'react' {
-  // ensure input class used above works with tailwind
 }

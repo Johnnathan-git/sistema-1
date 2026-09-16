@@ -2,7 +2,7 @@ import type { Account, Guest, Hotel, Reservation, Room } from './pms-types';
 
 export const HOTEL: Hotel = {
   id: 'h1',
-  name: 'Varshana Hotel',
+  name: 'Hotel Teste',
   operationalDate: '2026-09-15',
 };
 
@@ -45,7 +45,6 @@ export const INITIAL_GUESTS: Guest[] = [
 ];
 
 export const INITIAL_RESERVATIONS: Reservation[] = [
-  // —— Check-ins previstos (hoje 15/09) ——
   {
     id: 'res1',
     code: 'RSV-1001',
@@ -179,8 +178,6 @@ export const INITIAL_RESERVATIONS: Reservation[] = [
     fnrhFilled: true,
     notes: 'Grupo familiar · late checkout se possível',
   },
-
-  // —— Hospedados (já em check-in) ——
   {
     id: 'res2',
     code: 'RSV-1002',

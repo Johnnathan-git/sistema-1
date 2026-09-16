@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { usePms } from '@/lib/pms-store';
+import { ReservationModal } from '@/components/uos/ReservationModal';
 import {
   accountBalance,
   formatBRL,
@@ -23,18 +24,14 @@ function addDays(iso: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function daysBetween(a: string, b: string): number {
-  const da = new Date(a + 'T12:00:00').getTime();
-  const db = new Date(b + 'T12:00:00').getTime();
-  return Math.round((db - da) / 86400000);
-}
-
 export function ReceptionModule() {
-  const { hotel, reservations, rooms, accounts, checkIn, checkOut, markFnrh } = usePms();
+  const { hotel, reservations, rooms, accounts, checkIn, checkOut, markFnrh, setModule } =
+    usePms();
   const [tab, setTab] = useState<MainTab>('checkins');
   const [q, setQ] = useState('');
   const [selectedResId, setSelectedResId] = useState<string | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [modalResId, setModalResId] = useState<string | null>(null);
   const [chartDays, setChartDays] = useState(14);
   const today = hotel.operationalDate;
 
@@ -42,8 +39,7 @@ export function ReceptionModule() {
     () =>
       reservations.filter(
         (r) =>
-          r.checkIn === today &&
-          (r.status === 'confirmada' || r.status === 'pendente')
+          r.checkIn === today && (r.status === 'confirmada' || r.status === 'pendente')
       ),
     [reservations, today]
   );
@@ -105,11 +101,11 @@ export function ReceptionModule() {
   const guestInRoom = (roomId: string) =>
     reservations.find((r) => r.roomId === roomId && r.status === 'checkin');
 
-  const resOnRoom = (roomId: string) =>
+  const pendingResOnRoom = (roomId: string) =>
     reservations.find(
       (r) =>
         r.roomId === roomId &&
-        (r.status === 'checkin' || r.status === 'confirmada' || r.status === 'pendente')
+        (r.status === 'confirmada' || r.status === 'pendente')
     );
 
   const doCheckIn = (id: string) => {
@@ -123,20 +119,15 @@ export function ReceptionModule() {
     else toast.error(res.message);
   };
 
-  const chartDates = useMemo(() => {
-    return Array.from({ length: chartDays }, (_, i) => addDays(today, i));
-  }, [today, chartDays]);
+  const chartDates = useMemo(
+    () => Array.from({ length: chartDays }, (_, i) => addDays(today, i)),
+    [today, chartDays]
+  );
 
-  /** Cor da célula do chart para UH + data */
   const cellInfo = (room: Room, date: string) => {
-    // bloqueado / interdição permanente no chart
     if (room.occupancy === 'bloqueado' || room.governance === 'interditado') {
       return { cls: 'bg-orange-400 text-white', label: 'I', title: 'Interditado/Bloqueado' };
     }
-    if (room.governance === 'manutencao' && room.occupancy === 'bloqueado') {
-      return { cls: 'bg-orange-400 text-white', label: 'I', title: 'Manutenção' };
-    }
-
     const res = reservations.find(
       (r) =>
         r.roomId === room.id &&
@@ -145,7 +136,6 @@ export function ReceptionModule() {
         r.checkIn <= date &&
         r.checkOut > date
     );
-
     if (res) {
       if (res.status === 'checkin') {
         if (res.checkOut === date)
@@ -156,11 +146,7 @@ export function ReceptionModule() {
         return { cls: 'bg-emerald-500 text-white', label: 'C', title: `Confirmada ${res.guestName}` };
       if (res.status === 'pendente')
         return { cls: 'bg-sky-300 text-slate-800', label: 'P', title: `Pendente ${res.guestName}` };
-      if (res.status === 'checkout' && res.checkOut === date)
-        return { cls: 'bg-pink-400 text-white', label: 'CO', title: 'Checkout' };
     }
-
-    // vago: mostra governança no dia de hoje; outros dias livre
     if (date === today) {
       if (room.governance === 'sujo')
         return { cls: 'bg-rose-200 text-rose-900', label: 'S', title: 'Sujo' };
@@ -171,13 +157,15 @@ export function ReceptionModule() {
       if (room.governance === 'limpo')
         return { cls: 'bg-lime-200 text-lime-900', label: 'L', title: 'Limpo' };
     }
-
     return { cls: 'bg-slate-50 text-slate-300', label: '·', title: 'Livre' };
   };
 
   return (
     <div className="space-y-4">
-      {/* Abas principais — modelo eSolution */}
+      {modalResId && (
+        <ReservationModal reservationId={modalResId} onClose={() => setModalResId(null)} />
+      )}
+
       <div className="flex flex-wrap items-center gap-1 border-b border-slate-200">
         {(
           [
@@ -203,7 +191,6 @@ export function ReceptionModule() {
         ))}
       </div>
 
-      {/* Toolbar busca */}
       {tab !== 'chart' && (
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -211,22 +198,20 @@ export function ReceptionModule() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={
-              tab === 'checkins'
-                ? 'Buscar reserva, hóspede ou UH…'
-                : 'Buscar UH, tipo ou bloco…'
+              tab === 'checkins' ? 'Buscar reserva, hóspede ou UH…' : 'Buscar UH, tipo ou bloco…'
             }
             className="w-full h-10 rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-[13px] outline-none focus:ring-2 focus:ring-indigo-500/20"
           />
         </div>
       )}
 
-      {/* ========== CHECK-INS PREVISTOS ========== */}
+      {/* CHECK-INS PREVISTOS */}
       {tab === 'checkins' && (
         <div className="space-y-3">
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+            <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/80">
               <p className="text-[12px] font-semibold text-slate-600">
-                Check-ins previstos e pré-check-ins · {filteredArrivals.length}
+                Check-ins previstos · {filteredArrivals.length}
               </p>
             </div>
             <div className="overflow-x-auto max-h-[420px]">
@@ -243,7 +228,7 @@ export function ReceptionModule() {
                     <th className="px-3 py-2 font-semibold">Check-out</th>
                     <th className="px-3 py-2 font-semibold">Canal</th>
                     <th className="px-3 py-2 font-semibold">Governança</th>
-                    <th className="px-3 py-2 font-semibold text-right">Ação</th>
+                    <th className="px-3 py-2 font-semibold text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -264,7 +249,7 @@ export function ReceptionModule() {
                           key={r.id}
                           onClick={() => setSelectedResId(r.id)}
                           className={cn(
-                            'cursor-pointer transition-colors',
+                            'cursor-pointer',
                             active ? 'bg-indigo-50' : 'hover:bg-slate-50'
                           )}
                         >
@@ -288,12 +273,8 @@ export function ReceptionModule() {
                           <td className="px-3 py-2 tabular-nums text-slate-600">
                             {r.adults}/{r.children}
                           </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {formatDateBR(r.checkIn)}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {formatDateBR(r.checkOut)}
-                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">{formatDateBR(r.checkIn)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{formatDateBR(r.checkOut)}</td>
                           <td className="px-3 py-2 capitalize text-slate-500">{r.origin}</td>
                           <td className="px-3 py-2">
                             {room ? (
@@ -311,13 +292,22 @@ export function ReceptionModule() {
                             )}
                           </td>
                           <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => doCheckIn(r.id)}
-                              className="h-7 px-2.5 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500"
-                            >
-                              Check-in
-                            </button>
+                            <div className="inline-flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setModalResId(r.id)}
+                                className="h-7 px-2 rounded-lg border border-slate-200 text-[11px] font-medium hover:bg-slate-50"
+                              >
+                                Reserva
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => doCheckIn(r.id)}
+                                className="h-7 px-2.5 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500"
+                              >
+                                Check-in
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -328,87 +318,80 @@ export function ReceptionModule() {
             </div>
           </div>
 
-          {/* Painel inferior — previsão do dia + detalhe reserva */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-            <div className="lg:col-span-5 rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 p-4 shadow-sm">
+            <div className="lg:col-span-5 rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-3">
                 Previsões do dia · {formatDateBR(today)}
               </p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Check-in</span>
-                  <span className="font-semibold tabular-nums">{arrivals.length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Ocupação total</span>
-                  <span className="font-semibold tabular-nums">
-                    {occupied}/{sellable}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Total UHs</span>
-                  <span className="font-semibold tabular-nums">{totalUhs}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Ocupadas %</span>
-                  <span className="font-semibold tabular-nums text-indigo-300">{occPct}%</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Adultos (in)</span>
-                  <span className="font-semibold tabular-nums">{adultsIn}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Crianças (in)</span>
-                  <span className="font-semibold tabular-nums">{childrenIn}</span>
-                </div>
-                <div className="flex justify-between border-t border-white/10 pt-2 mt-1">
-                  <span className="text-slate-400">Check-out</span>
-                  <span className="font-semibold tabular-nums">{departures.length}</span>
-                </div>
-                <div className="flex justify-between border-t border-white/10 pt-2 mt-1">
-                  <span className="text-slate-400">In-house</span>
-                  <span className="font-semibold tabular-nums">{inHouse.length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Adultos (out)</span>
-                  <span className="font-semibold tabular-nums">{adultsOut}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Crianças (out)</span>
-                  <span className="font-semibold tabular-nums">{childrenOut}</span>
-                </div>
+                <div className="flex justify-between"><span className="text-slate-400">Check-in</span><span className="font-semibold">{arrivals.length}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Ocupação</span><span className="font-semibold">{occupied}/{sellable}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Total UHs</span><span className="font-semibold">{totalUhs}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Ocupadas %</span><span className="font-semibold text-indigo-300">{occPct}%</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Adultos (in)</span><span className="font-semibold">{adultsIn}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Crianças (in)</span><span className="font-semibold">{childrenIn}</span></div>
+                <div className="flex justify-between border-t border-white/10 pt-2 mt-1"><span className="text-slate-400">Check-out</span><span className="font-semibold">{departures.length}</span></div>
+                <div className="flex justify-between border-t border-white/10 pt-2 mt-1"><span className="text-slate-400">In-house</span><span className="font-semibold">{inHouse.length}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Adultos (out)</span><span className="font-semibold">{adultsOut}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Crianças (out)</span><span className="font-semibold">{childrenOut}</span></div>
               </div>
             </div>
 
-            <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-3">
-                Observação / detalhe da reserva selecionada
+                Reserva selecionada
               </p>
               {selectedRes ? (
-                <ResDetail
-                  res={selectedRes}
-                  room={rooms.find((r) => r.id === selectedRes.roomId)}
-                  onFnrh={() => {
-                    markFnrh(selectedRes.id);
-                    toast.success('Pré-check-in / FNRH marcado');
-                  }}
-                  onCheckIn={() => doCheckIn(selectedRes.id)}
-                />
+                <div className="space-y-2 text-[13px]">
+                  <p className="font-semibold text-slate-900">{selectedRes.guestName}</p>
+                  <p className="text-slate-500">
+                    {selectedRes.code} · {selectedRes.roomNumber || selectedRes.roomType} ·{' '}
+                    {formatDateBR(selectedRes.checkIn)} → {formatDateBR(selectedRes.checkOut)}
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setModalResId(selectedRes.id)}
+                      className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] font-medium hover:bg-slate-50"
+                    >
+                      Abrir reserva
+                    </button>
+                    {!selectedRes.fnrhFilled && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          markFnrh(selectedRes.id);
+                          toast.success('FNRH marcada');
+                        }}
+                        className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] hover:bg-slate-50"
+                      >
+                        Marcar FNRH
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => doCheckIn(selectedRes.id)}
+                      className="h-8 px-3 rounded-lg bg-indigo-600 text-white text-[12px] font-semibold"
+                    >
+                      Check-in
+                    </button>
+                  </div>
+                </div>
               ) : (
-                <p className="text-[13px] text-slate-400">Selecione uma reserva na lista</p>
+                <p className="text-slate-400 text-[13px]">Selecione uma reserva na lista</p>
               )}
             </div>
           </div>
         </div>
       )}
 
-      {/* ========== RELAÇÃO DE UHs ========== */}
+      {/* RELAÇÃO DE UHs */}
       {tab === 'relacao' && (
         <div className="space-y-3">
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/80">
               <p className="text-[12px] font-semibold text-slate-600">
-                Relação de UHs · {filteredRooms.length} registro(s)
+                Relação de UHs · {filteredRooms.length}
               </p>
             </div>
             <div className="overflow-x-auto max-h-[420px]">
@@ -423,22 +406,19 @@ export function ReceptionModule() {
                     <th className="px-3 py-2 font-semibold">Hóspede</th>
                     <th className="px-3 py-2 font-semibold">Pré-CI</th>
                     <th className="px-3 py-2 font-semibold">NDP</th>
-                    <th className="px-3 py-2 font-semibold text-right">Ação</th>
+                    <th className="px-3 py-2 font-semibold text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {filteredRooms.map((room) => {
                     const guest = guestInRoom(room.id);
-                    const res = resOnRoom(room.id);
+                    const pending = pendingResOnRoom(room.id);
                     const active = selectedRoom?.id === room.id;
                     return (
                       <tr
                         key={room.id}
                         onClick={() => setSelectedRoomId(room.id)}
-                        className={cn(
-                          'cursor-pointer',
-                          active ? 'bg-indigo-50' : 'hover:bg-slate-50'
-                        )}
+                        className={cn(active ? 'bg-indigo-50' : 'hover:bg-slate-50', 'cursor-pointer')}
                       >
                         <td className="px-3 py-2 font-semibold tabular-nums">{room.number}</td>
                         <td className="px-3 py-2 text-slate-600">{room.type}</td>
@@ -446,18 +426,20 @@ export function ReceptionModule() {
                           {room.block || '—'} · {room.floor === 0 ? 'Térreo' : `${room.floor}º`}
                         </td>
                         <td className="px-3 py-2">
-                          <OccBadge status={room.occupancy} />
+                          <Badge tone={room.occupancy === 'ocupado' ? 'blue' : room.occupancy === 'bloqueado' ? 'slate' : 'green'}>
+                            {OCCUPANCY_LABEL[room.occupancy]}
+                          </Badge>
                         </td>
                         <td className="px-3 py-2">
-                          <GovBadge status={room.governance} />
+                          <Badge tone="violet">{GOVERNANCE_LABEL[room.governance]}</Badge>
                         </td>
                         <td className="px-3 py-2 max-w-[160px] truncate text-slate-700">
-                          {guest?.guestName || '—'}
+                          {guest?.guestName || pending?.guestName || '—'}
                         </td>
                         <td className="px-3 py-2">
-                          {res?.fnrhFilled ? (
+                          {(guest || pending)?.fnrhFilled ? (
                             <span className="text-emerald-600 font-medium">SIM</span>
-                          ) : res ? (
+                          ) : guest || pending ? (
                             <span className="text-slate-400">NÃO</span>
                           ) : (
                             '—'
@@ -470,29 +452,57 @@ export function ReceptionModule() {
                             <span className="text-slate-300">—</span>
                           )}
                         </td>
-                        <td
-                          className="px-3 py-2 text-right"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {guest && (
-                            <button
-                              type="button"
-                              onClick={() => doCheckOut(guest.id)}
-                              className="h-7 px-2.5 rounded-lg bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800"
-                            >
-                              Check-out
-                            </button>
-                          )}
-                          {res &&
-                            (res.status === 'confirmada' || res.status === 'pendente') && (
-                              <button
-                                type="button"
-                                onClick={() => doCheckIn(res.id)}
-                                className="h-7 px-2.5 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-500"
-                              >
-                                Check-in
-                              </button>
+                        <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="inline-flex gap-1 justify-end">
+                            {/* In-house: Reserva + Conta + Checkout — NUNCA Check-in */}
+                            {guest && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setModalResId(guest.id)}
+                                  className="h-7 px-2 rounded-lg border border-slate-200 text-[11px] font-medium hover:bg-slate-50"
+                                >
+                                  Reserva
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setModule('contas');
+                                    toast.message(`Conta de ${guest.guestName}`);
+                                  }}
+                                  className="h-7 px-2 rounded-lg border border-slate-200 text-[11px] font-medium hover:bg-slate-50"
+                                >
+                                  Conta
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => doCheckOut(guest.id)}
+                                  className="h-7 px-2.5 rounded-lg bg-slate-900 text-white text-[11px] font-semibold"
+                                >
+                                  Check-out
+                                </button>
+                              </>
                             )}
+                            {/* Chegada prevista na UH: Reserva + Check-in */}
+                            {!guest && pending && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setModalResId(pending.id)}
+                                  className="h-7 px-2 rounded-lg border border-slate-200 text-[11px] font-medium hover:bg-slate-50"
+                                >
+                                  Reserva
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => doCheckIn(pending.id)}
+                                  className="h-7 px-2.5 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold"
+                                >
+                                  Check-in
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -502,29 +512,26 @@ export function ReceptionModule() {
             </div>
           </div>
 
-          {/* Detalhe UH / reserva */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 p-4 shadow-sm">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 p-4">
             {selectedRoom ? (
-              <RoomDetail
+              <RoomDetailPanel
                 room={selectedRoom}
-                res={resOnRoom(selectedRoom.id)}
                 guest={guestInRoom(selectedRoom.id)}
-                account={
-                  guestInRoom(selectedRoom.id)?.accountId
-                    ? accounts.find(
-                        (a) => a.id === guestInRoom(selectedRoom.id)?.accountId
-                      )
-                    : undefined
-                }
+                pending={pendingResOnRoom(selectedRoom.id)}
+                onOpenRes={(id) => setModalResId(id)}
+                onAccount={(name) => {
+                  setModule('contas');
+                  toast.message(`Conta de ${name}`);
+                }}
               />
             ) : (
-              <p className="text-[13px] text-slate-400">Selecione uma UH na lista</p>
+              <p className="text-[13px] text-slate-400">Selecione uma UH</p>
             )}
           </div>
         </div>
       )}
 
-      {/* ========== CHART DE OCUPAÇÃO ========== */}
+      {/* CHART */}
       {tab === 'chart' && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -541,17 +548,13 @@ export function ReceptionModule() {
                 <option value={30}>30 dias</option>
               </select>
             </label>
-            <p className="text-[12px] text-slate-500">
-              {rooms.length} UHs · a partir de {formatDateBR(today)}
-            </p>
           </div>
-
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="overflow-auto max-h-[560px]">
               <table className="border-collapse text-[10px] min-w-max">
                 <thead className="sticky top-0 z-20 bg-slate-900 text-slate-200">
                   <tr>
-                    <th className="sticky left-0 z-30 bg-slate-900 px-3 py-2 text-left font-semibold min-w-[140px]">
+                    <th className="sticky left-0 z-30 bg-slate-900 px-3 py-2 text-left min-w-[140px]">
                       UH · Tipo
                     </th>
                     {chartDates.map((d) => {
@@ -560,15 +563,10 @@ export function ReceptionModule() {
                         weekday: 'short',
                       });
                       return (
-                        <th
-                          key={d}
-                          className="px-1 py-2 font-medium text-center min-w-[36px] border-l border-white/10"
-                        >
-                          <div className="leading-tight">
-                            <div className="text-[9px] text-slate-400 uppercase">{wd}</div>
-                            <div>
-                              {day}/{m}
-                            </div>
+                        <th key={d} className="px-1 py-2 text-center min-w-[36px] border-l border-white/10">
+                          <div className="text-[9px] text-slate-400 uppercase">{wd}</div>
+                          <div>
+                            {day}/{m}
                           </div>
                         </th>
                       );
@@ -577,12 +575,10 @@ export function ReceptionModule() {
                 </thead>
                 <tbody>
                   {[...rooms]
-                    .sort((a, b) =>
-                      a.number.localeCompare(b.number, 'pt-BR', { numeric: true })
-                    )
+                    .sort((a, b) => a.number.localeCompare(b.number, 'pt-BR', { numeric: true }))
                     .map((room) => (
-                      <tr key={room.id} className="border-t border-slate-100 hover:bg-slate-50/50">
-                        <td className="sticky left-0 z-10 bg-white px-3 py-1 font-medium text-[11px] text-slate-800 border-r border-slate-100 whitespace-nowrap">
+                      <tr key={room.id} className="border-t border-slate-100">
+                        <td className="sticky left-0 z-10 bg-white px-3 py-1 text-[11px] border-r border-slate-100 whitespace-nowrap">
                           <span className="font-semibold">{room.number}</span>
                           <span className="text-slate-400"> · {room.type}</span>
                         </td>
@@ -607,8 +603,6 @@ export function ReceptionModule() {
               </table>
             </div>
           </div>
-
-          {/* Legenda chart */}
           <div className="flex flex-wrap gap-3 text-[11px] text-slate-600">
             <Leg c="bg-lime-200" t="L Limpo" />
             <Leg c="bg-rose-200" t="S Sujo" />
@@ -626,185 +620,101 @@ export function ReceptionModule() {
   );
 }
 
-function ResDetail({
-  res,
+function RoomDetailPanel({
   room,
-  onFnrh,
-  onCheckIn,
-}: {
-  res: Reservation;
-  room?: Room;
-  onFnrh: () => void;
-  onCheckIn: () => void;
-}) {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
-      <Field label="Nº reserva" value={res.code} />
-      <Field label="Hóspede" value={res.guestName} />
-      <Field label="UH" value={res.roomNumber || '—'} />
-      <Field label="Tipo" value={res.roomType} />
-      <Field label="Check-in" value={formatDateBR(res.checkIn)} />
-      <Field label="Check-out" value={formatDateBR(res.checkOut)} />
-      <Field label="AD / CH" value={`${res.adults} / ${res.children}`} />
-      <Field label="Canal" value={res.origin} />
-      <Field
-        label="Pré-check-in / FNRH"
-        value={res.fnrhFilled ? 'Preenchido' : 'Pendente'}
-      />
-      <Field
-        label="Governança UH"
-        value={room ? GOVERNANCE_LABEL[room.governance] : '—'}
-      />
-      <Field label="Total" value={formatBRL(res.totalAmount)} />
-      <Field label="Pago" value={formatBRL(res.paidAmount)} />
-      {res.notes && (
-        <div className="sm:col-span-2">
-          <Field label="Observação" value={res.notes} />
-        </div>
-      )}
-      <div className="sm:col-span-2 flex flex-wrap gap-2 pt-2">
-        {!res.fnrhFilled && (
-          <button
-            type="button"
-            onClick={onFnrh}
-            className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] font-medium hover:bg-slate-50"
-          >
-            Marcar FNRH / pré-CI
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={onCheckIn}
-          className="h-8 px-3 rounded-lg bg-indigo-600 text-white text-[12px] font-semibold hover:bg-indigo-500"
-        >
-          Realizar check-in
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function RoomDetail({
-  room,
-  res,
   guest,
-  account,
+  pending,
+  onOpenRes,
+  onAccount,
 }: {
   room: Room;
-  res?: Reservation;
   guest?: Reservation;
-  account?: { charges: { amount: number }[]; payments: { amount: number }[] };
+  pending?: Reservation;
+  onOpenRes: (id: string) => void;
+  onAccount: (name: string) => void;
 }) {
-  const balance = account ? accountBalance(account as never) : null;
+  const res = guest || pending;
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-[13px]">
-      <div className="space-y-1.5">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[13px]">
+      <div className="space-y-1">
         <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">UH</p>
-        <Field label="Número" value={room.number} dark />
-        <Field label="Tipo" value={room.type} dark />
-        <Field
-          label="Local"
-          value={`${room.block || '—'} · ${room.floor === 0 ? 'Térreo' : room.floor + 'º'}`}
-          dark
-        />
-        <Field label="Ocupação" value={OCCUPANCY_LABEL[room.occupancy]} dark />
-        <Field label="Governança" value={GOVERNANCE_LABEL[room.governance]} dark />
-        <Field label="Camareira" value={room.housekeeper || '—'} dark />
-        <Field label="NDP" value={room.dnd ? 'Ativo' : 'Não'} dark />
+        <p>
+          <span className="text-slate-400">Número:</span> {room.number}
+        </p>
+        <p>
+          <span className="text-slate-400">Tipo:</span> {room.type}
+        </p>
+        <p>
+          <span className="text-slate-400">Ocupação:</span> {OCCUPANCY_LABEL[room.occupancy]}
+        </p>
+        <p>
+          <span className="text-slate-400">Governança:</span> {GOVERNANCE_LABEL[room.governance]}
+        </p>
       </div>
-      <div className="space-y-1.5 sm:col-span-2">
+      <div className="space-y-1">
         <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
           Reserva / hóspede
         </p>
-        {res || guest ? (
+        {res ? (
           <>
-            <Field label="Reserva" value={(guest || res)!.code} dark />
-            <Field label="Hóspede" value={(guest || res)!.guestName} dark />
-            <Field
-              label="Estadia"
-              value={`${formatDateBR((guest || res)!.checkIn)} → ${formatDateBR((guest || res)!.checkOut)}`}
-              dark
-            />
-            <Field label="Canal" value={(guest || res)!.origin} dark />
-            {balance !== null && (
-              <Field
-                label="Saldo conta"
-                value={balance > 0.01 ? formatBRL(balance) : 'Quitado'}
-                dark
-              />
-            )}
-            {(guest || res)!.notes && (
-              <Field label="Obs. reserva" value={(guest || res)!.notes!} dark />
-            )}
+            <p>
+              <span className="text-slate-400">Reserva:</span> {res.code}
+            </p>
+            <p>
+              <span className="text-slate-400">Hóspede:</span> {res.guestName}
+            </p>
+            <p>
+              <span className="text-slate-400">Estadia:</span>{' '}
+              {formatDateBR(res.checkIn)} → {formatDateBR(res.checkOut)}
+            </p>
+            <div className="flex flex-wrap gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => onOpenRes(res.id)}
+                className="h-8 px-3 rounded-lg bg-white text-slate-900 text-[12px] font-semibold"
+              >
+                Abrir reserva
+              </button>
+              {guest && (
+                <button
+                  type="button"
+                  onClick={() => onAccount(guest.guestName)}
+                  className="h-8 px-3 rounded-lg border border-white/20 text-[12px]"
+                >
+                  Conta do hóspede
+                </button>
+              )}
+            </div>
           </>
         ) : (
-          <p className="text-slate-500">UH sem reserva vinculada</p>
-        )}
-        {room.notes && <Field label="Obs. UH" value={room.notes} dark />}
-        {room.blockedReason && (
-          <Field label="Motivo bloqueio" value={room.blockedReason} dark />
+          <p className="text-slate-500">Sem reserva vinculada</p>
         )}
       </div>
     </div>
   );
 }
 
-function Field({
-  label,
-  value,
-  dark,
+function Badge({
+  children,
+  tone,
 }: {
-  label: string;
-  value: string;
-  dark?: boolean;
+  children: React.ReactNode;
+  tone: 'green' | 'blue' | 'slate' | 'violet';
 }) {
-  return (
-    <div className="flex gap-2 text-[12px]">
-      <span className={cn('shrink-0', dark ? 'text-slate-400' : 'text-slate-500')}>
-        {label}:
-      </span>
-      <span className={cn('font-medium', dark ? 'text-slate-100' : 'text-slate-900')}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function OccBadge({ status }: { status: Room['occupancy'] }) {
   const map = {
-    livre: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
-    ocupado: 'bg-blue-50 text-blue-800 ring-blue-200',
-    bloqueado: 'bg-slate-200 text-slate-800 ring-slate-300',
+    green: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
+    blue: 'bg-blue-50 text-blue-800 ring-blue-200',
+    slate: 'bg-slate-200 text-slate-800 ring-slate-300',
+    violet: 'bg-violet-50 text-violet-800 ring-violet-200',
   };
   return (
     <span
       className={cn(
         'inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ring-inset',
-        map[status]
+        map[tone]
       )}
     >
-      {OCCUPANCY_LABEL[status]}
-    </span>
-  );
-}
-
-function GovBadge({ status }: { status: Room['governance'] }) {
-  const map = {
-    limpo: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
-    sujo: 'bg-rose-50 text-rose-800 ring-rose-200',
-    limpeza: 'bg-amber-50 text-amber-900 ring-amber-200',
-    inspecao: 'bg-violet-50 text-violet-800 ring-violet-200',
-    manutencao: 'bg-orange-50 text-orange-900 ring-orange-200',
-    interditado: 'bg-slate-200 text-slate-800 ring-slate-300',
-  };
-  return (
-    <span
-      className={cn(
-        'inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ring-inset',
-        map[status]
-      )}
-    >
-      {GOVERNANCE_LABEL[status]}
+      {children}
     </span>
   );
 }
@@ -817,6 +727,3 @@ function Leg({ c, t }: { c: string; t: string }) {
     </span>
   );
 }
-
-// silence unused helper if tree-shaken
-void daysBetween;

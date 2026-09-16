@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { usePms } from '@/lib/pms-store';
+import { GOVERNANCE_STATUSES, usePms } from '@/lib/pms-store';
 import { ROOM_STATUS_LABEL, type RoomStatus } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
 import { CheckSquare, Square, X } from 'lucide-react';
 import { toast } from 'sonner';
 
-const STATUS_OPTIONS: RoomStatus[] = [
+/** Filtros do resumo (inclui ocupado só para visualização/contagem). */
+const FILTER_STATUSES: RoomStatus[] = [
   'livre',
   'ocupado',
   'sujo',
@@ -60,6 +61,11 @@ export function GovernanceModule() {
   const someVisibleSelected = list.some((r) => selected.has(r.id));
 
   const toggleOne = (id: string) => {
+    const guest = guestInRoom(id);
+    if (guest) {
+      toast.message('UH ocupada: status só muda no check-out da Recepção');
+      return;
+    }
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -69,12 +75,14 @@ export function GovernanceModule() {
   };
 
   const toggleAllVisible = () => {
+    const selectable = list.filter((r) => !guestInRoom(r.id));
     setSelected((prev) => {
       const next = new Set(prev);
-      if (allVisibleSelected) {
-        for (const r of list) next.delete(r.id);
+      const allOn = selectable.length > 0 && selectable.every((r) => next.has(r.id));
+      if (allOn) {
+        for (const r of selectable) next.delete(r.id);
       } else {
-        for (const r of list) next.add(r.id);
+        for (const r of selectable) next.add(r.id);
       }
       return next;
     });
@@ -87,33 +95,45 @@ export function GovernanceModule() {
       toast.error('Selecione pelo menos uma UH');
       return;
     }
+    if (bulkStatus === 'ocupado') {
+      toast.error('Ocupado só é definido no check-in');
+      return;
+    }
     let notes: string | undefined;
     if (bulkStatus === 'interditado' || bulkStatus === 'manutencao') {
       notes = window.prompt('Motivo (opcional, aplica a todas):') || undefined;
     }
+    let ok = 0;
+    let fail = 0;
     for (const id of selected) {
-      updateRoomStatus(id, bulkStatus, notes);
+      const res = updateRoomStatus(id, bulkStatus, notes);
+      if (res.ok) ok += 1;
+      else fail += 1;
     }
-    toast.success(
-      `${selected.size} UH(s) → ${ROOM_STATUS_LABEL[bulkStatus]}`
-    );
+    if (ok > 0) toast.success(`${ok} UH(s) → ${ROOM_STATUS_LABEL[bulkStatus]}`);
+    if (fail > 0)
+      toast.error(`${fail} UH(s) não alterada(s) (ocupada ou regra bloqueada)`);
     clearSelection();
   };
 
   const setStatusOne = (roomId: string, status: RoomStatus) => {
+    if (status === 'ocupado') {
+      toast.error('Ocupado só é definido no check-in da Recepção');
+      return;
+    }
     let notes: string | undefined;
     if (status === 'interditado' || status === 'manutencao') {
       notes = window.prompt('Motivo (opcional):') || undefined;
     }
-    updateRoomStatus(roomId, status, notes);
-    toast.success(ROOM_STATUS_LABEL[status]);
+    const res = updateRoomStatus(roomId, status, notes);
+    if (res.ok) toast.success(ROOM_STATUS_LABEL[status]);
+    else toast.error(res.message);
   };
 
   return (
     <div className="space-y-5">
-      {/* Resumo por status */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-        {STATUS_OPTIONS.map((s) => {
+        {FILTER_STATUSES.map((s) => {
           const active = filter === s;
           return (
             <button
@@ -137,7 +157,6 @@ export function GovernanceModule() {
         })}
       </div>
 
-      {/* Filtros */}
       <div className="flex flex-wrap gap-2 items-center">
         <select
           value={floor}
@@ -163,7 +182,6 @@ export function GovernanceModule() {
         <p className="text-[12px] text-slate-500 ml-auto">{list.length} UH(s) na lista</p>
       </div>
 
-      {/* Barra de ação em lote */}
       {selected.size > 0 && (
         <div className="sticky top-0 z-20 flex flex-wrap items-center gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 shadow-sm">
           <p className="text-[13px] font-semibold text-indigo-900">
@@ -174,7 +192,7 @@ export function GovernanceModule() {
             onChange={(e) => setBulkStatus(e.target.value as RoomStatus)}
             className="h-9 rounded-lg border border-indigo-200 bg-white px-3 text-[13px] font-medium"
           >
-            {STATUS_OPTIONS.map((s) => (
+            {GOVERNANCE_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {ROOM_STATUS_LABEL[s]}
               </option>
@@ -197,7 +215,6 @@ export function GovernanceModule() {
         </div>
       )}
 
-      {/* Lista */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
@@ -209,7 +226,7 @@ export function GovernanceModule() {
                     onClick={toggleAllVisible}
                     className="text-slate-500 hover:text-slate-800"
                     aria-label={allVisibleSelected ? 'Desmarcar todas' : 'Selecionar todas'}
-                    title={allVisibleSelected ? 'Desmarcar todas' : 'Selecionar todas visíveis'}
+                    title="Selecionar UHs disponíveis (ignora ocupadas)"
                   >
                     {allVisibleSelected ? (
                       <CheckSquare className="w-4 h-4 text-indigo-600" />
@@ -240,20 +257,26 @@ export function GovernanceModule() {
                   const guest = guestInRoom(room.id);
                   const isOn = selected.has(room.id);
                   const st = STATUS_STYLE[room.status];
+                  const locked = !!guest || room.status === 'ocupado';
                   return (
                     <tr
                       key={room.id}
                       className={cn(
                         'transition-colors',
-                        isOn ? 'bg-indigo-50/70' : 'hover:bg-slate-50/80'
+                        isOn ? 'bg-indigo-50/70' : 'hover:bg-slate-50/80',
+                        locked && 'opacity-90'
                       )}
                     >
                       <td className="px-4 py-2.5">
                         <button
                           type="button"
                           onClick={() => toggleOne(room.id)}
-                          className="text-slate-500 hover:text-indigo-600"
+                          className={cn(
+                            'text-slate-500',
+                            locked ? 'opacity-40 cursor-not-allowed' : 'hover:text-indigo-600'
+                          )}
                           aria-label={isOn ? 'Desmarcar' : 'Selecionar'}
+                          disabled={locked}
                         >
                           {isOn ? (
                             <CheckSquare className="w-4 h-4 text-indigo-600" />
@@ -283,24 +306,30 @@ export function GovernanceModule() {
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-slate-500 max-w-[220px] truncate">
-                        {guest
-                          ? guest.guestName
-                          : room.notes || '—'}
+                        {guest ? guest.guestName : room.notes || '—'}
                       </td>
                       <td className="px-4 py-2.5 text-right">
-                        <select
-                          value={room.status}
-                          onChange={(e) =>
-                            setStatusOne(room.id, e.target.value as RoomStatus)
-                          }
-                          className="h-8 rounded-lg border border-slate-200 bg-white text-[12px] px-2 font-medium max-w-[140px]"
-                        >
-                          {STATUS_OPTIONS.map((s) => (
-                            <option key={s} value={s}>
-                              {ROOM_STATUS_LABEL[s]}
-                            </option>
-                          ))}
-                        </select>
+                        {locked ? (
+                          <span className="text-[11px] text-slate-400 italic">Via check-out</span>
+                        ) : (
+                          <select
+                            value={
+                              GOVERNANCE_STATUSES.includes(room.status)
+                                ? room.status
+                                : 'livre'
+                            }
+                            onChange={(e) =>
+                              setStatusOne(room.id, e.target.value as RoomStatus)
+                            }
+                            className="h-8 rounded-lg border border-slate-200 bg-white text-[12px] px-2 font-medium max-w-[140px]"
+                          >
+                            {GOVERNANCE_STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                {ROOM_STATUS_LABEL[s]}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </td>
                     </tr>
                   );
@@ -312,8 +341,9 @@ export function GovernanceModule() {
       </div>
 
       <p className="text-[12px] text-slate-500">
-        Dica: use o checkbox do cabeçalho para selecionar todas as UHs visíveis no filtro atual, escolha o
-        novo status e clique em <strong>Aplicar status</strong>.
+        <strong>Ocupado</strong> só entra no check-in. UH com hóspede in-house só muda no{' '}
+        <strong>check-out</strong> (vira Suja). Governança: Livre, Sujo, Limpeza, Inspeção, Interditado e
+        Manutenção.
       </p>
     </div>
   );

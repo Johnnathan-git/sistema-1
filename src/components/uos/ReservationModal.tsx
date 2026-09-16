@@ -12,7 +12,19 @@ import {
   type RoomType,
 } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
-import { FileText, LogIn, LogOut, Save, Wallet, X } from 'lucide-react';
+import {
+  Download,
+  Eye,
+  FileText,
+  History,
+  LogIn,
+  LogOut,
+  Paperclip,
+  Save,
+  Ticket,
+  Wallet,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 const ROOM_TYPES: RoomType[] = [
@@ -35,7 +47,113 @@ const ORIGINS: Reservation['origin'][] = [
 const inputCls =
   'w-full h-10 rounded-xl border border-slate-200 px-3 text-[13px] outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50 disabled:text-slate-500';
 
-type ModalTab = 'geral' | 'valores' | 'obs';
+type ModalTab =
+  | 'geral'
+  | 'valores'
+  | 'obs'
+  | 'voucher'
+  | 'documentos'
+  | 'logs';
+
+/** Dados fictícios de layout */
+function mockDocs(res: Reservation) {
+  return [
+    {
+      id: 'd1',
+      name: `Voucher_${res.code}.pdf`,
+      type: 'Voucher',
+      size: '124 KB',
+      uploadedAt: res.checkIn + ' 09:12',
+      uploadedBy: 'Sistema',
+    },
+    {
+      id: 'd2',
+      name: 'Comprovante_PIX_sinal.pdf',
+      type: 'Comprovante',
+      size: '86 KB',
+      uploadedAt: res.checkIn + ' 10:05',
+      uploadedBy: 'Operador JH',
+    },
+    {
+      id: 'd3',
+      name: 'FNRH_digital.pdf',
+      type: 'FNRH',
+      size: '210 KB',
+      uploadedAt: res.checkIn + ' 14:22',
+      uploadedBy: 'Operador JH',
+    },
+  ];
+}
+
+function mockLogs(res: Reservation) {
+  const logs = [
+    {
+      id: 'l1',
+      at: '2026-09-10 11:34',
+      user: 'Operador JH',
+      action: 'Reserva criada',
+      detail: `Canal ${res.origin} · ${res.roomType}`,
+    },
+    {
+      id: 'l2',
+      at: '2026-09-10 11:35',
+      user: 'Sistema',
+      action: 'Confirmação automática',
+      detail: 'Status → Confirmada',
+    },
+    {
+      id: 'l3',
+      at: '2026-09-12 16:40',
+      user: 'Operador JH',
+      action: 'UH atribuída',
+      detail: res.roomNumber || 'A definir',
+    },
+    {
+      id: 'l4',
+      at: res.checkIn + ' 09:12',
+      user: 'Sistema',
+      action: 'Voucher gerado',
+      detail: `Voucher_${res.code}.pdf`,
+    },
+  ];
+  if (res.paidAmount > 0) {
+    logs.push({
+      id: 'l5',
+      at: res.checkIn + ' 10:05',
+      user: 'Operador JH',
+      action: 'Pagamento registrado',
+      detail: formatBRL(res.paidAmount),
+    });
+  }
+  if (res.fnrhFilled) {
+    logs.push({
+      id: 'l6',
+      at: res.checkIn + ' 14:20',
+      user: 'Operador JH',
+      action: 'FNRH preenchida',
+      detail: 'Pré-check-in concluído',
+    });
+  }
+  if (res.status === 'checkin') {
+    logs.push({
+      id: 'l7',
+      at: res.checkIn + ' 15:02',
+      user: 'Operador JH',
+      action: 'Check-in realizado',
+      detail: `UH ${res.roomNumber} · Conta aberta`,
+    });
+  }
+  if (res.status === 'checkout') {
+    logs.push({
+      id: 'l8',
+      at: res.checkOut + ' 11:00',
+      user: 'Operador JH',
+      action: 'Check-out realizado',
+      detail: 'UH liberada · status Sujo',
+    });
+  }
+  return logs;
+}
 
 export function ReservationModal({
   reservationId,
@@ -54,6 +172,7 @@ export function ReservationModal({
     markFnrh,
     checkIn,
     checkOut,
+    hotel,
   } = usePms();
 
   const res = reservations.find((r) => r.id === reservationId);
@@ -87,6 +206,9 @@ export function ReservationModal({
   const canCheckOut = draft.status === 'checkin';
   const editable = draft.status !== 'cancelada' && draft.status !== 'checkout';
 
+  const docs = mockDocs(draft);
+  const logs = mockLogs(draft);
+
   const save = () => {
     upsertReservation(draft);
     toast.success('Alterações salvas');
@@ -107,6 +229,25 @@ export function ReservationModal({
       toast.success(r.message);
       onClose();
     } else toast.error(r.message);
+  };
+
+  const openVoucherPdf = () => {
+    const html = buildVoucherHtml(draft, hotel.name, guest?.document);
+    const w = window.open('', '_blank', 'noopener,noreferrer,width=800,height=900');
+    if (!w) {
+      toast.error('Permita pop-ups para abrir o voucher');
+      return;
+    }
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => {
+      try {
+        w.print();
+      } catch {
+        /* ignore */
+      }
+    }, 400);
+    toast.message('Voucher aberto — use imprimir / salvar como PDF');
   };
 
   return (
@@ -158,12 +299,15 @@ export function ReservationModal({
             </button>
           </div>
 
-          <div className="px-5 border-b border-slate-100 flex gap-1 shrink-0">
+          <div className="px-3 sm:px-5 border-b border-slate-100 flex gap-0.5 overflow-x-auto shrink-0">
             {(
               [
                 ['geral', 'Geral'],
-                ['valores', 'Tarifa / valores'],
+                ['valores', 'Tarifa'],
                 ['obs', 'Observação'],
+                ['voucher', 'Voucher'],
+                ['documentos', 'Documentos'],
+                ['logs', 'Logs'],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -171,7 +315,7 @@ export function ReservationModal({
                 type="button"
                 onClick={() => setTab(id)}
                 className={cn(
-                  'px-3 py-2.5 text-[13px] border-b-2 -mb-px',
+                  'px-3 py-2.5 text-[13px] border-b-2 -mb-px whitespace-nowrap',
                   tab === id
                     ? 'border-indigo-600 text-indigo-700 font-semibold'
                     : 'border-transparent text-slate-500'
@@ -402,6 +546,175 @@ export function ReservationModal({
                 </div>
               </Section>
             )}
+
+            {tab === 'voucher' && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[13px] font-semibold text-slate-800">Voucher do hóspede</p>
+                    <p className="text-[12px] text-slate-500">
+                      Documento oficial da reserva — abrir ou salvar como PDF
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openVoucherPdf}
+                    className="h-9 px-3 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5"
+                  >
+                    <Ticket className="w-3.5 h-3.5" /> Abrir voucher (PDF)
+                  </button>
+                </div>
+
+                {/* Preview visual */}
+                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm text-[13px]">
+                  <div className="flex justify-between items-start border-b border-slate-100 pb-3 mb-3">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+                        {hotel.name}
+                      </p>
+                      <p className="text-lg font-semibold text-slate-900">VOUCHER DE HOSPEDAGEM</p>
+                    </div>
+                    <p className="font-mono text-[12px] text-slate-500">{draft.code}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400">Hóspede</p>
+                      <p className="font-medium">{draft.guestName}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400">Documento</p>
+                      <p className="font-medium">{guest?.document || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400">Check-in</p>
+                      <p className="font-medium">{formatDateBR(draft.checkIn)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400">Check-out</p>
+                      <p className="font-medium">{formatDateBR(draft.checkOut)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400">UH / Tipo</p>
+                      <p className="font-medium">
+                        {draft.roomNumber || '—'} · {draft.roomType}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400">Hóspedes</p>
+                      <p className="font-medium">
+                        {draft.adults} adulto(s) · {draft.children} criança(s)
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400">Valor</p>
+                      <p className="font-medium">{formatBRL(draft.totalAmount)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400">Status</p>
+                      <p className="font-medium">{RES_STATUS_LABEL[draft.status]}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === 'documentos' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[13px] font-semibold text-slate-800">
+                    Documentos da reserva
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => toast.message('Upload de documento (em breve)')}
+                    className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"
+                  >
+                    <Paperclip className="w-3.5 h-3.5" /> Anexar
+                  </button>
+                </div>
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <table className="w-full text-[12px]">
+                    <thead className="bg-slate-50 border-b border-slate-100">
+                      <tr className="text-left text-[10px] uppercase tracking-wider text-slate-400">
+                        <th className="px-3 py-2 font-semibold">Arquivo</th>
+                        <th className="px-3 py-2 font-semibold">Tipo</th>
+                        <th className="px-3 py-2 font-semibold">Enviado</th>
+                        <th className="px-3 py-2 font-semibold text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {docs.map((d) => (
+                        <tr key={d.id} className="hover:bg-slate-50/80">
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                              <div>
+                                <p className="font-medium text-slate-800">{d.name}</p>
+                                <p className="text-[10px] text-slate-400">{d.size}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-600">{d.type}</td>
+                          <td className="px-3 py-2.5 text-slate-500">
+                            <p>{d.uploadedAt}</p>
+                            <p className="text-[10px]">{d.uploadedBy}</p>
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            <div className="inline-flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  d.type === 'Voucher'
+                                    ? openVoucherPdf()
+                                    : toast.message(`Visualizar ${d.name} (mock)`)
+                                }
+                                className="h-7 w-7 rounded-lg border border-slate-200 inline-flex items-center justify-center hover:bg-white"
+                                title="Visualizar"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toast.message(`Download ${d.name} (mock)`)}
+                                className="h-7 w-7 rounded-lg border border-slate-200 inline-flex items-center justify-center hover:bg-white"
+                                title="Download"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {tab === 'logs' && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <History className="w-4 h-4 text-slate-400" />
+                  <p className="text-[13px] font-semibold text-slate-800">Histórico da reserva</p>
+                </div>
+                <div className="relative pl-4 space-y-0">
+                  <div className="absolute left-[7px] top-2 bottom-2 w-px bg-slate-200" />
+                  {logs.map((l) => (
+                    <div key={l.id} className="relative pb-4 last:pb-0">
+                      <div className="absolute left-[-13px] top-1.5 h-2.5 w-2.5 rounded-full bg-indigo-500 ring-2 ring-white" />
+                      <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
+                        <div className="flex flex-wrap items-baseline justify-between gap-1">
+                          <p className="text-[13px] font-semibold text-slate-800">{l.action}</p>
+                          <p className="text-[11px] text-slate-400 tabular-nums">{l.at}</p>
+                        </div>
+                        <p className="text-[12px] text-slate-600 mt-0.5">{l.detail}</p>
+                        <p className="text-[11px] text-slate-400 mt-1">por {l.user}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex flex-wrap gap-2 shrink-0">
@@ -420,7 +733,15 @@ export function ReservationModal({
               onClick={() => setShowAccount(true)}
               className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"
             >
-              <Wallet className="w-3.5 h-3.5" /> Conta do hóspede
+              <Wallet className="w-3.5 h-3.5" /> Conta
+            </button>
+
+            <button
+              type="button"
+              onClick={openVoucherPdf}
+              className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"
+            >
+              <Ticket className="w-3.5 h-3.5" /> Voucher
             </button>
 
             <button
@@ -433,14 +754,14 @@ export function ReservationModal({
               className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"
             >
               <FileText className="w-3.5 h-3.5" />
-              {draft.fnrhFilled ? 'FNRH OK' : 'Marcar FNRH'}
+              {draft.fnrhFilled ? 'FNRH OK' : 'FNRH'}
             </button>
 
             {canCheckIn && (
               <button
                 type="button"
                 onClick={doCheckIn}
-                className="h-9 px-3 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-emerald-500"
+                className="h-9 px-3 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5"
               >
                 <LogIn className="w-3.5 h-3.5" /> Check-in
               </button>
@@ -450,7 +771,7 @@ export function ReservationModal({
               <button
                 type="button"
                 onClick={doCheckOut}
-                className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-slate-800"
+                className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[13px] font-semibold inline-flex items-center gap-1.5"
               >
                 <LogOut className="w-3.5 h-3.5" /> Check-out
               </button>
@@ -468,7 +789,7 @@ export function ReservationModal({
                 }}
                 className="h-9 px-3 rounded-lg border border-rose-200 text-rose-700 text-[13px] hover:bg-rose-50 ml-auto"
               >
-                Cancelar reserva
+                Cancelar
               </button>
             )}
 
@@ -484,6 +805,40 @@ export function ReservationModal({
       </Overlay>
     </>
   );
+}
+
+function buildVoucherHtml(
+  r: Reservation,
+  hotelName: string,
+  document?: string
+): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Voucher ${r.code}</title>
+<style>
+  body{font-family:system-ui,sans-serif;padding:32px;color:#0f172a;max-width:640px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px} .muted{color:#64748b;font-size:12px}
+  .box{border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-top:16px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .lbl{font-size:10px;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em}
+  .val{font-size:14px;font-weight:600;margin-top:2px}
+  @media print{body{padding:12px}}
+</style></head><body>
+<p class="muted">${hotelName}</p>
+<h1>Voucher de hospedagem</h1>
+<p class="muted">Reserva ${r.code}</p>
+<div class="box">
+  <div class="grid">
+    <div><div class="lbl">Hóspede</div><div class="val">${r.guestName}</div></div>
+    <div><div class="lbl">Documento</div><div class="val">${document || '—'}</div></div>
+    <div><div class="lbl">Check-in</div><div class="val">${formatDateBR(r.checkIn)}</div></div>
+    <div><div class="lbl">Check-out</div><div class="val">${formatDateBR(r.checkOut)}</div></div>
+    <div><div class="lbl">UH / Tipo</div><div class="val">${r.roomNumber || '—'} · ${r.roomType}</div></div>
+    <div><div class="lbl">Hóspedes</div><div class="val">${r.adults} ad. · ${r.children} ch.</div></div>
+    <div><div class="lbl">Valor</div><div class="val">${formatBRL(r.totalAmount)}</div></div>
+    <div><div class="lbl">Status</div><div class="val">${RES_STATUS_LABEL[r.status]}</div></div>
+  </div>
+</div>
+<p class="muted" style="margin-top:24px">Documento gerado pelo UOS PMS · ${new Date().toLocaleString('pt-BR')}</p>
+</body></html>`;
 }
 
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {

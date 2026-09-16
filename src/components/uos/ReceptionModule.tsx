@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react';
 import { usePms } from '@/lib/pms-store';
-import { accountBalance, formatBRL, formatDateBR } from '@/lib/pms-types';
+import {
+  accountBalance,
+  formatBRL,
+  formatDateBR,
+  isRoomReadyForCheckIn,
+  roomNotReadyReason,
+} from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
 import {
   AlertTriangle,
@@ -29,14 +35,19 @@ export function ReceptionModule() {
   const departures = reservations.filter(
     (r) => r.checkOut === today && r.status === 'checkin'
   );
-  const notReady = rooms.filter((r) =>
-    ['sujo', 'limpeza', 'inspecao', 'interditado', 'manutencao'].includes(r.status)
+  const notReady = rooms.filter(
+    (r) =>
+      r.occupancy === 'bloqueado' ||
+      ['sujo', 'limpeza', 'inspecao', 'interditado', 'manutencao'].includes(r.governance)
   );
   const pendingBalance = accounts.filter((a) => accountBalance(a) > 0.01);
-  const occupied = rooms.filter((r) => r.status === 'ocupado').length;
-  const sellable = rooms.filter((r) => !['interditado', 'manutencao'].includes(r.status)).length;
-  const free = rooms.filter((r) => r.status === 'livre').length;
+  const occupied = rooms.filter((r) => r.occupancy === 'ocupado').length;
+  const sellable = rooms.filter((r) => r.occupancy !== 'bloqueado').length;
+  const free = rooms.filter(
+    (r) => r.occupancy === 'livre' && r.governance === 'limpo'
+  ).length;
   const occPct = sellable > 0 ? Math.round((occupied / sellable) * 100) : 0;
+  const dirtyCount = rooms.filter((r) => r.governance === 'sujo').length;
 
   const actionList = useMemo(() => {
     let list = [...reservations];
@@ -49,9 +60,8 @@ export function ReceptionModule() {
         const acc = accounts.find((a) => a.id === r.accountId);
         const balance = acc ? accountBalance(acc) : r.totalAmount - r.paidAmount;
         const room = rooms.find((rm) => rm.id === r.roomId);
-        const uhNotReady =
-          room && ['sujo', 'limpeza', 'inspecao', 'interditado', 'manutencao'].includes(room.status);
-        return balance > 0.01 || !!uhNotReady || !r.fnrhFilled;
+        const uhNotReady = room ? !isRoomReadyForCheckIn(room) && r.status !== 'checkin' : false;
+        return balance > 0.01 || uhNotReady || !r.fnrhFilled;
       });
     else
       list = [...arrivals, ...departures, ...inHouse].filter(
@@ -93,7 +103,7 @@ export function ReceptionModule() {
       id: 'occ',
       label: 'Ocupação',
       value: `${occPct}%`,
-      hint: `${occupied}/${sellable} UHs · ${free} livres`,
+      hint: `${occupied}/${sellable} UHs · ${free} prontas`,
       accent: 'from-indigo-500 to-indigo-600',
       icon: BedDouble,
     },
@@ -124,7 +134,7 @@ export function ReceptionModule() {
     {
       id: 'pendencias',
       label: 'Pendências',
-      value: pendingBalance.length + notReady.filter((r) => r.status === 'sujo').length,
+      value: pendingBalance.length + dirtyCount,
       hint: 'Saldo + UH suja',
       accent: 'from-slate-600 to-slate-700',
       icon: AlertTriangle,
@@ -133,7 +143,6 @@ export function ReceptionModule() {
 
   return (
     <div className="space-y-5">
-      {/* KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
         {kpis.map((k) => {
           const Icon = k.icon;
@@ -177,7 +186,6 @@ export function ReceptionModule() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-        {/* Main list */}
         <div className="xl:col-span-9 space-y-3">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[200px]">
@@ -225,7 +233,7 @@ export function ReceptionModule() {
           </div>
 
           <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50">
               <p className="text-[12px] font-semibold text-slate-600">
                 Fila operacional · {actionList.length} registro{actionList.length !== 1 ? 's' : ''}
               </p>
@@ -257,11 +265,8 @@ export function ReceptionModule() {
                       const balance = acc
                         ? accountBalance(acc)
                         : r.totalAmount - r.paidAmount;
-                      const uhNotReady =
-                        room &&
-                        ['sujo', 'limpeza', 'inspecao', 'interditado', 'manutencao'].includes(
-                          room.status
-                        );
+                      const ready = room ? isRoomReadyForCheckIn(room) : false;
+                      const reason = room ? roomNotReadyReason(room) : null;
 
                       return (
                         <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
@@ -273,6 +278,11 @@ export function ReceptionModule() {
                           </td>
                           <td className="px-3 py-3">
                             <span className="font-semibold tabular-nums">{r.roomNumber || '—'}</span>
+                            {room && (
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                {room.occupancy}/{room.governance}
+                              </p>
+                            )}
                           </td>
                           <td className="px-3 py-3 text-slate-600 whitespace-nowrap">
                             {formatDateBR(r.checkIn).slice(0, 5)} →{' '}
@@ -281,12 +291,12 @@ export function ReceptionModule() {
                           <td className="px-3 py-3 capitalize text-slate-500">{r.origin}</td>
                           <td className="px-3 py-3">
                             <div className="flex flex-wrap gap-1">
-                              {r.status === 'confirmada' && (
-                                <Pill tone="slate">Aguardando</Pill>
-                              )}
+                              {r.status === 'confirmada' && <Pill tone="slate">Aguardando</Pill>}
                               {r.status === 'checkin' && <Pill tone="green">In-house</Pill>}
                               {r.status === 'pendente' && <Pill tone="amber">Pendente</Pill>}
-                              {uhNotReady && <Pill tone="rose">UH não pronta</Pill>}
+                              {r.status !== 'checkin' && room && !ready && (
+                                <Pill tone="rose">{reason || 'UH não pronta'}</Pill>
+                              )}
                               {!r.fnrhFilled && <Pill tone="amber">FNRH</Pill>}
                             </div>
                           </td>
@@ -336,7 +346,6 @@ export function ReceptionModule() {
           </div>
         </div>
 
-        {/* Side panel — padrão Cloudbeds */}
         <div className="xl:col-span-3 space-y-3">
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
             <div className="flex items-center gap-2 mb-3">
@@ -347,7 +356,7 @@ export function ReceptionModule() {
               <Row label="Chegadas" value={arrivals.length} />
               <Row label="Saídas" value={departures.length} />
               <Row label="In-house" value={inHouse.length} />
-              <Row label="UHs livres" value={free} />
+              <Row label="UHs prontas" value={free} />
               <Row label="UHs não prontas" value={notReady.length} warn={notReady.length > 0} />
               <Row
                 label="Saldos em aberto"
@@ -363,24 +372,20 @@ export function ReceptionModule() {
               <p className="text-[13px] font-semibold text-amber-950">Atenção operacional</p>
             </div>
             <ul className="space-y-2 text-[12px] text-amber-900/80">
-              {notReady.filter((r) => r.status === 'sujo').length > 0 && (
-                <li>
-                  · {notReady.filter((r) => r.status === 'sujo').length} UH(s) suja(s) aguardando
-                  governança
-                </li>
+              {dirtyCount > 0 && (
+                <li>· {dirtyCount} UH(s) suja(s) aguardando governança</li>
               )}
               {arrivals.some((r) => {
                 const room = rooms.find((rm) => rm.id === r.roomId);
-                return (
-                  room &&
-                  ['sujo', 'limpeza', 'inspecao', 'interditado', 'manutencao'].includes(room.status)
-                );
+                return room && !isRoomReadyForCheckIn(room);
               }) && <li>· Há chegadas com UH ainda não pronta</li>}
               {pendingBalance.length > 0 && (
                 <li>· {pendingBalance.length} conta(s) com saldo pendente</li>
               )}
               {arrivals.filter((r) => !r.fnrhFilled).length > 0 && (
-                <li>· {arrivals.filter((r) => !r.fnrhFilled).length} FNRH(s) pendente(s) nas chegadas</li>
+                <li>
+                  · {arrivals.filter((r) => !r.fnrhFilled).length} FNRH(s) pendente(s) nas chegadas
+                </li>
               )}
               {notReady.length === 0 && pendingBalance.length === 0 && (
                 <li className="text-emerald-700">· Nenhuma pendência crítica no momento</li>
@@ -390,15 +395,15 @@ export function ReceptionModule() {
 
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 mb-2">
-              Legenda UH
+              Legenda
             </p>
             <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-              <Legend color="bg-emerald-400" label="Livre" />
+              <Legend color="bg-emerald-400" label="Livre / Limpo" />
               <Legend color="bg-blue-500" label="Ocupado" />
               <Legend color="bg-rose-400" label="Sujo" />
               <Legend color="bg-amber-400" label="Limpeza" />
               <Legend color="bg-violet-400" label="Inspeção" />
-              <Legend color="bg-slate-400" label="OOO / Manut." />
+              <Legend color="bg-slate-400" label="Bloqueado" />
             </div>
           </div>
         </div>
@@ -407,7 +412,13 @@ export function ReceptionModule() {
   );
 }
 
-function Pill({ children, tone }: { children: React.ReactNode; tone: 'green' | 'rose' | 'amber' | 'slate' }) {
+function Pill({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone: 'green' | 'rose' | 'amber' | 'slate';
+}) {
   const map = {
     green: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
     rose: 'bg-rose-50 text-rose-700 ring-rose-100',
@@ -415,7 +426,12 @@ function Pill({ children, tone }: { children: React.ReactNode; tone: 'green' | '
     slate: 'bg-slate-100 text-slate-600 ring-slate-200',
   };
   return (
-    <span className={cn('inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ring-inset', map[tone])}>
+    <span
+      className={cn(
+        'inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ring-inset',
+        map[tone]
+      )}
+    >
       {children}
     </span>
   );

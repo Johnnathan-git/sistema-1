@@ -19,6 +19,16 @@ import type {
 
 export type ModuleId = 'recepcao' | 'contas' | 'reservas' | 'governanca';
 
+/** Status que a governança pode aplicar manualmente (sem check-in/out). */
+export const GOVERNANCE_STATUSES: RoomStatus[] = [
+  'livre',
+  'sujo',
+  'limpeza',
+  'inspecao',
+  'interditado',
+  'manutencao',
+];
+
 interface PmsState {
   hotel: Hotel;
   rooms: Room[];
@@ -27,14 +37,24 @@ interface PmsState {
   accounts: Account[];
   module: ModuleId;
   setModule: (m: ModuleId) => void;
-  updateRoomStatus: (roomId: string, status: RoomStatus, notes?: string) => void;
+  updateRoomStatus: (
+    roomId: string,
+    status: RoomStatus,
+    notes?: string,
+    opts?: { fromOperation?: 'checkin' | 'checkout' }
+  ) => { ok: boolean; message: string };
   checkIn: (reservationId: string) => { ok: boolean; message: string };
   checkOut: (reservationId: string) => { ok: boolean; message: string };
   upsertReservation: (res: Reservation) => void;
   cancelReservation: (id: string) => void;
   markFnrh: (id: string) => void;
   addPayment: (accountId: string, amount: number, method: string) => void;
-  addCharge: (accountId: string, description: string, amount: number, category: Account['charges'][0]['category']) => void;
+  addCharge: (
+    accountId: string,
+    description: string,
+    amount: number,
+    category: Account['charges'][0]['category']
+  ) => void;
   createAvulsaAccount: (guestName: string) => void;
 }
 
@@ -52,15 +72,65 @@ export function PmsProvider({ children }: { children: ReactNode }) {
   const [accounts, setAccounts] = useState(INITIAL_ACCOUNTS);
   const [module, setModule] = useState<ModuleId>('recepcao');
 
-  const updateRoomStatus = useCallback((roomId: string, status: RoomStatus, notes?: string) => {
-    setRooms((prev) =>
-      prev.map((r) =>
-        r.id === roomId
-          ? { ...r, status, notes: notes !== undefined ? notes : r.notes }
-          : r
-      )
-    );
-  }, []);
+  const updateRoomStatus = useCallback(
+    (
+      roomId: string,
+      status: RoomStatus,
+      notes?: string,
+      opts?: { fromOperation?: 'checkin' | 'checkout' }
+    ) => {
+      const room = rooms.find((r) => r.id === roomId);
+      if (!room) return { ok: false, message: 'UH não encontrada' };
+
+      const inHouse = reservations.find(
+        (r) => r.roomId === roomId && r.status === 'checkin'
+      );
+
+      // Ocupado: apenas pelo fluxo de check-in
+      if (status === 'ocupado' && opts?.fromOperation !== 'checkin') {
+        return {
+          ok: false,
+          message: 'UH só fica Ocupada após o check-in do hóspede na Recepção',
+        };
+      }
+
+      // UH com hóspede in-house: só libera via check-out (vira Sujo)
+      if (inHouse && opts?.fromOperation !== 'checkout' && opts?.fromOperation !== 'checkin') {
+        return {
+          ok: false,
+          message: `${room.number} tem hóspede in-house (${inHouse.guestName}). Faça o check-out na Recepção.`,
+        };
+      }
+
+      // Não marcar Livre se ainda há in-house (defesa extra)
+      if (status === 'livre' && inHouse && opts?.fromOperation !== 'checkout') {
+        return {
+          ok: false,
+          message: 'Não é possível liberar UH com hóspede hospedado',
+        };
+      }
+
+      setRooms((prev) =>
+        prev.map((r) =>
+          r.id === roomId
+            ? {
+                ...r,
+                status,
+                notes:
+                  notes !== undefined
+                    ? notes
+                    : status === 'livre' || status === 'sujo' || status === 'ocupado'
+                      ? undefined
+                      : r.notes,
+              }
+            : r
+        )
+      );
+
+      return { ok: true, message: `${room.number} → status atualizado` };
+    },
+    [rooms, reservations]
+  );
 
   const checkIn = useCallback(
     (reservationId: string) => {
@@ -74,9 +144,23 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       const room = rooms.find((r) => r.id === res.roomId);
       if (!room) return { ok: false, message: 'UH não encontrada' };
       if (room.status === 'interditado' || room.status === 'manutencao')
-        return { ok: false, message: `UH ${room.number} indisponível (${room.status})` };
+        return {
+          ok: false,
+          message: `UH ${room.number} indisponível (${room.status})`,
+        };
+      if (room.status === 'ocupado')
+        return { ok: false, message: `UH ${room.number} já está ocupada` };
       if (room.status === 'sujo' || room.status === 'limpeza' || room.status === 'inspecao')
         return { ok: false, message: `UH ${room.number} não está pronta` };
+
+      const otherInHouse = reservations.find(
+        (r) => r.roomId === res.roomId && r.status === 'checkin' && r.id !== res.id
+      );
+      if (otherInHouse)
+        return {
+          ok: false,
+          message: `UH já vinculada a ${otherInHouse.guestName}`,
+        };
 
       const accountId = res.accountId || uid('acc');
       if (!res.accountId) {
@@ -121,10 +205,18 @@ export function PmsProvider({ children }: { children: ReactNode }) {
             : r
         )
       );
-      updateRoomStatus(res.roomId, 'ocupado');
-      return { ok: true, message: `Check-in realizado — ${res.guestName} em ${res.roomNumber}` };
+
+      // Força ocupado via operação de check-in
+      setRooms((prev) =>
+        prev.map((r) => (r.id === res.roomId ? { ...r, status: 'ocupado' as RoomStatus, notes: undefined } : r))
+      );
+
+      return {
+        ok: true,
+        message: `Check-in realizado — ${res.guestName} em ${res.roomNumber}`,
+      };
     },
-    [reservations, rooms, hotel.operationalDate, updateRoomStatus]
+    [reservations, rooms, hotel.operationalDate]
   );
 
   const checkOut = useCallback(
@@ -141,25 +233,35 @@ export function PmsProvider({ children }: { children: ReactNode }) {
           if (charges - payments > 0.01)
             return {
               ok: false,
-              message: `Conta com saldo pendente de R$ ${(charges - payments).toFixed(2).replace('.', ',')}`,
+              message: `Conta com saldo pendente de R$ ${(charges - payments)
+                .toFixed(2)
+                .replace('.', ',')}`,
             };
         }
       }
 
+      // 1) encerra hospedagem
       setReservations((prev) =>
         prev.map((r) =>
           r.id === reservationId ? { ...r, status: 'checkout' as ReservationStatus } : r
         )
       );
-      if (res.roomId) updateRoomStatus(res.roomId, 'sujo');
+      // 2) UH vai para Sujo (fluxo padrão pós check-out)
+      if (res.roomId) {
+        setRooms((prev) =>
+          prev.map((r) =>
+            r.id === res.roomId ? { ...r, status: 'sujo' as RoomStatus, notes: undefined } : r
+          )
+        );
+      }
       if (res.accountId) {
         setAccounts((prev) =>
           prev.map((a) => (a.id === res.accountId ? { ...a, status: 'quitada' } : a))
         );
       }
-      return { ok: true, message: `Check-out de ${res.guestName} concluído` };
+      return { ok: true, message: `Check-out de ${res.guestName} concluído · UH marcada como Suja` };
     },
-    [reservations, accounts, updateRoomStatus]
+    [reservations, accounts]
   );
 
   const upsertReservation = useCallback((res: Reservation) => {

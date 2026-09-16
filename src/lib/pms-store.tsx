@@ -9,24 +9,26 @@ import {
 import { HOTEL, INITIAL_ACCOUNTS, INITIAL_GUESTS, INITIAL_RESERVATIONS, INITIAL_ROOMS } from './pms-data';
 import type {
   Account,
+  GovernanceStatus,
   Guest,
   Hotel,
+  OccupancyStatus,
   Reservation,
   ReservationStatus,
   Room,
-  RoomStatus,
+  RoomStatusLog,
 } from './pms-types';
+import { isRoomReadyForCheckIn, roomNotReadyReason } from './pms-types';
 
 export type ModuleId = 'recepcao' | 'contas' | 'reservas' | 'governanca';
 
-/** Status que a governança pode aplicar manualmente (sem check-in/out). */
-export const GOVERNANCE_STATUSES: RoomStatus[] = [
-  'livre',
+export const GOVERNANCE_STATUSES: GovernanceStatus[] = [
+  'limpo',
   'sujo',
   'limpeza',
   'inspecao',
-  'interditado',
   'manutencao',
+  'interditado',
 ];
 
 interface PmsState {
@@ -35,14 +37,19 @@ interface PmsState {
   guests: Guest[];
   reservations: Reservation[];
   accounts: Account[];
+  roomLogs: RoomStatusLog[];
   module: ModuleId;
   setModule: (m: ModuleId) => void;
-  updateRoomStatus: (
-    roomId: string,
-    status: RoomStatus,
-    notes?: string,
-    opts?: { fromOperation?: 'checkin' | 'checkout' }
-  ) => { ok: boolean; message: string };
+  updateGovernance: (
+    roomIds: string[],
+    governance: GovernanceStatus,
+    notes?: string
+  ) => { ok: number; fail: number; message: string };
+  assignHousekeeper: (roomIds: string[], housekeeper: string | undefined) => void;
+  setRoomNotes: (roomId: string, notes: string) => void;
+  setDnd: (roomId: string, dnd: boolean) => void;
+  blockRoom: (roomId: string, reason: string) => { ok: boolean; message: string };
+  unblockRoom: (roomId: string) => { ok: boolean; message: string };
   checkIn: (reservationId: string) => { ok: boolean; message: string };
   checkOut: (reservationId: string) => { ok: boolean; message: string };
   upsertReservation: (res: Reservation) => void;
@@ -64,72 +71,205 @@ function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function nowStamp(opDate: string) {
+  const t = new Date();
+  const hh = String(t.getHours()).padStart(2, '0');
+  const mm = String(t.getMinutes()).padStart(2, '0');
+  return `${opDate} ${hh}:${mm}`;
+}
+
 export function PmsProvider({ children }: { children: ReactNode }) {
   const [hotel] = useState(HOTEL);
   const [rooms, setRooms] = useState(INITIAL_ROOMS);
   const [guests] = useState(INITIAL_GUESTS);
   const [reservations, setReservations] = useState(INITIAL_RESERVATIONS);
   const [accounts, setAccounts] = useState(INITIAL_ACCOUNTS);
+  const [roomLogs, setRoomLogs] = useState<RoomStatusLog[]>([]);
   const [module, setModule] = useState<ModuleId>('recepcao');
 
-  const updateRoomStatus = useCallback(
-    (
-      roomId: string,
-      status: RoomStatus,
-      notes?: string,
-      opts?: { fromOperation?: 'checkin' | 'checkout' }
-    ) => {
+  const pushLog = useCallback(
+    (entry: Omit<RoomStatusLog, 'id' | 'at' | 'user'> & { at?: string; user?: string }) => {
+      setRoomLogs((prev) => [
+        {
+          id: uid('log'),
+          at: entry.at || nowStamp(hotel.operationalDate),
+          user: entry.user || 'Operador',
+          ...entry,
+        },
+        ...prev,
+      ].slice(0, 200));
+    },
+    [hotel.operationalDate]
+  );
+
+  const updateGovernance = useCallback(
+    (roomIds: string[], governance: GovernanceStatus, notes?: string) => {
+      let ok = 0;
+      let fail = 0;
+      setRooms((prev) =>
+        prev.map((r) => {
+          if (!roomIds.includes(r.id)) return r;
+          if (r.occupancy === 'ocupado') {
+            fail += 1;
+            return r;
+          }
+          // Interdição/manutenção também bloqueia ocupação comercial
+          let occupancy: OccupancyStatus = r.occupancy;
+          let blockedReason = r.blockedReason;
+          if (governance === 'interditado' || governance === 'manutencao') {
+            occupancy = 'bloqueado';
+            blockedReason = notes || r.notes || governance;
+          } else if (r.occupancy === 'bloqueado' && (r.governance === 'interditado' || r.governance === 'manutencao')) {
+            occupancy = 'livre';
+            blockedReason = undefined;
+          }
+          ok += 1;
+          pushLog({
+            roomId: r.id,
+            roomNumber: r.number,
+            governance,
+            occupancy,
+            note: notes,
+            source: 'governanca',
+          });
+          return {
+            ...r,
+            governance,
+            occupancy,
+            notes: notes !== undefined ? notes : r.notes,
+            blockedReason,
+          };
+        })
+      );
+      // recount fail for rooms that were ocupado - the map above is async state so recount:
+      const ocupados = rooms.filter((r) => roomIds.includes(r.id) && r.occupancy === 'ocupado').length;
+      fail = ocupados;
+      ok = roomIds.length - fail;
+      return {
+        ok,
+        fail,
+        message:
+          fail > 0
+            ? `${ok} alterada(s), ${fail} bloqueada(s) (hóspede in-house)`
+            : `${ok} UH(s) atualizada(s)`,
+      };
+    },
+    [pushLog, rooms]
+  );
+
+  const assignHousekeeper = useCallback(
+    (roomIds: string[], housekeeper: string | undefined) => {
+      setRooms((prev) =>
+        prev.map((r) => (roomIds.includes(r.id) ? { ...r, housekeeper } : r))
+      );
+      for (const id of roomIds) {
+        const room = rooms.find((r) => r.id === id);
+        if (room)
+          pushLog({
+            roomId: id,
+            roomNumber: room.number,
+            housekeeper: housekeeper || '(sem camareira)',
+            source: 'governanca',
+            note: housekeeper ? `Camareira: ${housekeeper}` : 'Camareira removida',
+          });
+      }
+    },
+    [pushLog, rooms]
+  );
+
+  const setRoomNotes = useCallback(
+    (roomId: string, notes: string) => {
+      setRooms((prev) => prev.map((r) => (r.id === roomId ? { ...r, notes } : r)));
+      const room = rooms.find((r) => r.id === roomId);
+      if (room)
+        pushLog({
+          roomId,
+          roomNumber: room.number,
+          note: notes || '(obs. limpa)',
+          source: 'governanca',
+        });
+    },
+    [pushLog, rooms]
+  );
+
+  const setDnd = useCallback(
+    (roomId: string, dnd: boolean) => {
+      setRooms((prev) => prev.map((r) => (r.id === roomId ? { ...r, dnd } : r)));
+      const room = rooms.find((r) => r.id === roomId);
+      if (room)
+        pushLog({
+          roomId,
+          roomNumber: room.number,
+          note: dnd ? 'Não perturbe ATIVO' : 'Não perturbe desativado',
+          source: 'governanca',
+        });
+    },
+    [pushLog, rooms]
+  );
+
+  const blockRoom = useCallback(
+    (roomId: string, reason: string) => {
       const room = rooms.find((r) => r.id === roomId);
       if (!room) return { ok: false, message: 'UH não encontrada' };
-
-      const inHouse = reservations.find(
-        (r) => r.roomId === roomId && r.status === 'checkin'
-      );
-
-      // Ocupado: apenas pelo fluxo de check-in
-      if (status === 'ocupado' && opts?.fromOperation !== 'checkin') {
-        return {
-          ok: false,
-          message: 'UH só fica Ocupada após o check-in do hóspede na Recepção',
-        };
-      }
-
-      // UH com hóspede in-house: só libera via check-out (vira Sujo)
-      if (inHouse && opts?.fromOperation !== 'checkout' && opts?.fromOperation !== 'checkin') {
-        return {
-          ok: false,
-          message: `${room.number} tem hóspede in-house (${inHouse.guestName}). Faça o check-out na Recepção.`,
-        };
-      }
-
-      // Não marcar Livre se ainda há in-house (defesa extra)
-      if (status === 'livre' && inHouse && opts?.fromOperation !== 'checkout') {
-        return {
-          ok: false,
-          message: 'Não é possível liberar UH com hóspede hospedado',
-        };
-      }
-
+      if (room.occupancy === 'ocupado')
+        return { ok: false, message: 'Não bloqueia UH com hóspede — faça check-out antes' };
       setRooms((prev) =>
         prev.map((r) =>
           r.id === roomId
             ? {
                 ...r,
-                status,
-                notes:
-                  notes !== undefined
-                    ? notes
-                    : status === 'livre' || status === 'sujo' || status === 'ocupado'
-                      ? undefined
-                      : r.notes,
+                occupancy: 'bloqueado' as OccupancyStatus,
+                blockedReason: reason,
+                notes: reason || r.notes,
               }
             : r
         )
       );
-
-      return { ok: true, message: `${room.number} → status atualizado` };
+      pushLog({
+        roomId,
+        roomNumber: room.number,
+        occupancy: 'bloqueado',
+        note: reason,
+        source: 'governanca',
+      });
+      return { ok: true, message: `${room.number} bloqueada` };
     },
-    [rooms, reservations]
+    [rooms, pushLog]
+  );
+
+  const unblockRoom = useCallback(
+    (roomId: string) => {
+      const room = rooms.find((r) => r.id === roomId);
+      if (!room) return { ok: false, message: 'UH não encontrada' };
+      if (room.occupancy !== 'bloqueado')
+        return { ok: false, message: 'UH não está bloqueada' };
+      if (room.occupancy === 'ocupado')
+        return { ok: false, message: 'UH ocupada' };
+      setRooms((prev) =>
+        prev.map((r) =>
+          r.id === roomId
+            ? {
+                ...r,
+                occupancy: 'livre' as OccupancyStatus,
+                blockedReason: undefined,
+                governance:
+                  r.governance === 'interditado' || r.governance === 'manutencao'
+                    ? ('sujo' as GovernanceStatus)
+                    : r.governance,
+              }
+            : r
+        )
+      );
+      pushLog({
+        roomId,
+        roomNumber: room.number,
+        occupancy: 'livre',
+        note: 'Desbloqueio',
+        source: 'governanca',
+      });
+      return { ok: true, message: `${room.number} desbloqueada` };
+    },
+    [rooms, pushLog]
   );
 
   const checkIn = useCallback(
@@ -143,24 +283,18 @@ export function PmsProvider({ children }: { children: ReactNode }) {
 
       const room = rooms.find((r) => r.id === res.roomId);
       if (!room) return { ok: false, message: 'UH não encontrada' };
-      if (room.status === 'interditado' || room.status === 'manutencao')
+      if (!isRoomReadyForCheckIn(room)) {
         return {
           ok: false,
-          message: `UH ${room.number} indisponível (${room.status})`,
+          message: `UH ${room.number}: ${roomNotReadyReason(room) || 'não pronta'}`,
         };
-      if (room.status === 'ocupado')
-        return { ok: false, message: `UH ${room.number} já está ocupada` };
-      if (room.status === 'sujo' || room.status === 'limpeza' || room.status === 'inspecao')
-        return { ok: false, message: `UH ${room.number} não está pronta` };
+      }
 
       const otherInHouse = reservations.find(
         (r) => r.roomId === res.roomId && r.status === 'checkin' && r.id !== res.id
       );
       if (otherInHouse)
-        return {
-          ok: false,
-          message: `UH já vinculada a ${otherInHouse.guestName}`,
-        };
+        return { ok: false, message: `UH já vinculada a ${otherInHouse.guestName}` };
 
       const accountId = res.accountId || uid('acc');
       if (!res.accountId) {
@@ -205,18 +339,27 @@ export function PmsProvider({ children }: { children: ReactNode }) {
             : r
         )
       );
-
-      // Força ocupado via operação de check-in
       setRooms((prev) =>
-        prev.map((r) => (r.id === res.roomId ? { ...r, status: 'ocupado' as RoomStatus, notes: undefined } : r))
+        prev.map((r) =>
+          r.id === res.roomId
+            ? { ...r, occupancy: 'ocupado' as OccupancyStatus, dnd: false }
+            : r
+        )
       );
+      pushLog({
+        roomId: res.roomId!,
+        roomNumber: res.roomNumber || room.number,
+        occupancy: 'ocupado',
+        source: 'checkin',
+        note: `Check-in ${res.guestName}`,
+      });
 
       return {
         ok: true,
         message: `Check-in realizado — ${res.guestName} em ${res.roomNumber}`,
       };
     },
-    [reservations, rooms, hotel.operationalDate]
+    [reservations, rooms, hotel.operationalDate, pushLog]
   );
 
   const checkOut = useCallback(
@@ -240,28 +383,44 @@ export function PmsProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // 1) encerra hospedagem
       setReservations((prev) =>
         prev.map((r) =>
           r.id === reservationId ? { ...r, status: 'checkout' as ReservationStatus } : r
         )
       );
-      // 2) UH vai para Sujo (fluxo padrão pós check-out)
       if (res.roomId) {
         setRooms((prev) =>
           prev.map((r) =>
-            r.id === res.roomId ? { ...r, status: 'sujo' as RoomStatus, notes: undefined } : r
+            r.id === res.roomId
+              ? {
+                  ...r,
+                  occupancy: 'livre' as OccupancyStatus,
+                  governance: 'sujo' as GovernanceStatus,
+                  dnd: false,
+                }
+              : r
           )
         );
+        pushLog({
+          roomId: res.roomId,
+          roomNumber: res.roomNumber || '',
+          occupancy: 'livre',
+          governance: 'sujo',
+          source: 'checkout',
+          note: `Check-out ${res.guestName}`,
+        });
       }
       if (res.accountId) {
         setAccounts((prev) =>
           prev.map((a) => (a.id === res.accountId ? { ...a, status: 'quitada' } : a))
         );
       }
-      return { ok: true, message: `Check-out de ${res.guestName} concluído · UH marcada como Suja` };
+      return {
+        ok: true,
+        message: `Check-out de ${res.guestName} concluído · UH marcada como Suja`,
+      };
     },
-    [reservations, accounts]
+    [reservations, accounts, pushLog]
   );
 
   const upsertReservation = useCallback((res: Reservation) => {
@@ -352,9 +511,15 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       guests,
       reservations,
       accounts,
+      roomLogs,
       module,
       setModule,
-      updateRoomStatus,
+      updateGovernance,
+      assignHousekeeper,
+      setRoomNotes,
+      setDnd,
+      blockRoom,
+      unblockRoom,
       checkIn,
       checkOut,
       upsertReservation,
@@ -370,8 +535,14 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       guests,
       reservations,
       accounts,
+      roomLogs,
       module,
-      updateRoomStatus,
+      updateGovernance,
+      assignHousekeeper,
+      setRoomNotes,
+      setDnd,
+      blockRoom,
+      unblockRoom,
       checkIn,
       checkOut,
       upsertReservation,

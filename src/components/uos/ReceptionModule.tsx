@@ -11,7 +11,7 @@ import {
   type Room,
 } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
-import { LayoutGrid, List, LogIn, Search } from 'lucide-react';
+import { ArrowLeftRight, LayoutGrid, List, LogIn, Search, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 type MainTab = 'checkins' | 'hospedados' | 'chart';
@@ -23,7 +23,17 @@ function addDays(iso: string, n: number): string {
 }
 
 export function ReceptionModule() {
-  const { hotel, reservations, rooms, guests, checkIn, checkOut, markFnrh } = usePms();
+  const {
+    hotel,
+    reservations,
+    rooms,
+    guests,
+    checkIn,
+    checkOut,
+    cancelCheckIn,
+    transferRoom,
+    markFnrh,
+  } = usePms();
   const [tab, setTab] = useState<MainTab>('checkins');
   const [q, setQ] = useState('');
   const [selectedResId, setSelectedResId] = useState<string | null>(null);
@@ -33,6 +43,8 @@ export function ReceptionModule() {
     reservationId?: string;
   } | null>(null);
   const [chartDays, setChartDays] = useState(14);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferRoomId, setTransferRoomId] = useState('');
   const today = hotel.operationalDate;
 
   const arrivals = useMemo(
@@ -85,6 +97,18 @@ export function ReceptionModule() {
         ? filteredInHouse[0] ?? null
         : null);
 
+  const availableTransferRooms = useMemo(
+    () =>
+      rooms.filter(
+        (r) =>
+          r.occupancy === 'livre' &&
+          r.governance !== 'interditado' &&
+          r.governance !== 'manutencao' &&
+          (!selectedRes || r.id !== selectedRes.roomId)
+      ),
+    [rooms, selectedRes]
+  );
+
   const doCheckIn = (id: string) => {
     const res = checkIn(id);
     if (res.ok) toast.success(res.message);
@@ -94,6 +118,27 @@ export function ReceptionModule() {
     const res = checkOut(id);
     if (res.ok) toast.success(res.message);
     else toast.error(res.message);
+  };
+  const doCancelCheckIn = (id: string) => {
+    if (!window.confirm('Cancelar o check-in deste hóspede? A UH será liberada como suja.'))
+      return;
+    const res = cancelCheckIn(id);
+    if (res.ok) {
+      toast.success(res.message);
+      setSelectedResId(null);
+    } else toast.error(res.message);
+  };
+  const doTransfer = () => {
+    if (!selectedRes || !transferRoomId) {
+      toast.error('Selecione a UH de destino');
+      return;
+    }
+    const res = transferRoom(selectedRes.id, transferRoomId);
+    if (res.ok) {
+      toast.success(res.message);
+      setTransferOpen(false);
+      setTransferRoomId('');
+    } else toast.error(res.message);
   };
 
   const chartDates = useMemo(
@@ -135,7 +180,9 @@ export function ReceptionModule() {
 
   return (
     <div className="space-y-4">
-      {modalResId && <ReservationModal reservationId={modalResId} onClose={() => setModalResId(null)} />}
+      {modalResId && (
+        <ReservationModal reservationId={modalResId} onClose={() => setModalResId(null)} />
+      )}
       {modalAccount && (
         <AccountModal
           accountId={modalAccount.accountId}
@@ -158,7 +205,9 @@ export function ReceptionModule() {
             onClick={() => setTab(id)}
             className={cn(
               'px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px inline-flex items-center gap-1.5',
-              tab === id ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800'
+              tab === id
+                ? 'border-indigo-600 text-indigo-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             )}
           >
             <Icon className="w-3.5 h-3.5" />
@@ -201,7 +250,11 @@ export function ReceptionModule() {
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {filteredArrivals.length === 0 ? (
-                    <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400">Nenhum check-in previsto para hoje</td></tr>
+                    <tr>
+                      <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                        Nenhum check-in previsto para hoje
+                      </td>
+                    </tr>
                   ) : (
                     filteredArrivals.map((r) => {
                       const room = rooms.find((rm) => rm.id === r.roomId);
@@ -209,16 +262,38 @@ export function ReceptionModule() {
                       const reason = room ? roomNotReadyReason(room) : 'Sem UH';
                       const active = selectedRes?.id === r.id;
                       return (
-                        <tr key={r.id} onClick={() => setSelectedResId(r.id)} onDoubleClick={() => setModalResId(r.id)} className={cn('cursor-pointer', active ? 'bg-indigo-50' : 'hover:bg-slate-50')}>
+                        <tr
+                          key={r.id}
+                          onClick={() => setSelectedResId(r.id)}
+                          onDoubleClick={() => setModalResId(r.id)}
+                          className={cn('cursor-pointer', active ? 'bg-indigo-50' : 'hover:bg-slate-50')}
+                        >
                           <td className="px-3 py-2 font-mono text-[11px]">{r.code.replace('RSV-', '')}</td>
                           <td className="px-3 py-2 font-medium max-w-[160px] truncate">{r.guestName}</td>
                           <td className="px-3 py-2 font-semibold">{r.roomNumber || '—'}</td>
                           <td className="px-3 py-2">{r.fnrhFilled ? 'SIM' : 'NÃO'}</td>
                           <td className="px-3 py-2">{r.adults}/{r.children}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{formatDateBR(r.checkIn)} → {formatDateBR(r.checkOut)}</td>
-                          <td className="px-3 py-2">{room ? <span className={!ready ? 'text-rose-600 font-semibold' : 'text-emerald-600'}>{GOVERNANCE_LABEL[room.governance]}{!ready ? ` · ${reason}` : ''}</span> : '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {formatDateBR(r.checkIn)} → {formatDateBR(r.checkOut)}
+                          </td>
+                          <td className="px-3 py-2">
+                            {room ? (
+                              <span className={!ready ? 'text-rose-600 font-semibold' : 'text-emerald-600'}>
+                                {GOVERNANCE_LABEL[room.governance]}
+                                {!ready ? ` · ${reason}` : ''}
+                              </span>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
-                            <button type="button" onClick={() => doCheckIn(r.id)} className="h-7 px-2.5 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold">Check-in</button>
+                            <button
+                              type="button"
+                              onClick={() => doCheckIn(r.id)}
+                              className="h-7 px-2.5 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold"
+                            >
+                              Check-in
+                            </button>
                           </td>
                         </tr>
                       );
@@ -230,23 +305,48 @@ export function ReceptionModule() {
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
             <div className="lg:col-span-5 rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 p-4 text-[13px] space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Previsões do dia · {formatDateBR(today)}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Previsões do dia · {formatDateBR(today)}
+              </p>
               <div className="grid grid-cols-2 gap-2">
-                <span className="text-slate-400">Check-in</span><span className="font-semibold text-right">{arrivals.length}</span>
-                <span className="text-slate-400">Check-out</span><span className="font-semibold text-right">{departures.length}</span>
-                <span className="text-slate-400">In-house</span><span className="font-semibold text-right">{inHouse.length}</span>
-                <span className="text-slate-400">Ocupação</span><span className="font-semibold text-right text-indigo-300">{occupied}/{sellable} · {occPct}%</span>
+                <span className="text-slate-400">Check-in</span>
+                <span className="font-semibold text-right">{arrivals.length}</span>
+                <span className="text-slate-400">Check-out</span>
+                <span className="font-semibold text-right">{departures.length}</span>
+                <span className="text-slate-400">In-house</span>
+                <span className="font-semibold text-right">{inHouse.length}</span>
+                <span className="text-slate-400">Ocupação</span>
+                <span className="font-semibold text-right text-indigo-300">
+                  {occupied}/{sellable} · {occPct}%
+                </span>
               </div>
             </div>
             <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Reserva selecionada</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                Reserva selecionada
+              </p>
               {selectedRes && selectedRes.status !== 'checkin' ? (
                 <div className="text-[13px] space-y-2">
                   <p className="font-semibold">{selectedRes.guestName}</p>
-                  <p className="text-slate-500">{selectedRes.code} · {selectedRes.roomNumber || selectedRes.roomType} · {formatDateBR(selectedRes.checkIn)} → {formatDateBR(selectedRes.checkOut)}</p>
+                  <p className="text-slate-500">
+                    {selectedRes.code} · {selectedRes.roomNumber || selectedRes.roomType} ·{' '}
+                    {formatDateBR(selectedRes.checkIn)} → {formatDateBR(selectedRes.checkOut)}
+                  </p>
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={() => setModalResId(selectedRes.id)} className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] font-medium">Abrir reserva</button>
-                    <button type="button" onClick={() => doCheckIn(selectedRes.id)} className="h-8 px-3 rounded-lg bg-indigo-600 text-white text-[12px] font-semibold">Check-in</button>
+                    <button
+                      type="button"
+                      onClick={() => setModalResId(selectedRes.id)}
+                      className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] font-medium"
+                    >
+                      Abrir reserva
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => doCheckIn(selectedRes.id)}
+                      className="h-8 px-3 rounded-lg bg-indigo-600 text-white text-[12px] font-semibold"
+                    >
+                      Check-in
+                    </button>
                   </div>
                 </div>
               ) : null}
@@ -256,12 +356,73 @@ export function ReceptionModule() {
       )}
 
       {tab === 'hospedados' && (
-        <div className="space-y-3">
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className="px-4 py-2 border-b bg-slate-50/80 text-[12px] font-semibold text-slate-600">
+        <div className="flex flex-col min-h-[calc(100vh-220px)]">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <button
+              type="button"
+              disabled={!selectedRes || selectedRes.status !== 'checkin'}
+              onClick={() => {
+                setTransferRoomId('');
+                setTransferOpen(true);
+              }}
+              className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 disabled:opacity-40 hover:bg-slate-50"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5" /> Transferência
+            </button>
+            <button
+              type="button"
+              disabled={!selectedRes || selectedRes.status !== 'checkin'}
+              onClick={() => selectedRes && doCancelCheckIn(selectedRes.id)}
+              className="h-9 px-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-[13px] font-medium inline-flex items-center gap-1.5 disabled:opacity-40 hover:bg-amber-100"
+            >
+              <Undo2 className="w-3.5 h-3.5" /> Cancelar check-in
+            </button>
+          </div>
+
+          {transferOpen && selectedRes && (
+            <div className="mb-3 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 flex flex-wrap items-end gap-3">
+              <div className="min-w-[200px] flex-1">
+                <p className="text-[11px] font-semibold uppercase text-slate-500 mb-1">
+                  Transferir {selectedRes.guestName}
+                </p>
+                <p className="text-[12px] text-slate-600 mb-2">
+                  De {selectedRes.roomNumber} → selecione a UH destino
+                </p>
+                <select
+                  value={transferRoomId}
+                  onChange={(e) => setTransferRoomId(e.target.value)}
+                  className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-[13px]"
+                >
+                  <option value="">Selecione a UH…</option>
+                  {availableTransferRooms.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.number} · {r.type} · {GOVERNANCE_LABEL[r.governance]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={doTransfer}
+                className="h-10 px-4 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold"
+              >
+                Confirmar transferência
+              </button>
+              <button
+                type="button"
+                onClick={() => setTransferOpen(false)}
+                className="h-10 px-3 rounded-lg border text-[13px]"
+              >
+                Fechar
+              </button>
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden flex-1 min-h-0 flex flex-col">
+            <div className="px-4 py-2 border-b bg-slate-50/80 text-[12px] font-semibold text-slate-600 shrink-0">
               Hospedados · {filteredInHouse.length}
             </div>
-            <div className="overflow-x-auto max-h-[400px]">
+            <div className="overflow-auto flex-1 min-h-0">
               <table className="text-[12px] min-w-max w-full">
                 <thead className="sticky top-0 bg-white z-10">
                   <tr className="text-left text-[10px] uppercase text-slate-400 border-b">
@@ -280,39 +441,122 @@ export function ReceptionModule() {
                     <th className="px-3 py-2 whitespace-nowrap">Canal</th>
                     <th className="px-3 py-2 whitespace-nowrap">NDP</th>
                     <th className="px-3 py-2 whitespace-nowrap">Empresa</th>
-                    <th className="px-3 py-2 text-right whitespace-nowrap sticky right-0 bg-white shadow-[-4px_0_8px_rgba(0,0,0,0.04)]">Ações</th>
+                    <th className="px-3 py-2 text-right whitespace-nowrap sticky right-0 bg-white shadow-[-4px_0_8px_rgba(0,0,0,0.04)]">
+                      Ações
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {filteredInHouse.length === 0 ? (
-                    <tr><td colSpan={16} className="px-4 py-12 text-center text-slate-400">Nenhum hóspede in-house no momento</td></tr>
+                    <tr>
+                      <td colSpan={16} className="px-4 py-12 text-center text-slate-400">
+                        Nenhum hóspede in-house no momento
+                      </td>
+                    </tr>
                   ) : (
                     filteredInHouse.map((r) => {
                       const room = rooms.find((rm) => rm.id === r.roomId);
                       const active = selectedRes?.id === r.id;
-                      const empresa = r.origin === 'direto' ? 'PARTICULAR' : r.origin.toUpperCase();
+                      const empresa =
+                        r.origin === 'direto' ? 'PARTICULAR' : r.origin.toUpperCase();
                       return (
-                        <tr key={r.id} onClick={() => setSelectedResId(r.id)} onDoubleClick={() => setModalResId(r.id)} className={cn('cursor-pointer', active ? 'bg-indigo-50' : 'hover:bg-slate-50')}>
-                          <td className="px-3 py-2 font-semibold whitespace-nowrap">{r.roomNumber || '—'}</td>
+                        <tr
+                          key={r.id}
+                          onClick={() => setSelectedResId(r.id)}
+                          onDoubleClick={() => setModalResId(r.id)}
+                          className={cn(
+                            'cursor-pointer',
+                            active ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                          )}
+                        >
+                          <td className="px-3 py-2 font-semibold whitespace-nowrap">
+                            {r.roomNumber || '—'}
+                          </td>
                           <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{r.roomType}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{room ? (room.floor === 0 ? 'Térreo' : `${room.floor}º`) : '—'}</td>
-                          <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{room?.block || '—'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap text-blue-700 font-medium">Ocupada</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{room ? GOVERNANCE_LABEL[room.governance] : '—'}</td>
-                          <td className="px-3 py-2 font-medium whitespace-nowrap max-w-[180px] truncate">{r.guestName}</td>
-                          <td className="px-3 py-2 font-mono text-[11px] whitespace-nowrap">{r.code.replace('RSV-', '')}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{r.fnrhFilled ? <span className="text-emerald-600 font-medium">Sim</span> : <span className="text-slate-400">Não</span>}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{r.adults}/{r.children}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {room ? (room.floor === 0 ? 'Térreo' : `${room.floor}º`) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-slate-600 whitespace-nowrap">
+                            {room?.block || '—'}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-blue-700 font-medium">
+                            Ocupada
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {room ? GOVERNANCE_LABEL[room.governance] : '—'}
+                          </td>
+                          <td className="px-3 py-2 font-medium whitespace-nowrap max-w-[180px] truncate">
+                            {r.guestName}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-[11px] whitespace-nowrap">
+                            {r.code.replace('RSV-', '')}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {r.fnrhFilled ? (
+                              <span className="text-emerald-600 font-medium">Sim</span>
+                            ) : (
+                              <span className="text-slate-400">Não</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {r.adults}/{r.children}
+                          </td>
                           <td className="px-3 py-2 whitespace-nowrap">{formatDateBR(r.checkIn)}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{formatDateBR(r.checkOut)}{r.checkOut === today && <span className="ml-1 text-amber-600 font-semibold text-[10px]">HOJE</span>}</td>
-                          <td className="px-3 py-2 capitalize text-slate-500 whitespace-nowrap">{r.origin}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{room?.dnd ? <span className="text-rose-600 font-semibold">S</span> : <span className="text-slate-300">N</span>}</td>
-                          <td className="px-3 py-2 text-slate-500 whitespace-nowrap text-[11px]">{empresa}</td>
-                          <td className={cn('px-3 py-2 text-right whitespace-nowrap sticky right-0 shadow-[-4px_0_8px_rgba(0,0,0,0.04)]', active ? 'bg-indigo-50' : 'bg-white')} onClick={(e) => e.stopPropagation()}>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {formatDateBR(r.checkOut)}
+                            {r.checkOut === today && (
+                              <span className="ml-1 text-amber-600 font-semibold text-[10px]">
+                                HOJE
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 capitalize text-slate-500 whitespace-nowrap">
+                            {r.origin}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {room?.dnd ? (
+                              <span className="text-rose-600 font-semibold">S</span>
+                            ) : (
+                              <span className="text-slate-300">N</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-slate-500 whitespace-nowrap text-[11px]">
+                            {empresa}
+                          </td>
+                          <td
+                            className={cn(
+                              'px-3 py-2 text-right whitespace-nowrap sticky right-0 shadow-[-4px_0_8px_rgba(0,0,0,0.04)]',
+                              active ? 'bg-indigo-50' : 'bg-white'
+                            )}
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <div className="inline-flex gap-1">
-                              <button type="button" onClick={() => setModalResId(r.id)} className="h-7 px-2 rounded-lg border text-[11px]">Reserva</button>
-                              <button type="button" onClick={() => setModalAccount({ accountId: r.accountId, reservationId: r.id })} className="h-7 px-2 rounded-lg border text-[11px]">Conta</button>
-                              <button type="button" onClick={() => doCheckOut(r.id)} className="h-7 px-2 rounded-lg bg-slate-900 text-white text-[11px] font-semibold">Check-out</button>
+                              <button
+                                type="button"
+                                onClick={() => setModalResId(r.id)}
+                                className="h-7 px-2 rounded-lg border text-[11px]"
+                              >
+                                Reserva
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setModalAccount({
+                                    accountId: r.accountId,
+                                    reservationId: r.id,
+                                  })
+                                }
+                                className="h-7 px-2 rounded-lg border text-[11px]"
+                              >
+                                Conta
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => doCheckOut(r.id)}
+                                className="h-7 px-2 rounded-lg bg-slate-900 text-white text-[11px] font-semibold"
+                              >
+                                Check-out
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -324,60 +568,149 @@ export function ReceptionModule() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 p-4 text-[12px]">
-            {selectedRes && selectedRes.status === 'checkin' ? (() => {
-              const room = rooms.find((rm) => rm.id === selectedRes.roomId);
-              const guest = guests.find((g) => g.id === selectedRes.guestId);
-              const companions = [
-                selectedRes.guestName,
-                ...(selectedRes.adults > 1 ? ['SARA QUEIROZ DA SILVA', 'JULIA QUEIROZ DA SILVA'].slice(0, Math.min(2, selectedRes.adults - 1)) : []),
-                ...(selectedRes.children > 0 ? ['ELAINE APARECIDA QUEIROZ'].slice(0, selectedRes.children) : []),
-              ];
-              return (
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                  <div className="md:col-span-3 space-y-1.5">
-                    <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">UH / Reserva</p>
-                    <p><span className="text-slate-400">Nº reserva:</span> <span className="font-semibold">{selectedRes.code.replace('RSV-', '')}</span></p>
-                    <p><span className="text-slate-400">UH:</span> <span className="font-semibold">{selectedRes.roomNumber} · {selectedRes.roomType}</span></p>
-                    <p><span className="text-slate-400">Andar / bloco:</span> {room ? `${room.floor === 0 ? 'Térreo' : room.floor + 'º'} · ${room.block || '—'}` : '—'}</p>
-                    <p><span className="text-slate-400">Governança:</span> {room ? GOVERNANCE_LABEL[room.governance] : '—'}</p>
-                  </div>
-                  <div className="md:col-span-3 space-y-1.5">
-                    <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Estadia</p>
-                    <p><span className="text-slate-400">Check-in efetuado:</span> {formatDateBR(selectedRes.checkIn)}</p>
-                    <p><span className="text-slate-400">Checkout previsto:</span> {formatDateBR(selectedRes.checkOut)}</p>
-                    <p><span className="text-slate-400">Origem:</span> <span className="capitalize">{selectedRes.origin}</span></p>
-                    <p><span className="text-slate-400">Pré-check-in / FNRH:</span> {selectedRes.fnrhFilled ? 'Conferido' : 'Não conferido'}</p>
-                    <p><span className="text-slate-400">Placa veículo:</span> ABC1D23</p>
-                  </div>
-                  <div className="md:col-span-3 space-y-1.5">
-                    <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Hóspedes</p>
-                    <ul className="space-y-0.5">
-                      {companions.map((name, i) => (
-                        <li key={i} className={i === 0 ? 'font-semibold' : 'text-slate-300'}>{name}</li>
-                      ))}
-                    </ul>
-                    {guest && <p className="text-slate-400 pt-1">Doc: {guest.document} · {guest.phone}</p>}
-                  </div>
-                  <div className="md:col-span-3 space-y-1.5">
-                    <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Observação</p>
-                    <p className="text-slate-300 min-h-[48px]">{selectedRes.notes || 'Sem observações registradas.'}</p>
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      <button type="button" onClick={() => setModalResId(selectedRes.id)} className="h-8 px-3 rounded-lg bg-white text-slate-900 text-[12px] font-semibold">Abrir reserva</button>
-                      <button type="button" onClick={() => setModalAccount({ accountId: selectedRes.accountId, reservationId: selectedRes.id })} className="h-8 px-3 rounded-lg border border-white/30 text-[12px]">Conta</button>
-                      <button type="button" onClick={() => doCheckOut(selectedRes.id)} className="h-8 px-3 rounded-lg bg-indigo-500 text-white text-[12px] font-semibold">Check-out</button>
+          <div className="sticky bottom-0 z-20 mt-3 rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 p-4 text-[12px] shadow-[0_-8px_24px_rgba(0,0,0,0.12)]">
+            {selectedRes && selectedRes.status === 'checkin'
+              ? (() => {
+                  const room = rooms.find((rm) => rm.id === selectedRes.roomId);
+                  const guest = guests.find((g) => g.id === selectedRes.guestId);
+                  const companions = [
+                    selectedRes.guestName,
+                    ...(selectedRes.adults > 1
+                      ? ['SARA QUEIROZ DA SILVA', 'JULIA QUEIROZ DA SILVA'].slice(
+                          0,
+                          Math.min(2, selectedRes.adults - 1)
+                        )
+                      : []),
+                    ...(selectedRes.children > 0
+                      ? ['ELAINE APARECIDA QUEIROZ'].slice(0, selectedRes.children)
+                      : []),
+                  ];
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                      <div className="md:col-span-3 space-y-1.5">
+                        <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">
+                          UH / Reserva
+                        </p>
+                        <p>
+                          <span className="text-slate-400">Nº reserva:</span>{' '}
+                          <span className="font-semibold">
+                            {selectedRes.code.replace('RSV-', '')}
+                          </span>
+                        </p>
+                        <p>
+                          <span className="text-slate-400">UH:</span>{' '}
+                          <span className="font-semibold">
+                            {selectedRes.roomNumber} · {selectedRes.roomType}
+                          </span>
+                        </p>
+                        <p>
+                          <span className="text-slate-400">Andar / bloco:</span>{' '}
+                          {room
+                            ? `${room.floor === 0 ? 'Térreo' : room.floor + 'º'} · ${
+                                room.block || '—'
+                              }`
+                            : '—'}
+                        </p>
+                        <p>
+                          <span className="text-slate-400">Governança:</span>{' '}
+                          {room ? GOVERNANCE_LABEL[room.governance] : '—'}
+                        </p>
+                      </div>
+                      <div className="md:col-span-3 space-y-1.5">
+                        <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">
+                          Estadia
+                        </p>
+                        <p>
+                          <span className="text-slate-400">Check-in efetuado:</span>{' '}
+                          {formatDateBR(selectedRes.checkIn)}
+                        </p>
+                        <p>
+                          <span className="text-slate-400">Checkout previsto:</span>{' '}
+                          {formatDateBR(selectedRes.checkOut)}
+                        </p>
+                        <p>
+                          <span className="text-slate-400">Origem:</span>{' '}
+                          <span className="capitalize">{selectedRes.origin}</span>
+                        </p>
+                        <p>
+                          <span className="text-slate-400">Pré-check-in / FNRH:</span>{' '}
+                          {selectedRes.fnrhFilled ? 'Conferido' : 'Não conferido'}
+                        </p>
+                        <p>
+                          <span className="text-slate-400">Placa veículo:</span> ABC1D23
+                        </p>
+                      </div>
+                      <div className="md:col-span-3 space-y-1.5">
+                        <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">
+                          Hóspedes
+                        </p>
+                        <ul className="space-y-0.5">
+                          {companions.map((name, i) => (
+                            <li
+                              key={i}
+                              className={i === 0 ? 'font-semibold' : 'text-slate-300'}
+                            >
+                              {name}
+                            </li>
+                          ))}
+                        </ul>
+                        {guest && (
+                          <p className="text-slate-400 pt-1">
+                            Doc: {guest.document} · {guest.phone}
+                          </p>
+                        )}
+                      </div>
+                      <div className="md:col-span-3 space-y-1.5">
+                        <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">
+                          Observação
+                        </p>
+                        <p className="text-slate-300 min-h-[48px]">
+                          {selectedRes.notes || 'Sem observações registradas.'}
+                        </p>
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setModalResId(selectedRes.id)}
+                            className="h-8 px-3 rounded-lg bg-white text-slate-900 text-[12px] font-semibold"
+                          >
+                            Abrir reserva
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setModalAccount({
+                                accountId: selectedRes.accountId,
+                                reservationId: selectedRes.id,
+                              })
+                            }
+                            className="h-8 px-3 rounded-lg border border-white/30 text-[12px]"
+                          >
+                            Conta
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => doCheckOut(selectedRes.id)}
+                            className="h-8 px-3 rounded-lg bg-indigo-500 text-white text-[12px] font-semibold"
+                          >
+                            Check-out
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              );
-            })() : null}
+                  );
+                })()
+              : null}
           </div>
         </div>
       )}
 
       {tab === 'chart' && (
         <div className="space-y-3">
-          <select value={chartDays} onChange={(e) => setChartDays(Number(e.target.value))} className="h-9 rounded-lg border px-2 text-[13px]">
+          <select
+            value={chartDays}
+            onChange={(e) => setChartDays(Number(e.target.value))}
+            className="h-9 rounded-lg border px-2 text-[13px]"
+          >
             <option value={7}>7 dias</option>
             <option value={14}>14 dias</option>
             <option value={21}>21 dias</option>
@@ -387,23 +720,47 @@ export function ReceptionModule() {
             <table className="border-collapse text-[10px] min-w-max">
               <thead className="sticky top-0 z-20 bg-slate-900 text-slate-200">
                 <tr>
-                  <th className="sticky left-0 z-30 bg-slate-900 px-3 py-2 text-left min-w-[120px]">UH</th>
+                  <th className="sticky left-0 z-30 bg-slate-900 px-3 py-2 text-left min-w-[120px]">
+                    UH
+                  </th>
                   {chartDates.map((d) => {
                     const [, m, day] = d.split('-');
-                    return <th key={d} className="px-1 py-2 text-center min-w-[34px] border-l border-white/10">{day}/{m}</th>;
+                    return (
+                      <th
+                        key={d}
+                        className="px-1 py-2 text-center min-w-[34px] border-l border-white/10"
+                      >
+                        {day}/{m}
+                      </th>
+                    );
                   })}
                 </tr>
               </thead>
               <tbody>
-                {[...rooms].sort((a, b) => a.number.localeCompare(b.number, 'pt-BR', { numeric: true })).map((room) => (
-                  <tr key={room.id} className="border-t border-slate-100">
-                    <td className="sticky left-0 bg-white px-3 py-1 font-medium border-r">{room.number}</td>
-                    {chartDates.map((d) => {
-                      const cell = cellInfo(room, d);
-                      return <td key={d} title={cell.title} className={cn('px-0.5 py-1 text-center font-bold min-w-[34px]', cell.cls)}>{cell.label}</td>;
-                    })}
-                  </tr>
-                ))}
+                {[...rooms]
+                  .sort((a, b) => a.number.localeCompare(b.number, 'pt-BR', { numeric: true }))
+                  .map((room) => (
+                    <tr key={room.id} className="border-t border-slate-100">
+                      <td className="sticky left-0 bg-white px-3 py-1 font-medium border-r">
+                        {room.number}
+                      </td>
+                      {chartDates.map((d) => {
+                        const cell = cellInfo(room, d);
+                        return (
+                          <td
+                            key={d}
+                            title={cell.title}
+                            className={cn(
+                              'px-0.5 py-1 text-center font-bold min-w-[34px]',
+                              cell.cls
+                            )}
+                          >
+                            {cell.label}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>

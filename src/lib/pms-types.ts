@@ -1,3 +1,16 @@
+/** Status comercial/ocupação da UH (só muda com check-in/out ou bloqueio). */
+export type OccupancyStatus = 'livre' | 'ocupado' | 'bloqueado';
+
+/** Status operacional de arrumação (governança). */
+export type GovernanceStatus =
+  | 'limpo'
+  | 'sujo'
+  | 'limpeza'
+  | 'inspecao'
+  | 'manutencao'
+  | 'interditado';
+
+/** @deprecated use OccupancyStatus + GovernanceStatus */
 export type RoomStatus =
   | 'livre'
   | 'ocupado'
@@ -32,9 +45,30 @@ export interface Room {
   number: string;
   type: RoomType;
   floor: number;
-  status: RoomStatus;
+  /** Bloco físico (ex.: Torre A) */
+  block?: string;
   capacity: number;
+  occupancy: OccupancyStatus;
+  governance: GovernanceStatus;
+  /** Camareira responsável */
+  housekeeper?: string;
   notes?: string;
+  /** Não perturbe */
+  dnd?: boolean;
+  blockedReason?: string;
+}
+
+export interface RoomStatusLog {
+  id: string;
+  roomId: string;
+  roomNumber: string;
+  at: string;
+  user: string;
+  occupancy?: OccupancyStatus;
+  governance?: GovernanceStatus;
+  housekeeper?: string;
+  note?: string;
+  source: 'governanca' | 'checkin' | 'checkout' | 'sistema';
 }
 
 export interface Guest {
@@ -111,14 +145,50 @@ export function formatDateBR(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
-export const ROOM_STATUS_LABEL: Record<RoomStatus, string> = {
+/** UH pronta para receber check-in */
+export function isRoomReadyForCheckIn(room: Room): boolean {
+  if (room.occupancy === 'ocupado') return false;
+  if (room.occupancy === 'bloqueado') return false;
+  if (room.governance === 'interditado' || room.governance === 'manutencao') return false;
+  if (room.governance === 'sujo' || room.governance === 'limpeza' || room.governance === 'inspecao')
+    return false;
+  return room.occupancy === 'livre' && room.governance === 'limpo';
+}
+
+export function roomNotReadyReason(room: Room): string | null {
+  if (room.occupancy === 'ocupado') return 'UH já ocupada';
+  if (room.occupancy === 'bloqueado')
+    return `UH bloqueada${room.blockedReason ? ` (${room.blockedReason})` : ''}`;
+  if (room.governance === 'interditado') return 'UH interditada';
+  if (room.governance === 'manutencao') return 'UH em manutenção';
+  if (room.governance === 'sujo') return 'UH suja';
+  if (room.governance === 'limpeza') return 'UH em limpeza';
+  if (room.governance === 'inspecao') return 'UH em inspeção';
+  if (room.governance !== 'limpo') return 'UH não está limpa';
+  return null;
+}
+
+export const OCCUPANCY_LABEL: Record<OccupancyStatus, string> = {
   livre: 'Livre',
   ocupado: 'Ocupado',
+  bloqueado: 'Bloqueado',
+};
+
+export const GOVERNANCE_LABEL: Record<GovernanceStatus, string> = {
+  limpo: 'Limpo',
   sujo: 'Sujo',
   limpeza: 'Em limpeza',
   inspecao: 'Inspeção',
-  interditado: 'Interditado',
   manutencao: 'Manutenção',
+  interditado: 'Interditado',
+};
+
+/** Labels legados para compatibilidade visual */
+export const ROOM_STATUS_LABEL: Record<string, string> = {
+  ...OCCUPANCY_LABEL,
+  ...GOVERNANCE_LABEL,
+  livre: 'Livre',
+  ocupado: 'Ocupado',
 };
 
 export const RES_STATUS_LABEL: Record<ReservationStatus, string> = {
@@ -129,3 +199,11 @@ export const RES_STATUS_LABEL: Record<ReservationStatus, string> = {
   no_show: 'No-show',
   cancelada: 'Cancelada',
 };
+
+export const HOUSEKEEPERS = [
+  'Maria Silva',
+  'Ana Costa',
+  'Joana Pereira',
+  'Fernanda Lima',
+  'Patrícia Souza',
+] as const;

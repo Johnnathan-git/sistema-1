@@ -184,7 +184,6 @@ export function ReceptionModule() {
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/80 text-[12px] font-semibold text-slate-600">
               Check-ins previstos · {filteredArrivals.length}
-              <span className="ml-2 font-normal text-slate-400">(1 clique = detalhe · 2 cliques = abrir reserva)</span>
             </div>
             <div className="overflow-x-auto max-h-[380px]">
               <table className="w-full text-[12px]">
@@ -250,9 +249,7 @@ export function ReceptionModule() {
                     <button type="button" onClick={() => doCheckIn(selectedRes.id)} className="h-8 px-3 rounded-lg bg-indigo-600 text-white text-[12px] font-semibold">Check-in</button>
                   </div>
                 </div>
-              ) : (
-                <p className="text-slate-400 text-[13px]">Clique em uma linha da lista</p>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
@@ -263,7 +260,6 @@ export function ReceptionModule() {
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="px-4 py-2 border-b bg-slate-50/80 text-[12px] font-semibold text-slate-600">
               Hospedados · {filteredInHouse.length}
-              <span className="ml-2 font-normal text-slate-400">(1 clique = rodapé · 2 cliques = reserva · arraste a barra para mais colunas)</span>
             </div>
             <div className="overflow-x-auto max-h-[400px]">
               <table className="text-[12px] min-w-max w-full">
@@ -374,9 +370,7 @@ export function ReceptionModule() {
                   </div>
                 </div>
               );
-            })() : (
-              <p className="text-slate-400">Clique em um hóspede da lista para ver os detalhes</p>
-            )}
+            })() : null}
           </div>
         </div>
       )}

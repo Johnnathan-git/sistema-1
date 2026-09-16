@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { usePms } from '@/lib/pms-store';
 import { AccountModal } from '@/components/uos/AccountModal';
+import { PensionTab } from '@/components/uos/PensionTab';
 import {
   accountBalance,
   formatBRL,
@@ -51,11 +52,11 @@ type ModalTab =
   | 'geral'
   | 'valores'
   | 'obs'
+  | 'pensoes'
   | 'voucher'
   | 'documentos'
   | 'logs';
 
-/** Dados fictícios de layout */
 function mockDocs(res: Reservation) {
   return [
     {
@@ -304,6 +305,7 @@ export function ReservationModal({
               [
                 ['geral', 'Geral'],
                 ['valores', 'Tarifa'],
+                ['pensoes', 'Pensões'],
                 ['obs', 'Observação'],
                 ['voucher', 'Voucher'],
                 ['documentos', 'Documentos'],
@@ -332,52 +334,19 @@ export function ReservationModal({
                 <Section title="Período e acomodação">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <Field label="Check-in">
-                      <input
-                        type="date"
-                        disabled={!editable || isInHouse}
-                        value={draft.checkIn}
-                        onChange={(e) => setDraft({ ...draft, checkIn: e.target.value })}
-                        className={inputCls}
-                      />
+                      <input type="date" disabled={!editable || isInHouse} value={draft.checkIn} onChange={(e) => setDraft({ ...draft, checkIn: e.target.value })} className={inputCls} />
                     </Field>
                     <Field label="Check-out">
-                      <input
-                        type="date"
-                        disabled={!editable}
-                        value={draft.checkOut}
-                        onChange={(e) => setDraft({ ...draft, checkOut: e.target.value })}
-                        className={inputCls}
-                      />
+                      <input type="date" disabled={!editable} value={draft.checkOut} onChange={(e) => setDraft({ ...draft, checkOut: e.target.value })} className={inputCls} />
                     </Field>
                     <Field label="Adultos">
-                      <input
-                        type="number"
-                        min={1}
-                        disabled={!editable}
-                        value={draft.adults}
-                        onChange={(e) => setDraft({ ...draft, adults: Number(e.target.value) })}
-                        className={inputCls}
-                      />
+                      <input type="number" min={1} disabled={!editable} value={draft.adults} onChange={(e) => setDraft({ ...draft, adults: Number(e.target.value) })} className={inputCls} />
                     </Field>
                     <Field label="Crianças">
-                      <input
-                        type="number"
-                        min={0}
-                        disabled={!editable}
-                        value={draft.children}
-                        onChange={(e) => setDraft({ ...draft, children: Number(e.target.value) })}
-                        className={inputCls}
-                      />
+                      <input type="number" min={0} disabled={!editable} value={draft.children} onChange={(e) => setDraft({ ...draft, children: Number(e.target.value) })} className={inputCls} />
                     </Field>
                     <Field label="Tipo de UH">
-                      <select
-                        disabled={!editable || isInHouse}
-                        value={draft.roomType}
-                        onChange={(e) =>
-                          setDraft({ ...draft, roomType: e.target.value as RoomType })
-                        }
-                        className={inputCls}
-                      >
+                      <select disabled={!editable || isInHouse} value={draft.roomType} onChange={(e) => setDraft({ ...draft, roomType: e.target.value as RoomType })} className={inputCls}>
                         {ROOM_TYPES.map((t) => (
                           <option key={t}>{t}</option>
                         ))}
@@ -407,17 +376,7 @@ export function ReservationModal({
                       </select>
                     </Field>
                     <Field label="Canal / origem">
-                      <select
-                        disabled={!editable}
-                        value={draft.origin}
-                        onChange={(e) =>
-                          setDraft({
-                            ...draft,
-                            origin: e.target.value as Reservation['origin'],
-                          })
-                        }
-                        className={inputCls}
-                      >
+                      <select disabled={!editable} value={draft.origin} onChange={(e) => setDraft({ ...draft, origin: e.target.value as Reservation['origin'] })} className={inputCls}>
                         {ORIGINS.map((o) => (
                           <option key={o} value={o}>
                             {o}
@@ -436,12 +395,7 @@ export function ReservationModal({
                 <Section title="Hóspede">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="Nome">
-                      <input
-                        disabled={!editable}
-                        value={draft.guestName}
-                        onChange={(e) => setDraft({ ...draft, guestName: e.target.value })}
-                        className={inputCls}
-                      />
+                      <input disabled={!editable} value={draft.guestName} onChange={(e) => setDraft({ ...draft, guestName: e.target.value })} className={inputCls} />
                     </Field>
                     <Field label="Documento">
                       <input disabled value={guest?.document || '—'} className={inputCls} />
@@ -472,34 +426,13 @@ export function ReservationModal({
               <Section title="Tarifário e valores">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <Field label="Valor total (R$)">
-                    <input
-                      type="number"
-                      disabled={!editable}
-                      value={draft.totalAmount}
-                      onChange={(e) =>
-                        setDraft({ ...draft, totalAmount: Number(e.target.value) })
-                      }
-                      className={inputCls}
-                    />
+                    <input type="number" disabled={!editable} value={draft.totalAmount} onChange={(e) => setDraft({ ...draft, totalAmount: Number(e.target.value) })} className={inputCls} />
                   </Field>
                   <Field label="Já pago (R$)">
-                    <input
-                      type="number"
-                      disabled={!editable}
-                      value={draft.paidAmount}
-                      onChange={(e) =>
-                        setDraft({ ...draft, paidAmount: Number(e.target.value) })
-                      }
-                      className={inputCls}
-                    />
+                    <input type="number" disabled={!editable} value={draft.paidAmount} onChange={(e) => setDraft({ ...draft, paidAmount: Number(e.target.value) })} className={inputCls} />
                   </Field>
                   <Field label="Saldo">
-                    <div
-                      className={cn(
-                        'h-10 flex items-center text-[13px] font-semibold',
-                        balance > 0.01 ? 'text-rose-600' : 'text-emerald-600'
-                      )}
-                    >
+                    <div className={cn('h-10 flex items-center text-[13px] font-semibold', balance > 0.01 ? 'text-rose-600' : 'text-emerald-600')}>
                       {formatBRL(balance)}
                     </div>
                   </Field>
@@ -507,19 +440,17 @@ export function ReservationModal({
                 {account && (
                   <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-[12px] space-y-1">
                     <p className="font-semibold text-slate-700">Conta vinculada</p>
-                    <p className="text-slate-500">
-                      Status: {account.status} · Aberta em {formatDateBR(account.openedAt)}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setShowAccount(true)}
-                      className="mt-1 text-indigo-600 font-medium hover:underline"
-                    >
+                    <p className="text-slate-500">Status: {account.status} · Aberta em {formatDateBR(account.openedAt)}</p>
+                    <button type="button" onClick={() => setShowAccount(true)} className="mt-1 text-indigo-600 font-medium hover:underline">
                       Abrir extrato da conta →
                     </button>
                   </div>
                 )}
               </Section>
+            )}
+
+            {tab === 'pensoes' && (
+              <PensionTab checkIn={draft.checkIn} checkOut={draft.checkOut} editable={editable} />
             )}
 
             {tab === 'obs' && (
@@ -534,13 +465,7 @@ export function ReservationModal({
                 />
                 <div className="mt-3 flex items-center gap-2 text-[13px]">
                   <span className="text-slate-500">FNRH / pré-check-in:</span>
-                  <span
-                    className={
-                      draft.fnrhFilled
-                        ? 'text-emerald-600 font-semibold'
-                        : 'text-amber-700 font-semibold'
-                    }
-                  >
+                  <span className={draft.fnrhFilled ? 'text-emerald-600 font-semibold' : 'text-amber-700 font-semibold'}>
                     {draft.fnrhFilled ? 'Preenchida' : 'Pendente'}
                   </span>
                 </div>
@@ -552,67 +477,29 @@ export function ReservationModal({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-[13px] font-semibold text-slate-800">Voucher do hóspede</p>
-                    <p className="text-[12px] text-slate-500">
-                      Documento oficial da reserva — abrir ou salvar como PDF
-                    </p>
+                    <p className="text-[12px] text-slate-500">Documento oficial da reserva — abrir ou salvar como PDF</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={openVoucherPdf}
-                    className="h-9 px-3 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5"
-                  >
+                  <button type="button" onClick={openVoucherPdf} className="h-9 px-3 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5">
                     <Ticket className="w-3.5 h-3.5" /> Abrir voucher (PDF)
                   </button>
                 </div>
-
-                {/* Preview visual */}
                 <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm text-[13px]">
                   <div className="flex justify-between items-start border-b border-slate-100 pb-3 mb-3">
                     <div>
-                      <p className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-                        {hotel.name}
-                      </p>
+                      <p className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">{hotel.name}</p>
                       <p className="text-lg font-semibold text-slate-900">VOUCHER DE HOSPEDAGEM</p>
                     </div>
                     <p className="font-mono text-[12px] text-slate-500">{draft.code}</p>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-[10px] uppercase text-slate-400">Hóspede</p>
-                      <p className="font-medium">{draft.guestName}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase text-slate-400">Documento</p>
-                      <p className="font-medium">{guest?.document || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase text-slate-400">Check-in</p>
-                      <p className="font-medium">{formatDateBR(draft.checkIn)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase text-slate-400">Check-out</p>
-                      <p className="font-medium">{formatDateBR(draft.checkOut)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase text-slate-400">UH / Tipo</p>
-                      <p className="font-medium">
-                        {draft.roomNumber || '—'} · {draft.roomType}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase text-slate-400">Hóspedes</p>
-                      <p className="font-medium">
-                        {draft.adults} adulto(s) · {draft.children} criança(s)
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase text-slate-400">Valor</p>
-                      <p className="font-medium">{formatBRL(draft.totalAmount)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase text-slate-400">Status</p>
-                      <p className="font-medium">{RES_STATUS_LABEL[draft.status]}</p>
-                    </div>
+                    <div><p className="text-[10px] uppercase text-slate-400">Hóspede</p><p className="font-medium">{draft.guestName}</p></div>
+                    <div><p className="text-[10px] uppercase text-slate-400">Documento</p><p className="font-medium">{guest?.document || '—'}</p></div>
+                    <div><p className="text-[10px] uppercase text-slate-400">Check-in</p><p className="font-medium">{formatDateBR(draft.checkIn)}</p></div>
+                    <div><p className="text-[10px] uppercase text-slate-400">Check-out</p><p className="font-medium">{formatDateBR(draft.checkOut)}</p></div>
+                    <div><p className="text-[10px] uppercase text-slate-400">UH / Tipo</p><p className="font-medium">{draft.roomNumber || '—'} · {draft.roomType}</p></div>
+                    <div><p className="text-[10px] uppercase text-slate-400">Hóspedes</p><p className="font-medium">{draft.adults} adulto(s) · {draft.children} criança(s)</p></div>
+                    <div><p className="text-[10px] uppercase text-slate-400">Valor</p><p className="font-medium">{formatBRL(draft.totalAmount)}</p></div>
+                    <div><p className="text-[10px] uppercase text-slate-400">Status</p><p className="font-medium">{RES_STATUS_LABEL[draft.status]}</p></div>
                   </div>
                 </div>
               </div>
@@ -621,14 +508,8 @@ export function ReservationModal({
             {tab === 'documentos' && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-[13px] font-semibold text-slate-800">
-                    Documentos da reserva
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => toast.message('Upload de documento (em breve)')}
-                    className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"
-                  >
+                  <p className="text-[13px] font-semibold text-slate-800">Documentos da reserva</p>
+                  <button type="button" onClick={() => toast.message('Upload de documento (em breve)')} className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50">
                     <Paperclip className="w-3.5 h-3.5" /> Anexar
                   </button>
                 </div>
@@ -661,24 +542,10 @@ export function ReservationModal({
                           </td>
                           <td className="px-3 py-2.5 text-right">
                             <div className="inline-flex gap-1">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  d.type === 'Voucher'
-                                    ? openVoucherPdf()
-                                    : toast.message(`Visualizar ${d.name} (mock)`)
-                                }
-                                className="h-7 w-7 rounded-lg border border-slate-200 inline-flex items-center justify-center hover:bg-white"
-                                title="Visualizar"
-                              >
+                              <button type="button" onClick={() => (d.type === 'Voucher' ? openVoucherPdf() : toast.message(`Visualizar ${d.name} (mock)`))} className="h-7 w-7 rounded-lg border border-slate-200 inline-flex items-center justify-center hover:bg-white" title="Visualizar">
                                 <Eye className="w-3.5 h-3.5" />
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => toast.message(`Download ${d.name} (mock)`)}
-                                className="h-7 w-7 rounded-lg border border-slate-200 inline-flex items-center justify-center hover:bg-white"
-                                title="Download"
-                              >
+                              <button type="button" onClick={() => toast.message(`Download ${d.name} (mock)`)} className="h-7 w-7 rounded-lg border border-slate-200 inline-flex items-center justify-center hover:bg-white" title="Download">
                                 <Download className="w-3.5 h-3.5" />
                               </button>
                             </div>
@@ -719,85 +586,36 @@ export function ReservationModal({
 
           <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex flex-wrap gap-2 shrink-0">
             {editable && (
-              <button
-                type="button"
-                onClick={save}
-                className="h-9 px-3 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-indigo-500"
-              >
+              <button type="button" onClick={save} className="h-9 px-3 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-indigo-500">
                 <Save className="w-3.5 h-3.5" /> Salvar
               </button>
             )}
-
-            <button
-              type="button"
-              onClick={() => setShowAccount(true)}
-              className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"
-            >
+            <button type="button" onClick={() => setShowAccount(true)} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50">
               <Wallet className="w-3.5 h-3.5" /> Conta
             </button>
-
-            <button
-              type="button"
-              onClick={openVoucherPdf}
-              className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"
-            >
+            <button type="button" onClick={openVoucherPdf} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50">
               <Ticket className="w-3.5 h-3.5" /> Voucher
             </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                markFnrh(draft.id);
-                setDraft({ ...draft, fnrhFilled: true });
-                toast.success('FNRH marcada');
-              }}
-              className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"
-            >
+            <button type="button" onClick={() => { markFnrh(draft.id); setDraft({ ...draft, fnrhFilled: true }); toast.success('FNRH marcada'); }} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50">
               <FileText className="w-3.5 h-3.5" />
               {draft.fnrhFilled ? 'FNRH OK' : 'FNRH'}
             </button>
-
             {canCheckIn && (
-              <button
-                type="button"
-                onClick={doCheckIn}
-                className="h-9 px-3 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5"
-              >
+              <button type="button" onClick={doCheckIn} className="h-9 px-3 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5">
                 <LogIn className="w-3.5 h-3.5" /> Check-in
               </button>
             )}
-
             {canCheckOut && (
-              <button
-                type="button"
-                onClick={doCheckOut}
-                className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[13px] font-semibold inline-flex items-center gap-1.5"
-              >
+              <button type="button" onClick={doCheckOut} className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[13px] font-semibold inline-flex items-center gap-1.5">
                 <LogOut className="w-3.5 h-3.5" /> Check-out
               </button>
             )}
-
             {editable && !isInHouse && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm('Cancelar esta reserva?')) {
-                    cancelReservation(draft.id);
-                    toast.message('Reserva cancelada');
-                    onClose();
-                  }
-                }}
-                className="h-9 px-3 rounded-lg border border-rose-200 text-rose-700 text-[13px] hover:bg-rose-50 ml-auto"
-              >
+              <button type="button" onClick={() => { if (window.confirm('Cancelar esta reserva?')) { cancelReservation(draft.id); toast.message('Reserva cancelada'); onClose(); } }} className="h-9 px-3 rounded-lg border border-rose-200 text-rose-700 text-[13px] hover:bg-rose-50 ml-auto">
                 Cancelar
               </button>
             )}
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-9 px-3 rounded-lg text-[13px] text-slate-600 hover:bg-slate-100"
-            >
+            <button type="button" onClick={onClose} className="h-9 px-3 rounded-lg text-[13px] text-slate-600 hover:bg-slate-100">
               Fechar
             </button>
           </div>
@@ -807,11 +625,7 @@ export function ReservationModal({
   );
 }
 
-function buildVoucherHtml(
-  r: Reservation,
-  hotelName: string,
-  document?: string
-): string {
+function buildVoucherHtml(r: Reservation, hotelName: string, document?: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Voucher ${r.code}</title>
 <style>
   body{font-family:system-ui,sans-serif;padding:32px;color:#0f172a;max-width:640px;margin:0 auto}
@@ -844,12 +658,7 @@ function buildVoucherHtml(
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button
-        type="button"
-        className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]"
-        aria-label="Fechar"
-        onClick={onClose}
-      />
+      <button type="button" className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" aria-label="Fechar" onClick={onClose} />
       <div className="relative z-10 w-full flex justify-center">{children}</div>
     </div>
   );
@@ -858,9 +667,7 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400 mb-2">
-        {title}
-      </p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400 mb-2">{title}</p>
       {children}
     </div>
   );
@@ -869,9 +676,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-        {label}
-      </span>
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</span>
       {children}
     </label>
   );

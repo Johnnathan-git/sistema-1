@@ -14,7 +14,6 @@ import {
 } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
 import {
-  Download,
   Eye,
   FileText,
   History,
@@ -258,82 +257,214 @@ export function ReservationModal({
       )}
 
       <Overlay onClose={onClose}>
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[min(860px,90vh)] flex flex-col overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-3 shrink-0">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-indigo-500">Reserva · {draft.code}</p>
               <h2 className="text-lg font-semibold text-slate-900 leading-tight mt-0.5">{draft.guestName}</h2>
               <div className="flex flex-wrap gap-1.5 mt-1.5">
-                <span className={cn('inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ring-inset', isInHouse ? 'bg-emerald-50 text-emerald-800 ring-emerald-200' : draft.status === 'confirmada' ? 'bg-slate-100 text-slate-700 ring-slate-200' : 'bg-amber-50 text-amber-800 ring-amber-200')}>
+                <span
+                  className={cn(
+                    'inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ring-inset',
+                    isInHouse
+                      ? 'bg-emerald-50 text-emerald-800 ring-emerald-200'
+                      : draft.status === 'confirmada'
+                        ? 'bg-slate-100 text-slate-700 ring-slate-200'
+                        : 'bg-amber-50 text-amber-800 ring-amber-200'
+                  )}
+                >
                   {RES_STATUS_LABEL[draft.status]}
                 </span>
-                {draft.roomNumber && <span className="text-[11px] text-slate-500 font-medium">{draft.roomNumber} · {draft.roomType}</span>}
+                {draft.roomNumber && (
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {draft.roomNumber} · {draft.roomType}
+                  </span>
+                )}
               </div>
             </div>
-            <button type="button" onClick={onClose} className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50"
+            >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           <div className="px-3 sm:px-5 border-b border-slate-100 flex gap-0.5 overflow-x-auto shrink-0">
-            {([['geral', 'Geral'], ['valores', 'Tarifa'], ['pensoes', 'Pensões'], ['obs', 'Observação'], ['voucher', 'Voucher'], ['documentos', 'Documentos'], ['logs', 'Logs']] as const).map(([id, label]) => (
-              <button key={id} type="button" onClick={() => setTab(id)} className={cn('px-3 py-2.5 text-[13px] border-b-2 -mb-px whitespace-nowrap', tab === id ? 'border-indigo-600 text-indigo-700 font-semibold' : 'border-transparent text-slate-500')}>
+            {(
+              [
+                ['geral', 'Geral'],
+                ['valores', 'Tarifa'],
+                ['pensoes', 'Pensões'],
+                ['obs', 'Observação'],
+                ['voucher', 'Voucher'],
+                ['documentos', 'Documentos'],
+                ['logs', 'Logs'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTab(id)}
+                className={cn(
+                  'px-3 py-2.5 text-[13px] border-b-2 -mb-px whitespace-nowrap',
+                  tab === id
+                    ? 'border-indigo-600 text-indigo-700 font-semibold'
+                    : 'border-transparent text-slate-500'
+                )}
+              >
                 {label}
               </button>
             ))}
           </div>
 
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4">
             {tab === 'geral' && (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                 <div className="lg:col-span-8 space-y-4">
                   <Section title="Dados gerais">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <Field label="Número"><input disabled value={draft.code} className={inputCls} /></Field>
-                      <Field label="Status"><div className="h-10 flex items-center text-[13px] font-medium text-slate-700">{RES_STATUS_LABEL[draft.status]}</div></Field>
-                      <Field label="Check-in"><input type="date" disabled={!editable || isInHouse} value={draft.checkIn} onChange={(e) => setDraft({ ...draft, checkIn: e.target.value })} className={inputCls} /></Field>
-                      <Field label="Horário CI"><input disabled={!editable || isInHouse} defaultValue="15:00" className={inputCls} /></Field>
-                      <Field label="Check-out"><input type="date" disabled={!editable} value={draft.checkOut} onChange={(e) => setDraft({ ...draft, checkOut: e.target.value })} className={inputCls} /></Field>
-                      <Field label="Horário CO"><input disabled={!editable} defaultValue="11:00" className={inputCls} /></Field>
-                      <Field label="Grupo"><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
-                      <Field label="Evento"><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
+                      <Field label="Número">
+                        <input disabled value={draft.code} className={inputCls} />
+                      </Field>
+                      <Field label="Status">
+                        <div className="h-10 flex items-center text-[13px] font-medium text-slate-700">
+                          {RES_STATUS_LABEL[draft.status]}
+                        </div>
+                      </Field>
+                      <Field label="Check-in">
+                        <input
+                          type="date"
+                          disabled={!editable || isInHouse}
+                          value={draft.checkIn}
+                          onChange={(e) => setDraft({ ...draft, checkIn: e.target.value })}
+                          className={inputCls}
+                        />
+                      </Field>
+                      <Field label="Horário CI">
+                        <input disabled={!editable || isInHouse} defaultValue="15:00" className={inputCls} />
+                      </Field>
+                      <Field label="Check-out">
+                        <input
+                          type="date"
+                          disabled={!editable}
+                          value={draft.checkOut}
+                          onChange={(e) => setDraft({ ...draft, checkOut: e.target.value })}
+                          className={inputCls}
+                        />
+                      </Field>
+                      <Field label="Horário CO">
+                        <input disabled={!editable} defaultValue="11:00" className={inputCls} />
+                      </Field>
+                      <Field label="Grupo">
+                        <input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} />
+                      </Field>
+                      <Field label="Evento">
+                        <input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} />
+                      </Field>
                     </div>
                   </Section>
 
                   <Section title="Hóspede">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Field label="Nome"><input disabled={!editable} value={draft.guestName} onChange={(e) => setDraft({ ...draft, guestName: e.target.value })} className={inputCls} /></Field>
-                      <Field label="Documento / CPF"><input disabled value={guest?.document || '—'} className={inputCls} /></Field>
-                      <Field label="Cidade"><input disabled value="—" className={inputCls} /></Field>
-                      <Field label="CEP"><input disabled defaultValue="—" className={inputCls} /></Field>
+                      <Field label="Nome">
+                        <input
+                          disabled={!editable}
+                          value={draft.guestName}
+                          onChange={(e) => setDraft({ ...draft, guestName: e.target.value })}
+                          className={inputCls}
+                        />
+                      </Field>
+                      <Field label="Documento / CPF">
+                        <input disabled value={guest?.document || '—'} className={inputCls} />
+                      </Field>
+                      <Field label="Cidade">
+                        <input disabled value="—" className={inputCls} />
+                      </Field>
+                      <Field label="CEP">
+                        <input disabled defaultValue="—" className={inputCls} />
+                      </Field>
                     </div>
                   </Section>
 
                   <Section title="Reservante">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Field label="Nome"><input disabled={!editable} value={draft.guestName} className={inputCls} /></Field>
-                      <Field label="CPF"><input disabled value={guest?.document || '—'} className={inputCls} /></Field>
-                      <Field label="Fone 1"><input disabled value={guest?.phone || '—'} className={inputCls} /></Field>
-                      <Field label="Fone 2"><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
-                      <Field label="E-mail"><input disabled value={guest?.email || '—'} className={inputCls} /></Field>
+                      <Field label="Nome">
+                        <input disabled={!editable} value={draft.guestName} className={inputCls} />
+                      </Field>
+                      <Field label="CPF">
+                        <input disabled value={guest?.document || '—'} className={inputCls} />
+                      </Field>
+                      <Field label="Fone 1">
+                        <input disabled value={guest?.phone || '—'} className={inputCls} />
+                      </Field>
+                      <Field label="Fone 2">
+                        <input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} />
+                      </Field>
+                      <Field label="E-mail">
+                        <input disabled value={guest?.email || '—'} className={inputCls} />
+                      </Field>
                     </div>
                   </Section>
 
                   <Section title="Acomodações">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <Field label="Tipo UH">
-                        <select disabled={!editable || isInHouse} value={draft.roomType} onChange={(e) => setDraft({ ...draft, roomType: e.target.value as RoomType })} className={inputCls}>
-                          {ROOM_TYPES.map((t) => <option key={t}>{t}</option>)}
+                        <select
+                          disabled={!editable || isInHouse}
+                          value={draft.roomType}
+                          onChange={(e) => setDraft({ ...draft, roomType: e.target.value as RoomType })}
+                          className={inputCls}
+                        >
+                          {ROOM_TYPES.map((t) => (
+                            <option key={t}>{t}</option>
+                          ))}
                         </select>
                       </Field>
                       <Field label="UH">
-                        <select disabled={!editable || isInHouse} value={draft.roomId || ''} onChange={(e) => { const rm = rooms.find((r) => r.id === e.target.value); setDraft({ ...draft, roomId: rm?.id, roomNumber: rm?.number, roomType: (rm?.type as RoomType) || draft.roomType }); }} className={inputCls}>
+                        <select
+                          disabled={!editable || isInHouse}
+                          value={draft.roomId || ''}
+                          onChange={(e) => {
+                            const rm = rooms.find((r) => r.id === e.target.value);
+                            setDraft({
+                              ...draft,
+                              roomId: rm?.id,
+                              roomNumber: rm?.number,
+                              roomType: (rm?.type as RoomType) || draft.roomType,
+                            });
+                          }}
+                          className={inputCls}
+                        >
                           <option value="">Sem UH</option>
-                          {rooms.map((r) => <option key={r.id} value={r.id}>{r.number} · {r.type} ({OCCUPANCY_LABEL[r.occupancy]})</option>)}
+                          {rooms.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.number} · {r.type} ({OCCUPANCY_LABEL[r.occupancy]})
+                            </option>
+                          ))}
                         </select>
                       </Field>
-                      <Field label="Adultos"><input type="number" min={1} disabled={!editable} value={draft.adults} onChange={(e) => setDraft({ ...draft, adults: Number(e.target.value) })} className={inputCls} /></Field>
-                      <Field label="Crianças"><input type="number" min={0} disabled={!editable} value={draft.children} onChange={(e) => setDraft({ ...draft, children: Number(e.target.value) })} className={inputCls} /></Field>
+                      <Field label="Adultos">
+                        <input
+                          type="number"
+                          min={1}
+                          disabled={!editable}
+                          value={draft.adults}
+                          onChange={(e) => setDraft({ ...draft, adults: Number(e.target.value) })}
+                          className={inputCls}
+                        />
+                      </Field>
+                      <Field label="Crianças">
+                        <input
+                          type="number"
+                          min={0}
+                          disabled={!editable}
+                          value={draft.children}
+                          onChange={(e) => setDraft({ ...draft, children: Number(e.target.value) })}
+                          className={inputCls}
+                        />
+                      </Field>
                     </div>
                     {room && (
                       <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
@@ -391,8 +522,19 @@ export function ReservationModal({
                         </select>
                       </Field>
                       <Field label="Origem / canal">
-                        <select disabled={!editable} value={draft.origin} onChange={(e) => setDraft({ ...draft, origin: e.target.value as Reservation['origin'] })} className={inputCls}>
-                          {ORIGINS.map((o) => <option key={o} value={o}>{o}</option>)}
+                        <select
+                          disabled={!editable}
+                          value={draft.origin}
+                          onChange={(e) =>
+                            setDraft({ ...draft, origin: e.target.value as Reservation['origin'] })
+                          }
+                          className={inputCls}
+                        >
+                          {ORIGINS.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
                         </select>
                       </Field>
                       <Field label="Tipo hóspede">
@@ -419,13 +561,32 @@ export function ReservationModal({
                   <Section title="Tarifário / valor previsto">
                     <div className="space-y-3">
                       <Field label="Valor total (R$)">
-                        <input type="number" disabled={!editable} value={draft.totalAmount} onChange={(e) => setDraft({ ...draft, totalAmount: Number(e.target.value) })} className={inputCls} />
+                        <input
+                          type="number"
+                          disabled={!editable}
+                          value={draft.totalAmount}
+                          onChange={(e) => setDraft({ ...draft, totalAmount: Number(e.target.value) })}
+                          className={inputCls}
+                        />
                       </Field>
                       <Field label="Já pago (R$)">
-                        <input type="number" disabled={!editable} value={draft.paidAmount} onChange={(e) => setDraft({ ...draft, paidAmount: Number(e.target.value) })} className={inputCls} />
+                        <input
+                          type="number"
+                          disabled={!editable}
+                          value={draft.paidAmount}
+                          onChange={(e) => setDraft({ ...draft, paidAmount: Number(e.target.value) })}
+                          className={inputCls}
+                        />
                       </Field>
                       <Field label="Saldo">
-                        <div className={cn('h-10 flex items-center text-[13px] font-semibold', balance > 0.01 ? 'text-rose-600' : 'text-emerald-600')}>{formatBRL(balance)}</div>
+                        <div
+                          className={cn(
+                            'h-10 flex items-center text-[13px] font-semibold',
+                            balance > 0.01 ? 'text-rose-600' : 'text-emerald-600'
+                          )}
+                        >
+                          {formatBRL(balance)}
+                        </div>
                       </Field>
                       <Field label="Pensão">
                         <select disabled={!editable} defaultValue="meia_almoco" className={inputCls}>
@@ -457,9 +618,15 @@ export function ReservationModal({
                         <input type="checkbox" disabled={!editable} className="rounded border-slate-300" />
                         Hospedagem por empresa
                       </label>
-                      <Field label="Empresa"><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
-                      <Field label="Agente"><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
-                      <Field label="Voucher empr."><input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} /></Field>
+                      <Field label="Empresa">
+                        <input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} />
+                      </Field>
+                      <Field label="Agente">
+                        <input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} />
+                      </Field>
+                      <Field label="Voucher empr.">
+                        <input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} />
+                      </Field>
                     </div>
                   </Section>
                 </div>
@@ -469,51 +636,148 @@ export function ReservationModal({
             {tab === 'valores' && (
               <Section title="Tarifário e valores">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <Field label="Valor total (R$)"><input type="number" disabled={!editable} value={draft.totalAmount} onChange={(e) => setDraft({ ...draft, totalAmount: Number(e.target.value) })} className={inputCls} /></Field>
-                  <Field label="Já pago (R$)"><input type="number" disabled={!editable} value={draft.paidAmount} onChange={(e) => setDraft({ ...draft, paidAmount: Number(e.target.value) })} className={inputCls} /></Field>
-                  <Field label="Saldo"><div className={cn('h-10 flex items-center text-[13px] font-semibold', balance > 0.01 ? 'text-rose-600' : 'text-emerald-600')}>{formatBRL(balance)}</div></Field>
+                  <Field label="Valor total (R$)">
+                    <input
+                      type="number"
+                      disabled={!editable}
+                      value={draft.totalAmount}
+                      onChange={(e) => setDraft({ ...draft, totalAmount: Number(e.target.value) })}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field label="Já pago (R$)">
+                    <input
+                      type="number"
+                      disabled={!editable}
+                      value={draft.paidAmount}
+                      onChange={(e) => setDraft({ ...draft, paidAmount: Number(e.target.value) })}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field label="Saldo">
+                    <div
+                      className={cn(
+                        'h-10 flex items-center text-[13px] font-semibold',
+                        balance > 0.01 ? 'text-rose-600' : 'text-emerald-600'
+                      )}
+                    >
+                      {formatBRL(balance)}
+                    </div>
+                  </Field>
                 </div>
                 {account && (
                   <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-[12px] space-y-1">
                     <p className="font-semibold text-slate-700">Conta vinculada</p>
-                    <p className="text-slate-500">Status: {account.status} · Aberta em {formatDateBR(account.openedAt)}</p>
-                    <button type="button" onClick={() => setShowAccount(true)} className="mt-1 text-indigo-600 font-medium hover:underline">Abrir extrato da conta →</button>
+                    <p className="text-slate-500">
+                      Status: {account.status} · Aberta em {formatDateBR(account.openedAt)}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowAccount(true)}
+                      className="mt-1 text-indigo-600 font-medium hover:underline"
+                    >
+                      Abrir extrato da conta →
+                    </button>
                   </div>
                 )}
               </Section>
             )}
 
-            {tab === 'pensoes' && <PensionTab checkIn={draft.checkIn} checkOut={draft.checkOut} editable={editable} />}
+            {tab === 'pensoes' && (
+              <PensionTab checkIn={draft.checkIn} checkOut={draft.checkOut} editable={editable} />
+            )}
 
             {tab === 'obs' && (
               <Section title="Observações da reserva">
-                <textarea disabled={!editable} value={draft.notes || ''} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} rows={5} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50" placeholder="Observações internas, pedidos do hóspede…" />
+                <textarea
+                  disabled={!editable}
+                  value={draft.notes || ''}
+                  onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+                  rows={8}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50 min-h-[200px]"
+                  placeholder="Observações internas, pedidos do hóspede…"
+                />
                 <div className="mt-3 flex items-center gap-2 text-[13px]">
                   <span className="text-slate-500">FNRH / pré-check-in:</span>
-                  <span className={draft.fnrhFilled ? 'text-emerald-600 font-semibold' : 'text-amber-700 font-semibold'}>{draft.fnrhFilled ? 'Preenchida' : 'Pendente'}</span>
+                  <span
+                    className={
+                      draft.fnrhFilled
+                        ? 'text-emerald-600 font-semibold'
+                        : 'text-amber-700 font-semibold'
+                    }
+                  >
+                    {draft.fnrhFilled ? 'Preenchida' : 'Pendente'}
+                  </span>
                 </div>
               </Section>
             )}
 
             {tab === 'voucher' && (
-              <div className="space-y-4">
+              <div className="space-y-4 min-h-[280px]">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-[13px] font-semibold text-slate-800">Voucher do hóspede</p>
                     <p className="text-[12px] text-slate-500">Documento oficial da reserva</p>
                   </div>
-                  <button type="button" onClick={openVoucherPdf} className="h-9 px-3 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={openVoucherPdf}
+                    className="h-9 px-3 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5"
+                  >
                     <Ticket className="w-3.5 h-3.5" /> Abrir voucher (PDF)
                   </button>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm text-[13px]">
+                  <div className="flex justify-between items-start border-b border-slate-100 pb-3 mb-3">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+                        {hotel.name}
+                      </p>
+                      <p className="text-lg font-semibold text-slate-900">VOUCHER DE HOSPEDAGEM</p>
+                    </div>
+                    <p className="font-mono text-[12px] text-slate-500">{draft.code}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400">Hóspede</p>
+                      <p className="font-medium">{draft.guestName}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400">Documento</p>
+                      <p className="font-medium">{guest?.document || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400">Check-in</p>
+                      <p className="font-medium">{formatDateBR(draft.checkIn)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400">Check-out</p>
+                      <p className="font-medium">{formatDateBR(draft.checkOut)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400">UH / Tipo</p>
+                      <p className="font-medium">
+                        {draft.roomNumber || '—'} · {draft.roomType}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-slate-400">Valor</p>
+                      <p className="font-medium">{formatBRL(draft.totalAmount)}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
 
             {tab === 'documentos' && (
-              <div className="space-y-3">
+              <div className="space-y-3 min-h-[280px]">
                 <div className="flex items-center justify-between">
                   <p className="text-[13px] font-semibold text-slate-800">Documentos da reserva</p>
-                  <button type="button" onClick={() => toast.message('Upload (em breve)')} className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] font-medium inline-flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => toast.message('Upload (em breve)')}
+                    className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] font-medium inline-flex items-center gap-1.5"
+                  >
                     <Paperclip className="w-3.5 h-3.5" /> Anexar
                   </button>
                 </div>
@@ -530,11 +794,30 @@ export function ReservationModal({
                     <tbody className="divide-y divide-slate-50">
                       {docs.map((d) => (
                         <tr key={d.id}>
-                          <td className="px-3 py-2.5"><div className="flex items-center gap-2"><FileText className="w-4 h-4 text-slate-400" /><div><p className="font-medium">{d.name}</p><p className="text-[10px] text-slate-400">{d.size}</p></div></div></td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-slate-400" />
+                              <div>
+                                <p className="font-medium">{d.name}</p>
+                                <p className="text-[10px] text-slate-400">{d.size}</p>
+                              </div>
+                            </div>
+                          </td>
                           <td className="px-3 py-2.5">{d.type}</td>
-                          <td className="px-3 py-2.5 text-slate-500"><p>{d.uploadedAt}</p><p className="text-[10px]">{d.uploadedBy}</p></td>
+                          <td className="px-3 py-2.5 text-slate-500">
+                            <p>{d.uploadedAt}</p>
+                            <p className="text-[10px]">{d.uploadedBy}</p>
+                          </td>
                           <td className="px-3 py-2.5 text-right">
-                            <button type="button" onClick={() => (d.type === 'Voucher' ? openVoucherPdf() : toast.message(d.name))} className="h-7 w-7 rounded-lg border inline-flex items-center justify-center"><Eye className="w-3.5 h-3.5" /></button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                d.type === 'Voucher' ? openVoucherPdf() : toast.message(d.name)
+                              }
+                              className="h-7 w-7 rounded-lg border inline-flex items-center justify-center"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -545,7 +828,7 @@ export function ReservationModal({
             )}
 
             {tab === 'logs' && (
-              <div className="space-y-3">
+              <div className="space-y-3 min-h-[280px]">
                 <div className="flex items-center gap-2">
                   <History className="w-4 h-4 text-slate-400" />
                   <p className="text-[13px] font-semibold text-slate-800">Histórico da reserva</p>
@@ -572,35 +855,75 @@ export function ReservationModal({
 
           <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex flex-wrap gap-2 shrink-0">
             {editable && (
-              <button type="button" onClick={save} className="h-9 px-3 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={save}
+                className="h-9 px-3 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5"
+              >
                 <Save className="w-3.5 h-3.5" /> Salvar
               </button>
             )}
-            <button type="button" onClick={() => setShowAccount(true)} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setShowAccount(true)}
+              className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5"
+            >
               <Wallet className="w-3.5 h-3.5" /> Conta
             </button>
-            <button type="button" onClick={openVoucherPdf} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={openVoucherPdf}
+              className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5"
+            >
               <Ticket className="w-3.5 h-3.5" /> Voucher
             </button>
-            <button type="button" onClick={() => { markFnrh(draft.id); setDraft({ ...draft, fnrhFilled: true }); toast.success('FNRH marcada'); }} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                markFnrh(draft.id);
+                setDraft({ ...draft, fnrhFilled: true });
+                toast.success('FNRH marcada');
+              }}
+              className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5"
+            >
               <FileText className="w-3.5 h-3.5" /> FNRH
             </button>
             {canCheckIn && (
-              <button type="button" onClick={doCheckIn} className="h-9 px-3 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={doCheckIn}
+                className="h-9 px-3 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5"
+              >
                 <LogIn className="w-3.5 h-3.5" /> Check-in
               </button>
             )}
             {canCheckOut && (
-              <button type="button" onClick={doCheckOut} className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[13px] font-semibold inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={doCheckOut}
+                className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[13px] font-semibold inline-flex items-center gap-1.5"
+              >
                 <LogOut className="w-3.5 h-3.5" /> Check-out
               </button>
             )}
             {editable && !isInHouse && (
-              <button type="button" onClick={() => { if (window.confirm('Cancelar esta reserva?')) { cancelReservation(draft.id); toast.message('Reserva cancelada'); onClose(); } }} className="h-9 px-3 rounded-lg border border-rose-200 text-rose-700 text-[13px] ml-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('Cancelar esta reserva?')) {
+                    cancelReservation(draft.id);
+                    toast.message('Reserva cancelada');
+                    onClose();
+                  }
+                }}
+                className="h-9 px-3 rounded-lg border border-rose-200 text-rose-700 text-[13px] ml-auto"
+              >
                 Cancelar
               </button>
             )}
-            <button type="button" onClick={onClose} className="h-9 px-3 rounded-lg text-[13px] text-slate-600">Fechar</button>
+            <button type="button" onClick={onClose} className="h-9 px-3 rounded-lg text-[13px] text-slate-600">
+              Fechar
+            </button>
           </div>
         </div>
       </Overlay>
@@ -623,7 +946,12 @@ function buildVoucherHtml(r: Reservation, hotelName: string, document?: string):
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button type="button" className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" aria-label="Fechar" onClick={onClose} />
+      <button
+        type="button"
+        className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]"
+        aria-label="Fechar"
+        onClick={onClose}
+      />
       <div className="relative z-10 w-full flex justify-center">{children}</div>
     </div>
   );

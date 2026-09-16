@@ -256,40 +256,40 @@ export function ReceptionModule() {
             </div>
           </div>
 
-          <div className="fixed bottom-0 left-[232px] right-0 z-30 border-t border-teal-800 bg-[#0d3d38] text-teal-50 text-[12px] shadow-[0_-8px_30px_rgba(0,0,0,0.25)]">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-teal-800/60">
+          <div className="fixed bottom-0 left-[232px] right-0 z-30 border-t border-[#163a66] bg-[#0c2340] text-sky-50 text-[12px] shadow-[0_-8px_30px_rgba(0,0,0,0.25)]">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-[#163a66]">
               <div className="lg:col-span-3 p-3 space-y-1">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-teal-200/70">Previsões do dia</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-sky-200/70">Previsões do dia</p>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                  <span className="text-teal-200/60">Check-in · UHs</span><span className="font-semibold text-right">{arrivals.length}</span>
-                  <span className="text-teal-200/60">Adultos</span><span className="font-semibold text-right">{arrivalAdults}</span>
-                  <span className="text-teal-200/60">Crianças</span><span className="font-semibold text-right">{arrivalChildren}</span>
-                  <span className="text-teal-200/60">Check-out · UHs</span><span className="font-semibold text-right">{departures.length}</span>
+                  <span className="text-sky-200/60">Check-in · UHs</span><span className="font-semibold text-right">{arrivals.length}</span>
+                  <span className="text-sky-200/60">Adultos</span><span className="font-semibold text-right">{arrivalAdults}</span>
+                  <span className="text-sky-200/60">Crianças</span><span className="font-semibold text-right">{arrivalChildren}</span>
+                  <span className="text-sky-200/60">Check-out · UHs</span><span className="font-semibold text-right">{departures.length}</span>
                 </div>
               </div>
               <div className="lg:col-span-3 p-3 space-y-1">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-teal-200/70">Ocupação</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-sky-200/70">Ocupação</p>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                  <span className="text-teal-200/60">Qtd UHs</span><span className="font-semibold text-right">{sellable}</span>
-                  <span className="text-teal-200/60">Ocupadas</span><span className="font-semibold text-right">{occupied} · {occPct}%</span>
-                  <span className="text-teal-200/60">In-house</span><span className="font-semibold text-right">{inHouse.length}</span>
-                  <span className="text-teal-200/60">Total pax</span><span className="font-semibold text-right">{totalPax}</span>
+                  <span className="text-sky-200/60">Qtd UHs</span><span className="font-semibold text-right">{sellable}</span>
+                  <span className="text-sky-200/60">Ocupadas</span><span className="font-semibold text-right">{occupied} · {occPct}%</span>
+                  <span className="text-sky-200/60">In-house</span><span className="font-semibold text-right">{inHouse.length}</span>
+                  <span className="text-sky-200/60">Total pax</span><span className="font-semibold text-right">{totalPax}</span>
                 </div>
               </div>
               <div className="lg:col-span-6 p-3 space-y-1">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-teal-200/70">Observação da reserva selecionada</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-sky-200/70">Observação da reserva selecionada</p>
                 {selectedRes && selectedRes.status !== 'checkin' ? (
                   <div className="space-y-1">
-                    <p className="font-semibold">{selectedRes.guestName} <span className="font-mono font-normal text-teal-200/60">· {selectedRes.code.replace('RSV-', '')}</span></p>
-                    <p className="text-teal-100/90">{selectedRes.roomNumber || selectedRes.roomType} · {formatDateBR(selectedRes.checkIn)} → {formatDateBR(selectedRes.checkOut)} · {selectedRes.adults} AD / {selectedRes.children} CH · Canal <span className="capitalize">{selectedRes.origin}</span></p>
-                    <p className="text-teal-200/50 line-clamp-2">{selectedRes.notes || 'Sem observações registradas.'}</p>
+                    <p className="font-semibold">{selectedRes.guestName} <span className="font-mono font-normal text-sky-200/60">· {selectedRes.code.replace('RSV-', '')}</span></p>
+                    <p className="text-sky-100/90">{selectedRes.roomNumber || selectedRes.roomType} · {formatDateBR(selectedRes.checkIn)} → {formatDateBR(selectedRes.checkOut)} · {selectedRes.adults} AD / {selectedRes.children} CH · Canal <span className="capitalize">{selectedRes.origin}</span></p>
+                    <p className="text-sky-200/50 line-clamp-2">{selectedRes.notes || 'Sem observações registradas.'}</p>
                     <div className="flex flex-wrap gap-2 pt-1">
                       <button type="button" onClick={() => setModalResId(selectedRes.id)} className="h-7 px-2.5 rounded-lg bg-white text-slate-900 text-[11px] font-semibold">Abrir reserva</button>
-                      <button type="button" onClick={() => setModalResId(selectedRes.id)} className="h-7 px-2.5 rounded-lg bg-teal-500 text-white text-[11px] font-semibold">Preparar check-in</button>
+                      <button type="button" onClick={() => setModalResId(selectedRes.id)} className="h-7 px-2.5 rounded-lg bg-blue-500 text-white text-[11px] font-semibold">Preparar check-in</button>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-teal-200/50">Selecione uma reserva na lista</p>
+                  <p className="text-sky-200/50">Selecione uma reserva na lista</p>
                 )}
               </div>
             </div>
@@ -358,7 +358,7 @@ export function ReceptionModule() {
           </div>
 
           {selectedRes && selectedRes.status === 'checkin' && (
-            <div className="fixed bottom-0 left-[232px] right-0 z-30 border-t border-teal-800 bg-[#0d3d38] text-teal-50 px-6 py-4 text-[12px] shadow-[0_-8px_30px_rgba(0,0,0,0.25)]">
+            <div className="fixed bottom-0 left-[232px] right-0 z-30 border-t border-[#163a66] bg-[#0c2340] text-sky-50 px-6 py-4 text-[12px] shadow-[0_-8px_30px_rgba(0,0,0,0.25)]">
               {(() => {
                 const room = rooms.find((rm) => rm.id === selectedRes.roomId);
                 const guest = guests.find((g) => g.id === selectedRes.guestId);
@@ -366,32 +366,32 @@ export function ReceptionModule() {
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-4 max-w-[1600px]">
                     <div className="md:col-span-3 space-y-1.5">
-                      <p className="text-[10px] uppercase tracking-wider text-teal-200/70 font-semibold mb-1">UH / Reserva</p>
-                      <p><span className="text-teal-200/60">Nº reserva:</span> <span className="font-semibold">{selectedRes.code.replace('RSV-', '')}</span></p>
-                      <p><span className="text-teal-200/60">UH:</span> <span className="font-semibold">{selectedRes.roomNumber} · {selectedRes.roomType}</span></p>
-                      <p><span className="text-teal-200/60">Andar / bloco:</span> {room ? `${room.floor === 0 ? 'Térreo' : room.floor + 'º'} · ${room.block || '—'}` : '—'}</p>
-                      <p><span className="text-teal-200/60">Governança:</span> {room ? GOVERNANCE_LABEL[room.governance] : '—'}</p>
+                      <p className="text-[10px] uppercase tracking-wider text-sky-200/70 font-semibold mb-1">UH / Reserva</p>
+                      <p><span className="text-sky-200/60">Nº reserva:</span> <span className="font-semibold">{selectedRes.code.replace('RSV-', '')}</span></p>
+                      <p><span className="text-sky-200/60">UH:</span> <span className="font-semibold">{selectedRes.roomNumber} · {selectedRes.roomType}</span></p>
+                      <p><span className="text-sky-200/60">Andar / bloco:</span> {room ? `${room.floor === 0 ? 'Térreo' : room.floor + 'º'} · ${room.block || '—'}` : '—'}</p>
+                      <p><span className="text-sky-200/60">Governança:</span> {room ? GOVERNANCE_LABEL[room.governance] : '—'}</p>
                     </div>
                     <div className="md:col-span-3 space-y-1.5">
-                      <p className="text-[10px] uppercase tracking-wider text-teal-200/70 font-semibold mb-1">Estadia</p>
-                      <p><span className="text-teal-200/60">Check-in efetuado:</span> {formatDateBR(selectedRes.checkIn)}</p>
-                      <p><span className="text-teal-200/60">Checkout previsto:</span> {formatDateBR(selectedRes.checkOut)}</p>
-                      <p><span className="text-teal-200/60">Origem:</span> <span className="capitalize">{selectedRes.origin}</span></p>
-                      <p><span className="text-teal-200/60">Pré-check-in / FNRH:</span> {selectedRes.fnrhFilled ? 'Conferido' : 'Não conferido'}</p>
-                      <p><span className="text-teal-200/60">Placa veículo:</span> ABC1D23</p>
+                      <p className="text-[10px] uppercase tracking-wider text-sky-200/70 font-semibold mb-1">Estadia</p>
+                      <p><span className="text-sky-200/60">Check-in efetuado:</span> {formatDateBR(selectedRes.checkIn)}</p>
+                      <p><span className="text-sky-200/60">Checkout previsto:</span> {formatDateBR(selectedRes.checkOut)}</p>
+                      <p><span className="text-sky-200/60">Origem:</span> <span className="capitalize">{selectedRes.origin}</span></p>
+                      <p><span className="text-sky-200/60">Pré-check-in / FNRH:</span> {selectedRes.fnrhFilled ? 'Conferido' : 'Não conferido'}</p>
+                      <p><span className="text-sky-200/60">Placa veículo:</span> ABC1D23</p>
                     </div>
                     <div className="md:col-span-3 space-y-1.5">
-                      <p className="text-[10px] uppercase tracking-wider text-teal-200/70 font-semibold mb-1">Hóspedes</p>
-                      <ul className="space-y-0.5">{companions.map((name, i) => <li key={i} className={i === 0 ? 'font-semibold' : 'text-teal-100/80'}>{name}</li>)}</ul>
-                      {guest && <p className="text-teal-200/50 pt-1">Doc: {guest.document} · {guest.phone}</p>}
+                      <p className="text-[10px] uppercase tracking-wider text-sky-200/70 font-semibold mb-1">Hóspedes</p>
+                      <ul className="space-y-0.5">{companions.map((name, i) => <li key={i} className={i === 0 ? 'font-semibold' : 'text-sky-100/80'}>{name}</li>)}</ul>
+                      {guest && <p className="text-sky-200/50 pt-1">Doc: {guest.document} · {guest.phone}</p>}
                     </div>
                     <div className="md:col-span-3 space-y-1.5">
-                      <p className="text-[10px] uppercase tracking-wider text-teal-200/70 font-semibold mb-1">Observação</p>
-                      <p className="text-teal-100/80 min-h-[40px]">{selectedRes.notes || 'Sem observações registradas.'}</p>
+                      <p className="text-[10px] uppercase tracking-wider text-sky-200/70 font-semibold mb-1">Observação</p>
+                      <p className="text-sky-100/80 min-h-[40px]">{selectedRes.notes || 'Sem observações registradas.'}</p>
                       <div className="flex flex-wrap gap-2 pt-1">
                         <button type="button" onClick={() => setModalResId(selectedRes.id)} className="h-8 px-3 rounded-lg bg-white text-slate-900 text-[12px] font-semibold">Abrir reserva</button>
                         <button type="button" onClick={() => setModalAccount({ accountId: selectedRes.accountId, reservationId: selectedRes.id })} className="h-8 px-3 rounded-lg border border-white/30 text-[12px]">Conta</button>
-                        <button type="button" onClick={() => doCheckOut(selectedRes.id)} className="h-8 px-3 rounded-lg bg-teal-500 text-white text-[12px] font-semibold">Check-out</button>
+                        <button type="button" onClick={() => doCheckOut(selectedRes.id)} className="h-8 px-3 rounded-lg bg-blue-500 text-white text-[12px] font-semibold">Check-out</button>
                       </div>
                     </div>
                   </div>

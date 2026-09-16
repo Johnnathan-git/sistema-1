@@ -8,14 +8,13 @@ import {
   isRoomReadyForCheckIn,
   OCCUPANCY_LABEL,
   roomNotReadyReason,
-  type Reservation,
   type Room,
 } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
 import { LayoutGrid, List, LogIn, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
-type MainTab = 'checkins' | 'relacao' | 'chart';
+type MainTab = 'checkins' | 'hospedados' | 'chart';
 
 function addDays(iso: string, n: number): string {
   const d = new Date(iso + 'T12:00:00');
@@ -28,7 +27,6 @@ export function ReceptionModule() {
   const [tab, setTab] = useState<MainTab>('checkins');
   const [q, setQ] = useState('');
   const [selectedResId, setSelectedResId] = useState<string | null>(null);
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [modalResId, setModalResId] = useState<string | null>(null);
   const [modalAccount, setModalAccount] = useState<{
     accountId?: string;
@@ -69,39 +67,24 @@ export function ReceptionModule() {
     );
   }, [arrivals, q]);
 
-  const filteredRooms = useMemo(() => {
-    let list = [...rooms].sort((a, b) =>
-      a.number.localeCompare(b.number, 'pt-BR', { numeric: true })
-    );
+  const filteredInHouse = useMemo(() => {
     const query = q.trim().toLowerCase();
-    if (query) {
-      list = list.filter(
-        (r) =>
-          r.number.toLowerCase().includes(query) ||
-          r.type.toLowerCase().includes(query) ||
-          (r.block || '').toLowerCase().includes(query)
-      );
-    }
-    return list;
-  }, [rooms, q]);
+    if (!query) return inHouse;
+    return inHouse.filter(
+      (r) =>
+        r.guestName.toLowerCase().includes(query) ||
+        r.code.toLowerCase().includes(query) ||
+        (r.roomNumber || '').toLowerCase().includes(query)
+    );
+  }, [inHouse, q]);
 
   const selectedRes =
     reservations.find((r) => r.id === selectedResId) ||
-    (tab === 'checkins' ? filteredArrivals[0] ?? null : null);
-
-  const selectedRoom =
-    rooms.find((r) => r.id === selectedRoomId) ||
-    (tab === 'relacao' ? filteredRooms[0] ?? null : null);
-
-  const guestInRoom = (roomId: string) =>
-    reservations.find((r) => r.roomId === roomId && r.status === 'checkin');
-
-  const pendingResOnRoom = (roomId: string) =>
-    reservations.find(
-      (r) =>
-        r.roomId === roomId &&
-        (r.status === 'confirmada' || r.status === 'pendente')
-    );
+    (tab === 'checkins'
+      ? filteredArrivals[0] ?? null
+      : tab === 'hospedados'
+        ? filteredInHouse[0] ?? null
+        : null);
 
   const doCheckIn = (id: string) => {
     const res = checkIn(id);
@@ -172,7 +155,7 @@ export function ReceptionModule() {
         {(
           [
             { id: 'checkins' as const, label: 'Check-ins previstos', icon: LogIn },
-            { id: 'relacao' as const, label: 'Relação de UHs', icon: List },
+            { id: 'hospedados' as const, label: 'Hospedados', icon: List },
             { id: 'chart' as const, label: 'Chart de ocupação', icon: LayoutGrid },
           ] as const
         ).map(({ id, label, icon: Icon }) => (
@@ -199,7 +182,11 @@ export function ReceptionModule() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder={tab === 'checkins' ? 'Buscar reserva…' : 'Buscar UH…'}
+            placeholder={
+              tab === 'checkins'
+                ? 'Buscar reserva…'
+                : 'Buscar hóspede, UH ou reserva…'
+            }
             className="w-full h-10 rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-[13px] outline-none focus:ring-2 focus:ring-indigo-500/20"
           />
         </div>
@@ -251,17 +238,27 @@ export function ReceptionModule() {
                             active ? 'bg-indigo-50' : 'hover:bg-slate-50'
                           )}
                         >
-                          <td className="px-3 py-2 font-mono text-[11px]">{r.code.replace('RSV-', '')}</td>
-                          <td className="px-3 py-2 font-medium max-w-[160px] truncate">{r.guestName}</td>
+                          <td className="px-3 py-2 font-mono text-[11px]">
+                            {r.code.replace('RSV-', '')}
+                          </td>
+                          <td className="px-3 py-2 font-medium max-w-[160px] truncate">
+                            {r.guestName}
+                          </td>
                           <td className="px-3 py-2 font-semibold">{r.roomNumber || '—'}</td>
                           <td className="px-3 py-2">{r.fnrhFilled ? 'SIM' : 'NÃO'}</td>
-                          <td className="px-3 py-2">{r.adults}/{r.children}</td>
+                          <td className="px-3 py-2">
+                            {r.adults}/{r.children}
+                          </td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             {formatDateBR(r.checkIn)} → {formatDateBR(r.checkOut)}
                           </td>
                           <td className="px-3 py-2">
                             {room ? (
-                              <span className={!ready ? 'text-rose-600 font-semibold' : 'text-emerald-600'}>
+                              <span
+                                className={
+                                  !ready ? 'text-rose-600 font-semibold' : 'text-emerald-600'
+                                }
+                              >
                                 {GOVERNANCE_LABEL[room.governance]}
                                 {!ready ? ` · ${reason}` : ''}
                               </span>
@@ -269,7 +266,10 @@ export function ReceptionModule() {
                               '—'
                             )}
                           </td>
-                          <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                          <td
+                            className="px-3 py-2 text-right"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <button
                               type="button"
                               onClick={() => doCheckIn(r.id)}
@@ -309,7 +309,7 @@ export function ReceptionModule() {
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
                 Reserva selecionada (rodapé)
               </p>
-              {selectedRes ? (
+              {selectedRes && selectedRes.status !== 'checkin' ? (
                 <div className="text-[13px] space-y-2">
                   <p className="font-semibold">{selectedRes.guestName}</p>
                   <p className="text-slate-500">
@@ -331,18 +331,6 @@ export function ReceptionModule() {
                     >
                       Check-in
                     </button>
-                    {!selectedRes.fnrhFilled && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          markFnrh(selectedRes.id);
-                          toast.success('FNRH marcada');
-                        }}
-                        className="h-8 px-3 rounded-lg border text-[12px]"
-                      >
-                        Marcar FNRH
-                      </button>
-                    )}
                   </div>
                 </div>
               ) : (
@@ -353,163 +341,158 @@ export function ReceptionModule() {
         </div>
       )}
 
-      {tab === 'relacao' && (
+      {tab === 'hospedados' && (
         <div className="space-y-3">
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="px-4 py-2 border-b bg-slate-50/80 text-[12px] font-semibold text-slate-600">
-              Relação de UHs · {filteredRooms.length}
+              Hospedados · {filteredInHouse.length}
+              <span className="ml-2 font-normal text-slate-400">
+                (1 clique = detalhe · 2 cliques = abrir reserva)
+              </span>
             </div>
             <div className="overflow-x-auto max-h-[400px]">
               <table className="w-full text-[12px]">
                 <thead className="sticky top-0 bg-white z-10">
                   <tr className="text-left text-[10px] uppercase text-slate-400 border-b">
+                    <th className="px-3 py-2">Reserva</th>
+                    <th className="px-3 py-2">Hóspede</th>
                     <th className="px-3 py-2">UH</th>
                     <th className="px-3 py-2">Tipo</th>
-                    <th className="px-3 py-2">Ocupação</th>
                     <th className="px-3 py-2">Governança</th>
-                    <th className="px-3 py-2">Hóspede</th>
+                    <th className="px-3 py-2">AD/CH</th>
+                    <th className="px-3 py-2">Check-out</th>
                     <th className="px-3 py-2 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filteredRooms.map((room) => {
-                    const guest = guestInRoom(room.id);
-                    const pending = pendingResOnRoom(room.id);
-                    const active = selectedRoom?.id === room.id;
-                    return (
-                      <tr
-                        key={room.id}
-                        onClick={() => setSelectedRoomId(room.id)}
-                        onDoubleClick={() => {
-                          if (guest) setModalResId(guest.id);
-                          else if (pending) setModalResId(pending.id);
-                        }}
-                        className={cn(
-                          'cursor-pointer',
-                          active ? 'bg-indigo-50' : 'hover:bg-slate-50'
-                        )}
-                      >
-                        <td className="px-3 py-2 font-semibold">{room.number}</td>
-                        <td className="px-3 py-2 text-slate-600">{room.type}</td>
-                        <td className="px-3 py-2">{OCCUPANCY_LABEL[room.occupancy]}</td>
-                        <td className="px-3 py-2">{GOVERNANCE_LABEL[room.governance]}</td>
-                        <td className="px-3 py-2 truncate max-w-[140px]">
-                          {guest?.guestName || pending?.guestName || '—'}
-                        </td>
-                        <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="inline-flex gap-1">
-                            {guest && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => setModalResId(guest.id)}
-                                  className="h-7 px-2 rounded-lg border text-[11px]"
-                                >
-                                  Reserva
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setModalAccount({
-                                      accountId: guest.accountId,
-                                      reservationId: guest.id,
-                                    })
-                                  }
-                                  className="h-7 px-2 rounded-lg border text-[11px]"
-                                >
-                                  Conta
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => doCheckOut(guest.id)}
-                                  className="h-7 px-2 rounded-lg bg-slate-900 text-white text-[11px] font-semibold"
-                                >
-                                  Check-out
-                                </button>
-                              </>
+                  {filteredInHouse.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                        Nenhum hóspede in-house no momento
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredInHouse.map((r) => {
+                      const room = rooms.find((rm) => rm.id === r.roomId);
+                      const active = selectedRes?.id === r.id;
+                      return (
+                        <tr
+                          key={r.id}
+                          onClick={() => setSelectedResId(r.id)}
+                          onDoubleClick={() => setModalResId(r.id)}
+                          className={cn(
+                            'cursor-pointer',
+                            active ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                          )}
+                        >
+                          <td className="px-3 py-2 font-mono text-[11px]">
+                            {r.code.replace('RSV-', '')}
+                          </td>
+                          <td className="px-3 py-2 font-medium max-w-[160px] truncate">
+                            {r.guestName}
+                          </td>
+                          <td className="px-3 py-2 font-semibold">{r.roomNumber || '—'}</td>
+                          <td className="px-3 py-2 text-slate-600">{r.roomType}</td>
+                          <td className="px-3 py-2">
+                            {room ? GOVERNANCE_LABEL[room.governance] : '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            {r.adults}/{r.children}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {formatDateBR(r.checkOut)}
+                            {r.checkOut === today && (
+                              <span className="ml-1 text-amber-600 font-semibold text-[10px]">
+                                HOJE
+                              </span>
                             )}
-                            {!guest && pending && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => setModalResId(pending.id)}
-                                  className="h-7 px-2 rounded-lg border text-[11px]"
-                                >
-                                  Reserva
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => doCheckIn(pending.id)}
-                                  className="h-7 px-2 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold"
-                                >
-                                  Check-in
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+                          <td
+                            className="px-3 py-2 text-right"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="inline-flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setModalResId(r.id)}
+                                className="h-7 px-2 rounded-lg border text-[11px]"
+                              >
+                                Reserva
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setModalAccount({
+                                    accountId: r.accountId,
+                                    reservationId: r.id,
+                                  })
+                                }
+                                className="h-7 px-2 rounded-lg border text-[11px]"
+                              >
+                                Conta
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => doCheckOut(r.id)}
+                                className="h-7 px-2 rounded-lg bg-slate-900 text-white text-[11px] font-semibold"
+                              >
+                                Check-out
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 p-4 text-[13px]">
-            {selectedRoom ? (
+            {selectedRes && selectedRes.status === 'checkin' ? (
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-[10px] uppercase text-slate-400 font-semibold mb-1">UH</p>
-                  <p>{selectedRoom.number} · {selectedRoom.type}</p>
-                  <p className="text-slate-400">
-                    {OCCUPANCY_LABEL[selectedRoom.occupancy]} /{' '}
-                    {GOVERNANCE_LABEL[selectedRoom.governance]}
+                  <p className="text-[10px] uppercase text-slate-400 font-semibold mb-1">Hóspede</p>
+                  <p className="font-semibold">{selectedRes.guestName}</p>
+                  <p className="text-slate-400 text-[12px]">
+                    {selectedRes.code} · {selectedRes.roomNumber} · {selectedRes.roomType}
+                  </p>
+                  <p className="text-slate-400 text-[12px] mt-1">
+                    {formatDateBR(selectedRes.checkIn)} → {formatDateBR(selectedRes.checkOut)}
                   </p>
                 </div>
-                <div>
-                  <p className="text-[10px] uppercase text-slate-400 font-semibold mb-1">
-                    Reserva
-                  </p>
-                  {(() => {
-                    const g = guestInRoom(selectedRoom.id);
-                    const p = pendingResOnRoom(selectedRoom.id);
-                    const res = g || p;
-                    if (!res) return <p className="text-slate-500">Sem reserva</p>;
-                    return (
-                      <div className="space-y-2">
-                        <p>{res.guestName}</p>
-                        <p className="text-slate-400 text-[12px]">{res.code}</p>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setModalResId(res.id)}
-                            className="h-8 px-3 rounded-lg bg-white text-slate-900 text-[12px] font-semibold"
-                          >
-                            Abrir reserva
-                          </button>
-                          {g && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setModalAccount({
-                                  accountId: g.accountId,
-                                  reservationId: g.id,
-                                })
-                              }
-                              className="h-8 px-3 rounded-lg border border-white/30 text-[12px]"
-                            >
-                              Conta
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()}
+                <div className="flex flex-wrap gap-2 items-start">
+                  <button
+                    type="button"
+                    onClick={() => setModalResId(selectedRes.id)}
+                    className="h-8 px-3 rounded-lg bg-white text-slate-900 text-[12px] font-semibold"
+                  >
+                    Abrir reserva
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setModalAccount({
+                        accountId: selectedRes.accountId,
+                        reservationId: selectedRes.id,
+                      })
+                    }
+                    className="h-8 px-3 rounded-lg border border-white/30 text-[12px]"
+                  >
+                    Conta do hóspede
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => doCheckOut(selectedRes.id)}
+                    className="h-8 px-3 rounded-lg bg-indigo-500 text-white text-[12px] font-semibold"
+                  >
+                    Check-out
+                  </button>
                 </div>
               </div>
             ) : (
-              <p className="text-slate-400">Selecione uma UH</p>
+              <p className="text-slate-400">Clique em um hóspede da lista</p>
             )}
           </div>
         </div>
@@ -537,7 +520,10 @@ export function ReceptionModule() {
                   {chartDates.map((d) => {
                     const [, m, day] = d.split('-');
                     return (
-                      <th key={d} className="px-1 py-2 text-center min-w-[34px] border-l border-white/10">
+                      <th
+                        key={d}
+                        className="px-1 py-2 text-center min-w-[34px] border-l border-white/10"
+                      >
                         {day}/{m}
                       </th>
                     );

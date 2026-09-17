@@ -136,9 +136,6 @@ export function ReceptionDayFooter({
               <p className="text-slate-300 line-clamp-2">
                 {selectedRes.notes || 'Sem observação cadastrada.'}
               </p>
-              <p className="text-[10px] text-slate-500 pt-1">
-                Clique duas vezes na linha para abrir a reserva / conta e realizar o check-out.
-              </p>
             </div>
           ) : (
             <p className="text-slate-500">

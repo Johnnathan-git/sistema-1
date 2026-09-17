@@ -55,17 +55,6 @@ export function ReceptionModule() {
     [reservations, today]
   );
   const inHouse = useMemo(() => reservations.filter((r) => r.status === 'checkin'), [reservations]);
-  const departures = useMemo(
-    () => reservations.filter((r) => r.checkOut === today && r.status === 'checkin'),
-    [reservations, today]
-  );
-
-  const occupied = rooms.filter((r) => r.occupancy === 'ocupado').length;
-  const sellable = rooms.filter((r) => r.occupancy !== 'bloqueado').length;
-  const occPct = sellable > 0 ? ((occupied / sellable) * 100).toFixed(2) : '0.00';
-  const arrivalAdults = arrivals.reduce((s, r) => s + r.adults, 0);
-  const arrivalChildren = arrivals.reduce((s, r) => s + r.children, 0);
-  const totalPax = inHouse.reduce((s, r) => s + r.adults + r.children, 0);
 
   const clearFilters = () => {
     setQ('');
@@ -139,21 +128,13 @@ export function ReceptionModule() {
     return list;
   }, [inHouse, hRoom, hCategory, hBlock, hReserva, hGuest, hGroupName, hGroupFlag, hVehicle, rooms]);
 
-  const selectedRes =
-    reservations.find((r) => r.id === selectedResId) ||
-    (tab === 'hospedados' ? filteredInHouse[0] ?? null : tab === 'checkins' ? filteredArrivals[0] ?? null : null);
+  const selectedRes = selectedResId
+    ? reservations.find((r) => r.id === selectedResId) ?? null
+    : null;
 
-  const availableTransferRooms = useMemo(
-    () =>
-      rooms.filter(
-        (r) =>
-          r.occupancy === 'livre' &&
-          r.governance !== 'interditado' &&
-          r.governance !== 'manutencao' &&
-          (!selectedRes || r.id !== selectedRes.roomId)
-      ),
-    [rooms, selectedRes]
-  );
+  const selectedRoom = selectedRes?.roomId
+    ? rooms.find((r) => r.id === selectedRes.roomId)
+    : undefined;
 
   const doCheckOut = (id: string) => {
     const res = checkOut(id);
@@ -166,18 +147,6 @@ export function ReceptionModule() {
     if (res.ok) {
       toast.success(res.message);
       setSelectedResId(null);
-    } else toast.error(res.message);
-  };
-  const doTransfer = () => {
-    if (!selectedRes || !transferRoomId) {
-      toast.error('Selecione a UH de destino');
-      return;
-    }
-    const res = transferRoom(selectedRes.id, transferRoomId);
-    if (res.ok) {
-      toast.success(res.message);
-      setTransferOpen(false);
-      setTransferRoomId('');
     } else toast.error(res.message);
   };
 
@@ -208,7 +177,7 @@ export function ReceptionModule() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-28">
       {modalResId && <ReservationModal reservationId={modalResId} onClose={() => setModalResId(null)} />}
       {modalAccount && (
         <AccountModal accountId={modalAccount.accountId} reservationId={modalAccount.reservationId} onClose={() => setModalAccount(null)} />
@@ -242,10 +211,29 @@ export function ReceptionModule() {
       </div>
 
       {tab === 'checkins' && (
-        <div className="flex flex-col pb-36 space-y-3">
+        <div className="flex flex-col space-y-3">
           <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-            <p className="text-[12px] text-slate-500">Use os filtros e a lista de check-ins previstos abaixo.</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 text-[12px]">
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Reserva</span><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nº reserva" className="w-full h-8 rounded-lg border border-slate-200 px-2 outline-none focus:ring-1 focus:ring-blue-400" /></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Hóspede</span><input value={filterGuest} onChange={(e) => setFilterGuest(e.target.value)} placeholder="Nome" className="w-full h-8 rounded-lg border border-slate-200 px-2 outline-none focus:ring-1 focus:ring-blue-400" /></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Período CI</span><input type="date" value={filterPeriod} onChange={(e) => setFilterPeriod(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white" /></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">UH</span><select value={filterRoom} onChange={(e) => setFilterRoom(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option>{rooms.map((r) => <option key={r.id} value={r.id}>{r.number}</option>)}</select></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Categoria</span><select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todas</option><option>Standard</option><option>Superior</option><option>Apartamento</option><option>Suite</option></select></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Tipo UH</span><select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option><option>Standard</option><option>Superior</option><option>Apartamento</option><option>Suite</option></select></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Grupos</span><input value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)} placeholder="Grupo" className="w-full h-8 rounded-lg border border-slate-200 px-2 outline-none focus:ring-1 focus:ring-blue-400" /></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Canal</span><select value={filterCanal} onChange={(e) => setFilterCanal(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option><option value="direto">Direto</option><option value="booking">Booking</option><option value="walkin">Walk-in</option></select></label>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label className="inline-flex items-center gap-2 text-[12px] text-slate-700 mr-2">
+                <input type="checkbox" checked={onlyPreCI} onChange={(e) => setOnlyPreCI(e.target.checked)} className="rounded border-slate-300" />
+                Somente com Pré-CI
+              </label>
+              <button type="button" onClick={() => { clearFilters(); toast.message('Pesquisa limpa'); }} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[12px] font-medium hover:bg-slate-50">Limpar pesquisa</button>
+              <button type="button" onClick={() => toast.success('Lista atualizada')} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"><RefreshCw className="w-3.5 h-3.5" /> Atualizar</button>
+              <button type="button" onClick={() => window.print()} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"><Printer className="w-3.5 h-3.5" /> Imprimir</button>
+            </div>
           </div>
+
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/80 text-[12px] font-semibold text-slate-600">Check-ins previstos · {filteredArrivals.length}</div>
             <div className="overflow-x-auto max-h-[calc(100vh-420px)]">
@@ -285,10 +273,28 @@ export function ReceptionModule() {
       )}
 
       {tab === 'hospedados' && (
-        <div className="flex flex-col pb-36 space-y-3">
+        <div className="flex flex-col space-y-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 text-[12px]">
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">UH</span><select value={hRoom} onChange={(e) => setHRoom(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option>{rooms.map((r) => <option key={r.id} value={r.id}>{r.number}</option>)}</select></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Categoria</span><select value={hCategory} onChange={(e) => setHCategory(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todas</option><option>Standard</option><option>Superior</option><option>Apartamento</option><option>Suite</option></select></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Bloco</span><select value={hBlock} onChange={(e) => setHBlock(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option>{blocks.map((b) => <option key={b} value={b}>{b}</option>)}</select></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Grupo</span><select value={hGroupFlag} onChange={(e) => setHGroupFlag(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option><option value="sim">Sim</option><option value="nao">Não</option></select></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Nome grupo</span><input value={hGroupName} onChange={(e) => setHGroupName(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 outline-none focus:ring-1 focus:ring-blue-400" /></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Reserva</span><input value={hReserva} onChange={(e) => setHReserva(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 outline-none focus:ring-1 focus:ring-blue-400" /></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Veículo</span><input value={hVehicle} onChange={(e) => setHVehicle(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 outline-none focus:ring-1 focus:ring-blue-400" /></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Hóspede</span><input value={hGuest} onChange={(e) => setHGuest(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 outline-none focus:ring-1 focus:ring-blue-400" /></label>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" onClick={() => { setHRoom(''); setHCategory(''); setHBlock(''); setHGroupFlag(''); setHGroupName(''); setHReserva(''); setHVehicle(''); setHGuest(''); toast.message('Pesquisa limpa'); }} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[12px] font-medium hover:bg-slate-50">Limpar pesquisa</button>
+              <button type="button" onClick={() => toast.success('Lista atualizada')} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"><RefreshCw className="w-3.5 h-3.5" /> Atualizar</button>
+              <button type="button" onClick={() => window.print()} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"><Printer className="w-3.5 h-3.5" /> Imprimir</button>
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="px-4 py-2 border-b bg-slate-50/80 text-[12px] font-semibold text-slate-600">Hospedados · {filteredInHouse.length}</div>
-            <div className="overflow-x-auto max-h-[calc(100vh-380px)]">
+            <div className="overflow-x-auto max-h-[calc(100vh-420px)]">
               <table className="text-[12px] min-w-max w-full">
                 <thead className="sticky top-0 bg-white z-10">
                   <tr className="text-left text-[10px] uppercase text-slate-400 border-b">
@@ -347,6 +353,82 @@ export function ReceptionModule() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Rodapé fixo — detalhes da reserva selecionada */}
+      {selectedRes && (
+        <div className="fixed bottom-0 left-[232px] right-0 z-40 border-t border-slate-700 bg-slate-900 text-white shadow-2xl">
+          <div className="px-5 py-3 grid grid-cols-1 md:grid-cols-3 gap-4 text-[12px]">
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">UH · Reserva</p>
+              <p>
+                <span className="text-slate-400">UH:</span>{' '}
+                <span className="font-semibold">{selectedRes.roomNumber || '—'}</span>
+                {selectedRoom && (
+                  <span className="text-slate-400"> · {selectedRoom.type} · {selectedRoom.block || '—'}</span>
+                )}
+              </p>
+              <p>
+                <span className="text-slate-400">Reserva:</span>{' '}
+                <span className="font-semibold tabular-nums">{selectedRes.code}</span>
+              </p>
+              <p>
+                <span className="text-slate-400">Status:</span>{' '}
+                <span className="font-semibold">{selectedRes.status}</span>
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Hospedagem</p>
+              <p>
+                <span className="text-slate-400">Check-in:</span>{' '}
+                <span className="font-semibold">{formatDateBR(selectedRes.checkIn)}</span>
+              </p>
+              <p>
+                <span className="text-slate-400">Check-out:</span>{' '}
+                <span className="font-semibold">{formatDateBR(selectedRes.checkOut)}</span>
+              </p>
+              <p>
+                <span className="text-slate-400">AD/CH:</span>{' '}
+                <span className="font-semibold">{selectedRes.adults}/{selectedRes.children}</span>
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Hóspede · Ações</p>
+              <p className="font-semibold truncate">{selectedRes.guestName}</p>
+              <p className="text-slate-400 truncate">{selectedRes.notes || 'Sem observação'}</p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setModalResId(selectedRes.id)}
+                  className="h-7 px-2.5 rounded-md bg-white/10 hover:bg-white/20 text-[11px] font-medium"
+                >
+                  Abrir reserva
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setModalAccount({
+                      accountId: selectedRes.accountId,
+                      reservationId: selectedRes.id,
+                    })
+                  }
+                  className="h-7 px-2.5 rounded-md bg-white/10 hover:bg-white/20 text-[11px] font-medium"
+                >
+                  Conta
+                </button>
+                {selectedRes.status === 'checkin' && (
+                  <button
+                    type="button"
+                    onClick={() => doCheckOut(selectedRes.id)}
+                    className="h-7 px-2.5 rounded-md bg-rose-500/90 hover:bg-rose-500 text-[11px] font-medium"
+                  >
+                    Check-out
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

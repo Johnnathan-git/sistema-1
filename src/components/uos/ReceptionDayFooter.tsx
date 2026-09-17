@@ -23,15 +23,9 @@ export type DayStats = {
 export function ReceptionDayFooter({
   dayStats,
   selectedRes,
-  onOpenRes,
-  onOpenAccount,
-  onCheckOut,
 }: {
   dayStats: DayStats;
   selectedRes: Reservation | null;
-  onOpenRes: (id: string) => void;
-  onOpenAccount: (res: Reservation) => void;
-  onCheckOut: (id: string) => void;
 }) {
   return (
     <div className="fixed bottom-0 left-[232px] right-0 z-40 border-t border-slate-700 bg-slate-900 text-white shadow-2xl">
@@ -142,31 +136,9 @@ export function ReceptionDayFooter({
               <p className="text-slate-300 line-clamp-2">
                 {selectedRes.notes || 'Sem observação cadastrada.'}
               </p>
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                <button
-                  type="button"
-                  onClick={() => onOpenRes(selectedRes.id)}
-                  className="h-6 px-2 rounded bg-white/10 hover:bg-white/20 text-[10px] font-medium"
-                >
-                  Abrir reserva
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onOpenAccount(selectedRes)}
-                  className="h-6 px-2 rounded bg-white/10 hover:bg-white/20 text-[10px] font-medium"
-                >
-                  Conta
-                </button>
-                {selectedRes.status === 'checkin' && (
-                  <button
-                    type="button"
-                    onClick={() => onCheckOut(selectedRes.id)}
-                    className="h-6 px-2 rounded bg-rose-500/90 hover:bg-rose-500 text-[10px] font-medium"
-                  >
-                    Check-out
-                  </button>
-                )}
-              </div>
+              <p className="text-[10px] text-slate-500 pt-1">
+                Clique duas vezes na linha para abrir a reserva / conta e realizar o check-out.
+              </p>
             </div>
           ) : (
             <p className="text-slate-500">

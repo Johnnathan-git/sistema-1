@@ -4,10 +4,9 @@ import { ReservationModal } from '@/components/uos/ReservationModal';
 import { AccountModal } from '@/components/uos/AccountModal';
 import { TransferModal } from '@/components/uos/TransferModal';
 import { ReceptionDayFooter } from '@/components/uos/ReceptionDayFooter';
-import { CashReportModal } from '@/components/uos/CashReportModal';
 import { formatDateBR, type Room } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
-import { ArrowLeftRight, DoorOpen, LayoutGrid, List, LogIn, Printer, RefreshCw, Undo2, Wallet } from 'lucide-react';
+import { ArrowLeftRight, DoorOpen, LayoutGrid, List, LogIn, Printer, RefreshCw, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 type MainTab = 'checkins' | 'hospedados' | 'chart';
@@ -27,7 +26,6 @@ export function ReceptionModule() {
   const [modalAccount, setModalAccount] = useState<{ accountId?: string; reservationId?: string } | null>(null);
   const [chartDays, setChartDays] = useState(14);
   const [transferOpen, setTransferOpen] = useState(false);
-  const [cashReportOpen, setCashReportOpen] = useState(false);
   const [onlyPreCI, setOnlyPreCI] = useState(false);
   const [filterRoom, setFilterRoom] = useState('');
   const [filterType, setFilterType] = useState('');
@@ -165,7 +163,6 @@ export function ReceptionModule() {
       {transferOpen && selectedRes && selectedRes.status === 'checkin' && (
         <TransferModal reservation={selectedRes} onClose={() => setTransferOpen(false)} />
       )}
-      {cashReportOpen && <CashReportModal onClose={() => setCashReportOpen(false)} />}
 
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-0">
         <div className="flex flex-wrap items-center gap-1">
@@ -190,9 +187,6 @@ export function ReceptionModule() {
               <LayoutGrid className="w-3.5 h-3.5" /> Chart
             </button>
           </div>
-          <button type="button" onClick={() => setCashReportOpen(true)} className="h-8 px-3 rounded-lg border border-slate-800 bg-slate-900 text-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-800" title="Relatório detalhado do caixa">
-            <Wallet className="w-3.5 h-3.5" /> Caixa
-          </button>
         </div>
       </div>
 
@@ -223,7 +217,7 @@ export function ReceptionModule() {
                 <thead className="sticky top-0 bg-white z-10"><tr className="text-left text-[10px] uppercase text-slate-400 border-b"><th className="px-3 py-2">Reserva</th><th className="px-3 py-2">Hóspede</th><th className="px-3 py-2">UH</th><th className="px-3 py-2">Check-in</th><th className="px-3 py-2">Check-out</th><th className="px-3 py-2 text-right">Ação</th></tr></thead>
                 <tbody className="divide-y divide-slate-50">
                   {filteredArrivals.length === 0 ? (<tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">Nenhum check-in previsto</td></tr>) : filteredArrivals.map((r) => (
-                    <tr key={r.id} onClick={() => setSelectedResId(r.id)} onDoubleClick={() => setModalResId(r.id)} className={cn('cursor-pointer', selectedResId === r.id ? 'bg-blue-50' : 'hover:bg-slate-50')}>
+                    <tr key={r.id} onClick={() => setSelectedResId(r.id)} onDoubleClick={() => setModalResId(r.id)} className={cn('cursor-pointer', selectedResId === r.id ? 'bg-blue-200 ring-1 ring-inset ring-blue-400' : 'hover:bg-slate-50')}>
                       <td className="px-3 py-2 font-semibold">{r.code}</td><td className="px-3 py-2">{r.guestName}</td><td className="px-3 py-2">{r.roomNumber || '—'}</td><td className="px-3 py-2">{formatDateBR(r.checkIn)}</td><td className="px-3 py-2">{formatDateBR(r.checkOut)}</td>
                       <td className="px-3 py-2 text-right"><button type="button" onClick={(e) => { e.stopPropagation(); setModalResId(r.id); }} className="h-7 px-2 rounded-lg bg-blue-600 text-white text-[11px] font-semibold">Check-in</button></td>
                     </tr>
@@ -240,18 +234,13 @@ export function ReceptionModule() {
           <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-2 text-[12px]">
               <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">UH</span><select value={hRoom} onChange={(e) => setHRoom(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option>{rooms.map((r) => <option key={r.id} value={r.id}>{r.number}</option>)}</select></label>
-              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Categoria</span><select value={hCategory} onChange={(e) => setHCategory(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todas</option><option>Standard</option><option>Superior</option><option>Apartamento</option><option>Suite</option></select></label>
-              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Bloco</span><select value={hBlock} onChange={(e) => setHBlock(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option>{blocks.map((b) => <option key={b} value={b}>{b}</option>)}</select></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Categoria</span><select value={hCategory} onChange={(e) => setHCategory(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todas</option><option>Standard</option><option>Superior</option><option>Apartamento</option><option>Suite</option><option>Chalé Master</option><option>Bangalô</option></select></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Bloco</span><select value={hBlock} onChange={(e) => setHBlock(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option>{blocks.map((b) => <option key={b}>{b}</option>)}</select></label>
               <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Grupo</span><select value={hGroupFlag} onChange={(e) => setHGroupFlag(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option><option value="sim">Sim</option><option value="nao">Não</option></select></label>
               <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Nome grupo</span><input value={hGroupName} onChange={(e) => setHGroupName(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2" /></label>
               <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Reserva</span><input value={hReserva} onChange={(e) => setHReserva(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2" /></label>
-              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Veículo</span><input value={hVehicle} onChange={(e) => setHVehicle(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2" /></label>
               <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Hóspede</span><input value={hGuest} onChange={(e) => setHGuest(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2" /></label>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button type="button" onClick={() => { setHRoom(''); setHCategory(''); setHBlock(''); setHGroupFlag(''); setHGroupName(''); setHReserva(''); setHVehicle(''); setHGuest(''); toast.message('Pesquisa limpa'); }} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[12px]">Limpar pesquisa</button>
-              <button type="button" onClick={() => toast.success('Lista atualizada')} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[12px] inline-flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Atualizar</button>
-              <button type="button" onClick={() => window.print()} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[12px] inline-flex items-center gap-1.5"><Printer className="w-3.5 h-3.5" /> Imprimir</button>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Veículo</span><input value={hVehicle} onChange={(e) => setHVehicle(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2" /></label>
             </div>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -261,7 +250,7 @@ export function ReceptionModule() {
                 <thead className="sticky top-0 bg-white z-10"><tr className="text-left text-[10px] uppercase text-slate-400 border-b"><th className="px-3 py-2">UH</th><th className="px-3 py-2">Tipo</th><th className="px-3 py-2">Hóspede</th><th className="px-3 py-2">Reserva</th><th className="px-3 py-2">Check-in</th><th className="px-3 py-2">Check-out</th></tr></thead>
                 <tbody className="divide-y divide-slate-50">
                   {filteredInHouse.map((r) => (
-                    <tr key={r.id} onClick={() => setSelectedResId(r.id)} onDoubleClick={() => setModalResId(r.id)} className={cn('cursor-pointer', selectedResId === r.id ? 'bg-blue-50' : 'hover:bg-slate-50')}>
+                    <tr key={r.id} onClick={() => setSelectedResId(r.id)} onDoubleClick={() => setModalResId(r.id)} className={cn('cursor-pointer', selectedResId === r.id ? 'bg-blue-200 ring-1 ring-inset ring-blue-400' : 'hover:bg-slate-50')}>
                       <td className="px-3 py-2 font-semibold">{r.roomNumber}</td><td className="px-3 py-2">{r.roomType}</td><td className="px-3 py-2">{r.guestName}</td><td className="px-3 py-2">{r.code}</td><td className="px-3 py-2">{formatDateBR(r.checkIn)}</td><td className="px-3 py-2">{formatDateBR(r.checkOut)}</td>
                     </tr>
                   ))}
@@ -273,12 +262,41 @@ export function ReceptionModule() {
       )}
 
       {tab === 'chart' && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-[13px] font-semibold mb-2">Chart de ocupação · {chartDays} dias</p>
-          <div className="overflow-x-auto">
-            <table className="text-[10px] min-w-max">
-              <thead><tr><th className="px-2 py-1 text-left">UH</th>{chartDates.map((d) => <th key={d} className="px-1 py-1 text-center">{d.slice(8)}</th>)}</tr></thead>
-              <tbody>{rooms.map((room) => (<tr key={room.id}><td className="px-2 py-1 font-semibold">{room.number}</td>{chartDates.map((d) => { const info = cellInfo(room, d); return <td key={d} title={info.title} className={cn('px-1 py-1 text-center rounded', info.cls)}>{info.label}</td>; })}</tr>))}</tbody>
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="px-4 py-2 border-b bg-slate-50/80 flex items-center gap-2 text-[12px]">
+            <span className="font-semibold">Chart de ocupação</span>
+            <select value={chartDays} onChange={(e) => setChartDays(Number(e.target.value))} className="h-7 rounded border border-slate-200 px-2 text-[12px]">
+              <option value={7}>7 dias</option>
+              <option value={14}>14 dias</option>
+              <option value={21}>21 dias</option>
+              <option value={30}>30 dias</option>
+            </select>
+          </div>
+          <div className="overflow-auto max-h-[calc(100vh-280px)]">
+            <table className="text-[11px] min-w-max">
+              <thead className="sticky top-0 bg-white z-10">
+                <tr className="border-b">
+                  <th className="px-2 py-2 text-left sticky left-0 bg-white">UH</th>
+                  {chartDates.map((d) => (
+                    <th key={d} className="px-1 py-2 text-center min-w-[36px] text-[10px] text-slate-500">{d.slice(8)}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rooms.map((room) => (
+                  <tr key={room.id} className="border-b border-slate-50">
+                    <td className="px-2 py-1 font-medium sticky left-0 bg-white">{room.number}</td>
+                    {chartDates.map((d) => {
+                      const info = cellInfo(room, d);
+                      return (
+                        <td key={d} title={info.title} className={cn('px-0.5 py-1 text-center text-[10px] font-semibold', info.cls)}>
+                          {info.label}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
         </div>

@@ -10,7 +10,7 @@ import {
   type Room,
 } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
-import { ArrowLeftRight, DoorOpen, LayoutGrid, List, LogIn, Printer, RefreshCw, Search, Undo2, Wallet } from 'lucide-react';
+import { ArrowLeftRight, DoorOpen, LayoutGrid, List, LogIn, Printer, RefreshCw, Search, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 type MainTab = 'checkins' | 'hospedados' | 'chart';
@@ -188,7 +188,7 @@ export function ReceptionModule() {
             </button>
           ))}
         </div>
-        <div className="flex flex-wrap items-center gap-2 pb-1">
+        <div className="ml-auto flex flex-wrap items-center gap-2 pb-1">
           <button type="button" onClick={() => toast.message('Walk-in: use a Central de Reservas com origem Walk-in ou cadastre na hora')} className="h-8 px-3 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-900 text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-emerald-100">
             <DoorOpen className="w-3.5 h-3.5" /> Walk-in
           </button>
@@ -200,11 +200,6 @@ export function ReceptionModule() {
           </button>
           <button type="button" onClick={() => setTab('chart')} className={cn('h-8 px-3 rounded-lg border text-[12px] font-medium inline-flex items-center gap-1.5', tab === 'chart' ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}>
             <LayoutGrid className="w-3.5 h-3.5" /> Chart de ocupação
-          </button>
-        </div>
-        <div className="ml-auto pb-1">
-          <button type="button" onClick={() => { if (window.confirm('Fechar o caixa do dia operacional ' + today.split('-').reverse().join('/') + '?')) toast.success('Caixa fechado para o dia ' + today.split('-').reverse().join('/')); }} className="h-8 px-3 rounded-lg border border-slate-800 bg-slate-900 text-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-800" title="Fechar caixa do dia">
-            <Wallet className="w-3.5 h-3.5" /> Fechar caixa
           </button>
         </div>
       </div>

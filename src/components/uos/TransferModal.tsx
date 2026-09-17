@@ -25,6 +25,13 @@ export function TransferModal({
   const [guestIds, setGuestIds] = useState<Set<string>>(() => new Set(['principal']));
   const [newPrincipal, setNewPrincipal] = useState('principal');
 
+  /** Dados obrigatórios quando o novo titular era só acompanhante */
+  const [npName, setNpName] = useState('');
+  const [npDoc, setNpDoc] = useState('');
+  const [npPhone, setNpPhone] = useState('');
+  const [npEmail, setNpEmail] = useState('');
+  const [npNationality, setNpNationality] = useState('Brasileira');
+
   const available = useMemo(
     () =>
       rooms.filter(
@@ -48,10 +55,7 @@ export function TransferModal({
     return list;
   }, [reservation]);
 
-  const types = useMemo(
-    () => Array.from(new Set(available.map((r) => r.type))),
-    [available]
-  );
+  const needsPrincipalData = mode === 'hospede' && newPrincipal !== 'principal';
 
   const confirm = () => {
     if (!roomId) {
@@ -62,14 +66,23 @@ export function TransferModal({
       toast.error('Selecione ao menos um hóspede');
       return;
     }
+    if (needsPrincipalData) {
+      if (!npName.trim() || !npDoc.trim() || !npPhone.trim()) {
+        toast.error('Preencha nome, documento e telefone do novo titular');
+        return;
+      }
+    }
     const res = transferRoom(reservation.id, roomId);
     if (res.ok) {
-      const extra =
+      let extra =
         mode === 'hospede'
           ? ` · ${guestIds.size} hóspede(s)`
           : motivo
             ? ` · ${motivo}`
             : '';
+      if (needsPrincipalData) {
+        extra += ` · novo titular: ${npName.trim()}`;
+      }
       toast.success(res.message + extra);
       onClose();
     } else toast.error(res.message);
@@ -193,7 +206,18 @@ export function TransferModal({
                 </span>
                 <select
                   value={newPrincipal}
-                  onChange={(e) => setNewPrincipal(e.target.value)}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setNewPrincipal(id);
+                    const g = guests.find((x) => x.id === id);
+                    if (id !== 'principal' && g) {
+                      setNpName(g.name.startsWith('Acompanhante') ? '' : g.name);
+                      setNpDoc('');
+                      setNpPhone('');
+                      setNpEmail('');
+                      setNpNationality('Brasileira');
+                    }
+                  }}
                   className="w-full h-9 rounded-lg border border-slate-200 px-2 bg-white"
                 >
                   {guests.map((g) => (
@@ -203,27 +227,63 @@ export function TransferModal({
                   ))}
                 </select>
               </label>
+
+              {needsPrincipalData && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold text-amber-900 uppercase tracking-wide">
+                    Dados do novo titular (obrigatório)
+                  </p>
+                  <p className="text-[11px] text-amber-800/80">
+                    Acompanhantes não têm ficha completa no check-in. Preencha os dados de quem
+                    ficará como titular na UH de origem.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block space-y-0.5 col-span-2">
+                      <span className="text-[10px] uppercase text-slate-400 font-semibold">Nome completo</span>
+                      <input
+                        value={npName}
+                        onChange={(e) => setNpName(e.target.value)}
+                        className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                    </label>
+                    <label className="block space-y-0.5">
+                      <span className="text-[10px] uppercase text-slate-400 font-semibold">Documento</span>
+                      <input
+                        value={npDoc}
+                        onChange={(e) => setNpDoc(e.target.value)}
+                        placeholder="CPF / Passaporte"
+                        className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                    </label>
+                    <label className="block space-y-0.5">
+                      <span className="text-[10px] uppercase text-slate-400 font-semibold">Telefone</span>
+                      <input
+                        value={npPhone}
+                        onChange={(e) => setNpPhone(e.target.value)}
+                        className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                    </label>
+                    <label className="block space-y-0.5">
+                      <span className="text-[10px] uppercase text-slate-400 font-semibold">E-mail</span>
+                      <input
+                        value={npEmail}
+                        onChange={(e) => setNpEmail(e.target.value)}
+                        className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                    </label>
+                    <label className="block space-y-0.5">
+                      <span className="text-[10px] uppercase text-slate-400 font-semibold">Nacionalidade</span>
+                      <input
+                        value={npNationality}
+                        onChange={(e) => setNpNationality(e.target.value)}
+                        className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
             </>
           )}
-
-          <label className="block space-y-1">
-            <span className="text-[11px] font-semibold uppercase text-slate-400">Tipo UH destino</span>
-            <select
-              value={rooms.find((r) => r.id === roomId)?.type || ''}
-              onChange={(e) => {
-                const first = available.find((r) => r.type === e.target.value);
-                setRoomId(first?.id || '');
-              }}
-              className="w-full h-9 rounded-lg border border-slate-200 px-2 bg-white"
-            >
-              <option value="">Qualquer</option>
-              {types.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </label>
 
           <label className="block space-y-1">
             <span className="text-[11px] font-semibold uppercase text-slate-400">
@@ -242,6 +302,11 @@ export function TransferModal({
                 </option>
               ))}
             </select>
+            {roomId && (
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Tipo: {rooms.find((r) => r.id === roomId)?.type}
+              </p>
+            )}
           </label>
 
           {mode === 'uh' && (

@@ -41,11 +41,24 @@ function formatBRL(n: number) {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { hotel, module, setModule, rooms, reservations, accounts } = usePms();
+  const {
+    hotel,
+    module,
+    setModule,
+    rooms,
+    reservations,
+    accounts,
+    cashOpen,
+    cashFundo,
+    cashOpenedAt,
+    openCashRegister,
+    closeCashRegister,
+  } = usePms();
 
-  const [cashOpen, setCashOpen] = useState(false);
+  const [closeModal, setCloseModal] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
-  const [effective, setEffective] = useState<Record<string, string>>({});
+  const [openModal, setOpenModal] = useState(false);
+  const [fundoInput, setFundoInput] = useState('200,00');
 
   const occupied = rooms.filter((r) => r.occupancy === 'ocupado').length;
   const sellable = rooms.filter((r) => r.occupancy !== 'bloqueado').length;
@@ -58,7 +71,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const opDateBR = hotel.operationalDate.split('-').reverse().join('/');
 
-  /** Totaliza pagamentos do dia por método/bandeira */
   const totalsByMethod = useMemo(() => {
     const map = new Map<string, number>();
     for (const acc of accounts) {
@@ -68,7 +80,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         map.set(key, (map.get(key) || 0) + p.amount);
       }
     }
-    // Garante linhas padrão mesmo sem movimento
     const defaults = ['DINHEIRO', 'PIX', 'DÉBITO', 'CRÉDITO À VISTA', 'CRÉDITO PARCELADO'];
     for (const d of defaults) {
       if (!map.has(d)) map.set(d, 0);
@@ -78,20 +89,23 @@ export function AppShell({ children }: { children: ReactNode }) {
       .sort((a, b) => a.tipo.localeCompare(b.tipo, 'pt-BR'));
   }, [accounts, hotel.operationalDate]);
 
-  const openCash = () => {
-    const init: Record<string, string> = {};
-    for (const row of totalsByMethod) {
-      init[row.tipo] = row.valor.toFixed(2);
-    }
-    setEffective(init);
-    setConfirmClose(false);
-    setCashOpen(true);
-  };
+  const totalSistema = totalsByMethod.reduce((s, r) => s + r.valor, 0);
 
   const doCloseCash = () => {
-    setCashOpen(false);
+    const res = closeCashRegister();
+    setCloseModal(false);
     setConfirmClose(false);
-    toast.success(`Caixa fechado · dia ${opDateBR}`);
+    if (res.ok) toast.success(res.message);
+    else toast.error(res.message);
+  };
+
+  const doOpenCash = () => {
+    const n = parseFloat(fundoInput.replace(/\./g, '').replace(',', '.')) || 0;
+    const res = openCashRegister(n);
+    if (res.ok) {
+      toast.success(res.message);
+      setOpenModal(false);
+    } else toast.error(res.message);
   };
 
   const titles: Record<ModuleId, { title: string; subtitle: string }> = {
@@ -150,6 +164,17 @@ export function AppShell({ children }: { children: ReactNode }) {
                 className="h-full rounded-full bg-slate-600 transition-all"
                 style={{ width: `${occPct}%` }}
               />
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[11px]">
+              <span className="text-slate-400">Caixa</span>
+              <span
+                className={cn(
+                  'font-semibold',
+                  cashOpen ? 'text-emerald-700' : 'text-rose-700'
+                )}
+              >
+                {cashOpen ? 'Aberto' : 'Fechado'}
+              </span>
             </div>
           </div>
         </div>
@@ -217,17 +242,34 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
           </div>
 
-          <div className="ml-auto flex items-center gap-3">
-            <button
-              type="button"
-              onClick={openCash}
-              className="h-9 px-3 rounded-lg border border-slate-800 bg-slate-900 text-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-800"
-              title="Fechar caixa do dia operacional"
-            >
-              <Wallet className="w-3.5 h-3.5" />
-              Fechar caixa
-              <span className="text-slate-300 font-normal tabular-nums">{opDateBR}</span>
-            </button>
+          <div className="ml-auto flex items-center gap-2">
+            {cashOpen ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmClose(false);
+                  setCloseModal(true);
+                }}
+                className="h-9 px-3 rounded-lg border border-slate-800 bg-slate-900 text-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-800"
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                Fechar caixa
+                <span className="text-slate-300 font-normal tabular-nums">{opDateBR}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setFundoInput('200,00');
+                  setOpenModal(true);
+                }}
+                className="h-9 px-3 rounded-lg border border-emerald-700 bg-emerald-600 text-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-emerald-500"
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                Abrir caixa
+                <span className="text-emerald-100 font-normal tabular-nums">{opDateBR}</span>
+              </button>
+            )}
             <button
               type="button"
               className="relative h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50"
@@ -239,6 +281,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
+        {!cashOpen && (
+          <div className="mx-6 mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-[12px] text-amber-900">
+            Caixa fechado — nenhum lançamento de pagamento ou consumo é permitido até abrir o caixa.
+          </div>
+        )}
+
         <div className="px-6 pt-5 pb-1">
           <h1 className="text-[22px] font-semibold tracking-tight text-slate-900">
             {titles[module].title}
@@ -249,20 +297,20 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main className="flex-1 overflow-y-auto px-6 pb-8 pt-4">{children}</main>
       </div>
 
-      {/* Fechamento de caixa */}
-      {cashOpen && (
+      {/* Fechamento — somente leitura */}
+      {closeModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
               <div>
                 <p className="text-[15px] font-semibold text-slate-900">Fechamento de caixa</p>
                 <p className="text-[12px] text-slate-500">
-                  Informe o valor efetivo de cada tipo de recebimento
+                  Lançamentos do operador no dia (somente leitura)
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setCashOpen(false)}
+                onClick={() => setCloseModal(false)}
                 className="h-8 w-8 rounded-lg hover:bg-slate-100 inline-flex items-center justify-center"
               >
                 <X className="w-4 h-4" />
@@ -278,10 +326,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <span className="text-slate-400">Usuário:</span>{' '}
                 <span className="font-semibold text-slate-800">Operador</span>
               </div>
-              <div className="col-span-2">
+              <div>
                 <span className="text-slate-400">Abertura:</span>{' '}
                 <span className="font-semibold text-slate-800 tabular-nums">
-                  {opDateBR} 08:00:00
+                  {cashOpenedAt || '—'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">Fundo:</span>{' '}
+                <span className="font-semibold text-slate-800 tabular-nums">
+                  R$ {formatBRL(cashFundo)}
                 </span>
               </div>
             </div>
@@ -296,73 +350,22 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <tr className="text-left text-[10px] uppercase tracking-wider text-slate-400">
                       <th className="px-3 py-2 font-semibold">Tipo de recebimento</th>
                       <th className="px-3 py-2 font-semibold text-right">Valor sistema</th>
-                      <th className="px-3 py-2 font-semibold text-right">Valor efetivo</th>
-                      <th className="px-3 py-2 font-semibold text-right">Diferença</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {totalsByMethod.map((row) => {
-                      const eff = parseFloat((effective[row.tipo] || '0').replace(',', '.')) || 0;
-                      const diff = eff - row.valor;
-                      return (
-                        <tr key={row.tipo}>
-                          <td className="px-3 py-2 font-medium text-slate-800">{row.tipo}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                            {formatBRL(row.valor)}
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            <input
-                              value={effective[row.tipo] ?? ''}
-                              onChange={(e) =>
-                                setEffective((prev) => ({
-                                  ...prev,
-                                  [row.tipo]: e.target.value,
-                                }))
-                              }
-                              className="w-24 h-8 rounded-lg border border-slate-200 px-2 text-right tabular-nums outline-none focus:ring-1 focus:ring-blue-400"
-                            />
-                          </td>
-                          <td
-                            className={cn(
-                              'px-3 py-2 text-right tabular-nums font-medium',
-                              Math.abs(diff) < 0.01
-                                ? 'text-slate-500'
-                                : diff > 0
-                                  ? 'text-emerald-700'
-                                  : 'text-rose-700'
-                            )}
-                          >
-                            {formatBRL(diff)}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {totalsByMethod.map((row) => (
+                      <tr key={row.tipo}>
+                        <td className="px-3 py-2 font-medium text-slate-800">{row.tipo}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+                          {formatBRL(row.valor)}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                   <tfoot className="bg-slate-50 border-t border-slate-200">
                     <tr className="font-semibold text-[12px]">
                       <td className="px-3 py-2">Total</td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {formatBRL(totalsByMethod.reduce((s, r) => s + r.valor, 0))}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {formatBRL(
-                          totalsByMethod.reduce(
-                            (s, r) =>
-                              s +
-                              (parseFloat((effective[r.tipo] || '0').replace(',', '.')) || 0),
-                            0
-                          )
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {formatBRL(
-                          totalsByMethod.reduce((s, r) => {
-                            const eff =
-                              parseFloat((effective[r.tipo] || '0').replace(',', '.')) || 0;
-                            return s + (eff - r.valor);
-                          }, 0)
-                        )}
-                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatBRL(totalSistema)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -372,7 +375,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
               <button
                 type="button"
-                onClick={() => setCashOpen(false)}
+                onClick={() => setCloseModal(false)}
                 className="h-9 px-4 rounded-lg border border-slate-200 text-[13px] font-medium hover:bg-slate-50"
               >
                 Cancelar
@@ -411,6 +414,61 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Abertura de caixa */}
+      {openModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+              <div>
+                <p className="text-[15px] font-semibold text-slate-900">Abrir caixa</p>
+                <p className="text-[12px] text-slate-500">Informe o fundo de caixa em dinheiro</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenModal(false)}
+                className="h-8 w-8 rounded-lg hover:bg-slate-100 inline-flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3 text-[13px]">
+              <div className="text-[12px] text-slate-500">
+                Caixa: <span className="font-semibold text-slate-800">RECEPCAO01</span>
+                <br />
+                Data: <span className="font-semibold text-slate-800 tabular-nums">{opDateBR}</span>
+              </div>
+              <label className="block space-y-1">
+                <span className="text-[11px] font-semibold uppercase text-slate-400">
+                  Fundo de caixa (R$)
+                </span>
+                <input
+                  value={fundoInput}
+                  onChange={(e) => setFundoInput(e.target.value)}
+                  placeholder="0,00"
+                  className="w-full h-10 rounded-lg border border-slate-200 px-3 text-right tabular-nums outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setOpenModal(false)}
+                className="h-9 px-4 rounded-lg border border-slate-200 text-[13px] font-medium hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={doOpenCash}
+                className="h-9 px-4 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-500"
+              >
+                Abrir caixa
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

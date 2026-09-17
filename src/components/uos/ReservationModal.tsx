@@ -746,10 +746,6 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                           <span className="text-slate-500">Total reserva</span>
                           <span className="font-semibold tabular-nums">{formatBRL(draft.totalAmount)}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Saldo</span>
-                          <span className={cn('font-semibold tabular-nums', balance > 0.01 ? 'text-rose-600' : 'text-emerald-600')}>{formatBRL(balance)}</span>
-                        </div>
                       </div>
                     </div>
                   </Section>

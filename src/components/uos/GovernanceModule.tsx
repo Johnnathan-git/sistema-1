@@ -3,24 +3,12 @@ import { GOVERNANCE_STATUSES, usePms } from '@/lib/pms-store';
 import {
   formatDateBR,
   GOVERNANCE_LABEL,
-  HOUSEKEEPERS,
   OCCUPANCY_LABEL,
   type GovernanceStatus,
   type OccupancyStatus,
 } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
-import {
-  Ban,
-  CheckSquare,
-  History,
-  LayoutGrid,
-  Printer,
-  RefreshCw,
-  Search,
-  Square,
-  UserMinus,
-  UserPlus,
-} from 'lucide-react';
+import { Ban, CheckSquare, Eraser, Square, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 const OCC_STYLE: Record<OccupancyStatus, string> = {
@@ -42,11 +30,8 @@ export function GovernanceModule() {
   const {
     rooms,
     reservations,
-    roomLogs,
     updateGovernance,
-    assignHousekeeper,
     setRoomNotes,
-    setDnd,
     blockRoom,
     unblockRoom,
   } = usePms();
@@ -59,14 +44,17 @@ export function GovernanceModule() {
   const [fOcc, setFOcc] = useState<OccupancyStatus | ''>('');
   const [fBlocked, setFBlocked] = useState('');
   const [fDnd, setFDnd] = useState('');
-  const [applied, setApplied] = useState(true);
+  /** Só lista após clicar em Iniciar pesquisa */
+  const [searched, setSearched] = useState(false);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkGov, setBulkGov] = useState<GovernanceStatus>('limpo');
-  const [bulkHk, setBulkHk] = useState('');
-  const [showHistory, setShowHistory] = useState(false);
-  const [historyRoom, setHistoryRoom] = useState<string | 'all'>('all');
-  const [showChart, setShowChart] = useState(false);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [blockAction, setBlockAction] = useState<'bloquear' | 'desbloquear'>('bloquear');
+  const [blockReason, setBlockReason] = useState('');
+  const [blockObs, setBlockObs] = useState('');
+  const [blockFrom, setBlockFrom] = useState('');
+  const [blockTo, setBlockTo] = useState('');
 
   const floors = useMemo(
     () => Array.from(new Set(rooms.map((r) => r.floor))).sort((a, b) => a - b),
@@ -88,7 +76,7 @@ export function GovernanceModule() {
     reservations.find((r) => r.roomId === roomId && r.status === 'checkin');
 
   const list = useMemo(() => {
-    if (!applied) return [] as typeof rooms;
+    if (!searched) return [] as typeof rooms;
     let rows = [...rooms].sort((a, b) =>
       a.number.localeCompare(b.number, 'pt-BR', { numeric: true })
     );
@@ -106,7 +94,7 @@ export function GovernanceModule() {
     if (fDnd === 'sim') rows = rows.filter((r) => !!r.dnd);
     if (fDnd === 'nao') rows = rows.filter((r) => !r.dnd);
     return rows;
-  }, [rooms, applied, fNumber, fBlock, fFloor, fType, fGov, fOcc, fBlocked, fDnd]);
+  }, [rooms, searched, fNumber, fBlock, fFloor, fType, fGov, fOcc, fBlocked, fDnd]);
 
   const selectable = list.filter((r) => r.occupancy !== 'ocupado');
   const allSelectableOn =
@@ -147,20 +135,18 @@ export function GovernanceModule() {
     setFOcc('');
     setFBlocked('');
     setFDnd('');
-    setApplied(true);
+    setSearched(false);
     clearSelection();
-    toast.message('Pesquisa limpa');
   };
 
   const runSearch = () => {
-    setApplied(true);
+    setSearched(true);
     clearSelection();
-    toast.success('Pesquisa aplicada');
   };
 
   const applyBulkGov = () => {
     if (selected.size === 0) {
-      toast.error('Selecione pelo menos uma UH');
+      toast.error('Selecione pelo menos uma UH na lista');
       return;
     }
     let notes: string | undefined;
@@ -173,95 +159,66 @@ export function GovernanceModule() {
     clearSelection();
   };
 
-  const applyBulkHk = () => {
+  const clearObs = () => {
     if (selected.size === 0) {
       toast.error('Selecione pelo menos uma UH');
       return;
     }
-    assignHousekeeper([...selected], bulkHk || undefined);
+    for (const id of selected) setRoomNotes(id, '');
+    toast.success(`Observação limpa em ${selected.size} UH(s)`);
+    clearSelection();
+  };
+
+  const openBlockManager = () => {
+    if (selected.size === 0) {
+      toast.error('Selecione pelo menos uma UH');
+      return;
+    }
+    const first = rooms.find((r) => selected.has(r.id));
+    setBlockAction(first?.occupancy === 'bloqueado' ? 'desbloquear' : 'bloquear');
+    setBlockReason(first?.blockedReason || '');
+    setBlockObs(first?.notes || '');
+    setBlockFrom('');
+    setBlockTo('');
+    setBlockOpen(true);
+  };
+
+  const confirmBlockManager = () => {
+    if (selected.size === 0) return;
+    let ok = 0;
+    for (const id of selected) {
+      if (blockAction === 'bloquear') {
+        const period =
+          blockFrom || blockTo
+            ? ` · ${blockFrom ? formatDateBR(blockFrom) : '…'} a ${blockTo ? formatDateBR(blockTo) : '…'}`
+            : '';
+        const reason = (blockReason.trim() || 'Bloqueio operacional') + period;
+        const r = blockRoom(id, reason);
+        if (r.ok) ok++;
+      } else {
+        const r = unblockRoom(id);
+        if (r.ok) ok++;
+      }
+      if (blockObs.trim() !== '') setRoomNotes(id, blockObs.trim());
+    }
     toast.success(
-      bulkHk
-        ? `Camareira ${bulkHk} em ${selected.size} UH(s)`
-        : `Camareira removida de ${selected.size} UH(s)`
+      blockAction === 'bloquear'
+        ? `${ok} UH(s) bloqueada(s)`
+        : `${ok} UH(s) desbloqueada(s)`
     );
+    setBlockOpen(false);
     clearSelection();
   };
-
-  const applyBlock = () => {
-    if (selected.size === 0) {
-      toast.error('Selecione pelo menos uma UH');
-      return;
-    }
-    const reason = window.prompt('Motivo do bloqueio:') || 'Bloqueio operacional';
-    let ok = 0;
-    for (const id of selected) {
-      const r = blockRoom(id, reason);
-      if (r.ok) ok++;
-    }
-    toast.success(`${ok} UH(s) bloqueada(s)`);
-    clearSelection();
-  };
-
-  const applyUnblock = () => {
-    if (selected.size === 0) {
-      toast.error('Selecione pelo menos uma UH');
-      return;
-    }
-    let ok = 0;
-    for (const id of selected) {
-      const r = unblockRoom(id);
-      if (r.ok) ok++;
-    }
-    toast.success(`${ok} UH(s) desbloqueada(s)`);
-    clearSelection();
-  };
-
-  const toggleDndSelected = () => {
-    if (selected.size === 0) {
-      toast.error('Selecione pelo menos uma UH');
-      return;
-    }
-    for (const id of selected) {
-      const room = rooms.find((r) => r.id === id);
-      if (room) setDnd(id, !room.dnd);
-    }
-    toast.success('Não perturbe atualizado');
-    clearSelection();
-  };
-
-  const logsFiltered = useMemo(() => {
-    if (historyRoom === 'all') return roomLogs;
-    return roomLogs.filter((l) => l.roomId === historyRoom);
-  }, [roomLogs, historyRoom]);
 
   return (
     <div className="space-y-3">
-      {/* Toolbar de ações — padrão eSolution */}
-      <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-        <button
-          type="button"
-          onClick={runSearch}
-          className="h-8 px-2.5 rounded-lg border border-slate-200 bg-slate-50 text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-100"
-        >
-          <Search className="w-3.5 h-3.5" /> Localizar
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            window.print();
-            toast.message('Enviando para impressão…');
-          }}
-          className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"
-        >
-          <Printer className="w-3.5 h-3.5" /> Imprimir
-        </button>
-        <span className="w-px h-5 bg-slate-200 mx-1" />
+      {/* Toolbar — só o que foi pedido */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
         <div className="flex items-center gap-1.5">
           <select
             value={bulkGov}
             onChange={(e) => setBulkGov(e.target.value as GovernanceStatus)}
             className="h-8 rounded-lg border border-slate-200 text-[12px] px-2 bg-white"
-            title="Status de governança"
           >
             {GOVERNANCE_STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -272,104 +229,161 @@ export function GovernanceModule() {
           <button
             type="button"
             onClick={applyBulkGov}
-            className="h-8 px-2.5 rounded-lg bg-blue-600 text-white text-[12px] font-semibold hover:bg-blue-500"
+            className="h-8 px-3 rounded-lg bg-blue-600 text-white text-[12px] font-semibold hover:bg-blue-500"
           >
-            Alterar status
+            Alterar status de UH
           </button>
         </div>
-        <div className="flex items-center gap-1.5">
-          <select
-            value={bulkHk}
-            onChange={(e) => setBulkHk(e.target.value)}
-            className="h-8 rounded-lg border border-slate-200 text-[12px] px-2 bg-white"
-          >
-            <option value="">Camareira</option>
-            {HOUSEKEEPERS.map((h) => (
-              <option key={h} value={h}>
-                {h}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={applyBulkHk}
-            className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-medium inline-flex items-center gap-1 hover:bg-slate-50"
-          >
-            <UserPlus className="w-3.5 h-3.5" /> Atribuir
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setBulkHk('');
-              applyBulkHk();
-            }}
-            className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-medium inline-flex items-center gap-1 hover:bg-slate-50"
-          >
-            <UserMinus className="w-3.5 h-3.5" /> Desvincular
-          </button>
-        </div>
-        <span className="w-px h-5 bg-slate-200 mx-1" />
         <button
           type="button"
-          onClick={applyBlock}
-          className="h-8 px-2.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-[12px] font-medium inline-flex items-center gap-1 hover:bg-amber-100"
+          onClick={openBlockManager}
+          className="h-8 px-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-amber-100"
         >
-          <Ban className="w-3.5 h-3.5" /> Bloquear
+          <Ban className="w-3.5 h-3.5" /> Gerenciar bloqueio
         </button>
         <button
           type="button"
-          onClick={applyUnblock}
-          className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-medium hover:bg-slate-50"
+          onClick={clearObs}
+          className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"
         >
-          Desbloquear
-        </button>
-        <button
-          type="button"
-          onClick={toggleDndSelected}
-          className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-medium hover:bg-slate-50"
-        >
-          Não perturbe
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowHistory((v) => !v)}
-          className={cn(
-            'h-8 px-2.5 rounded-lg border text-[12px] font-medium inline-flex items-center gap-1',
-            showHistory
-              ? 'border-blue-300 bg-blue-50 text-blue-700'
-              : 'border-slate-200 bg-white hover:bg-slate-50'
-          )}
-        >
-          <History className="w-3.5 h-3.5" /> Histórico
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowChart((v) => !v)}
-          className={cn(
-            'h-8 px-2.5 rounded-lg border text-[12px] font-medium inline-flex items-center gap-1',
-            showChart
-              ? 'border-blue-300 bg-blue-50 text-blue-700'
-              : 'border-slate-200 bg-white hover:bg-slate-50'
-          )}
-        >
-          <LayoutGrid className="w-3.5 h-3.5" /> Chart
+          <Eraser className="w-3.5 h-3.5" /> Limpar observação
         </button>
         <span className="ml-auto text-[12px] text-slate-500 tabular-nums">
-          {list.length} UH(s) · {selected.size} selecionada(s)
+          {searched ? `${list.length} item(ns) encontrado(s)` : 'Informe os filtros e inicie a pesquisa'}
+          {selected.size > 0 ? ` · ${selected.size} selecionada(s)` : ''}
         </span>
       </div>
 
+      {/* Modal Gerenciar bloqueio */}
+      {blockOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+              <div>
+                <p className="text-[15px] font-semibold text-slate-900">Gerenciar bloqueio</p>
+                <p className="text-[12px] text-slate-500">{selected.size} UH(s) selecionada(s)</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBlockOpen(false)}
+                className="h-8 w-8 rounded-lg hover:bg-slate-100 inline-flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3 text-[13px]">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBlockAction('bloquear')}
+                  className={cn(
+                    'flex-1 h-9 rounded-lg border text-[12px] font-semibold',
+                    blockAction === 'bloquear'
+                      ? 'border-amber-300 bg-amber-50 text-amber-900'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  )}
+                >
+                  Bloquear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBlockAction('desbloquear')}
+                  className={cn(
+                    'flex-1 h-9 rounded-lg border text-[12px] font-semibold',
+                    blockAction === 'desbloquear'
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  )}
+                >
+                  Desbloquear
+                </button>
+              </div>
+              {blockAction === 'bloquear' && (
+                <>
+                  <label className="block space-y-1">
+                    <span className="text-[11px] font-semibold uppercase text-slate-400">
+                      Motivo / descrição do bloqueio
+                    </span>
+                    <input
+                      value={blockReason}
+                      onChange={(e) => setBlockReason(e.target.value)}
+                      placeholder="Ex.: Pintura das unidades"
+                      className="w-full h-9 rounded-lg border border-slate-200 px-3 outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block space-y-1">
+                      <span className="text-[11px] font-semibold uppercase text-slate-400">
+                        Período de
+                      </span>
+                      <input
+                        type="date"
+                        value={blockFrom}
+                        onChange={(e) => setBlockFrom(e.target.value)}
+                        className="w-full h-9 rounded-lg border border-slate-200 px-2 bg-white"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-[11px] font-semibold uppercase text-slate-400">
+                        Período até
+                      </span>
+                      <input
+                        type="date"
+                        value={blockTo}
+                        onChange={(e) => setBlockTo(e.target.value)}
+                        className="w-full h-9 rounded-lg border border-slate-200 px-2 bg-white"
+                      />
+                    </label>
+                  </div>
+                </>
+              )}
+              <label className="block space-y-1">
+                <span className="text-[11px] font-semibold uppercase text-slate-400">
+                  Observação da UH
+                </span>
+                <textarea
+                  value={blockObs}
+                  onChange={(e) => setBlockObs(e.target.value)}
+                  rows={3}
+                  placeholder="Observação (opcional)"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                />
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setBlockOpen(false)}
+                className="h-9 px-4 rounded-lg border border-slate-200 text-[13px] font-medium hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmBlockManager}
+                className="h-9 px-4 rounded-lg bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-500"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-3 items-start">
-        {/* Painel de pesquisa — esquerda */}
+        {/* Painel de pesquisa */}
         <aside className="w-[240px] shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="px-3 py-2.5 border-b border-slate-100 bg-slate-50">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
               Opções de pesquisa
             </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              Preencha e clique em Iniciar pesquisa
+            </p>
           </div>
           <div className="p-3 space-y-2.5 text-[12px]">
             <label className="block space-y-0.5">
-              <span className="text-[10px] uppercase text-slate-400 font-semibold">Número</span>
+              <span className="text-[10px] uppercase text-slate-400 font-semibold">UH</span>
               <input
                 value={fNumber}
                 onChange={(e) => setFNumber(e.target.value)}
@@ -384,7 +398,7 @@ export function GovernanceModule() {
                 onChange={(e) => setFBlock(e.target.value)}
                 className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"
               >
-                <option value="">Todos</option>
+                <option value="">Qualquer um</option>
                 {blocks.map((b) => (
                   <option key={b} value={b}>
                     {b}
@@ -399,7 +413,7 @@ export function GovernanceModule() {
                 onChange={(e) => setFFloor(e.target.value)}
                 className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"
               >
-                <option value="">Todos</option>
+                <option value="">Qualquer um</option>
                 {floors.map((f) => (
                   <option key={f} value={String(f)}>
                     {f === 0 ? 'Térreo' : `${f}º`}
@@ -414,7 +428,7 @@ export function GovernanceModule() {
                 onChange={(e) => setFType(e.target.value)}
                 className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"
               >
-                <option value="">Todos</option>
+                <option value="">Qualquer um</option>
                 {types.map((t) => (
                   <option key={t} value={t}>
                     {t}
@@ -424,14 +438,14 @@ export function GovernanceModule() {
             </label>
             <label className="block space-y-0.5">
               <span className="text-[10px] uppercase text-slate-400 font-semibold">
-                Status governança
+                Status da governança
               </span>
               <select
                 value={fGov}
                 onChange={(e) => setFGov(e.target.value as GovernanceStatus | '')}
                 className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"
               >
-                <option value="">Todos</option>
+                <option value="">Qualquer um</option>
                 {GOVERNANCE_STATUSES.map((s) => (
                   <option key={s} value={s}>
                     {GOVERNANCE_LABEL[s]}
@@ -446,7 +460,7 @@ export function GovernanceModule() {
                 onChange={(e) => setFOcc(e.target.value as OccupancyStatus | '')}
                 className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"
               >
-                <option value="">Todos</option>
+                <option value="">Qualquer um</option>
                 <option value="livre">Livre / Vago</option>
                 <option value="ocupado">Ocupado</option>
                 <option value="bloqueado">Bloqueado</option>
@@ -459,7 +473,7 @@ export function GovernanceModule() {
                 onChange={(e) => setFBlocked(e.target.value)}
                 className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"
               >
-                <option value="">Todos</option>
+                <option value="">Qualquer um</option>
                 <option value="sim">Sim</option>
                 <option value="nao">Não</option>
               </select>
@@ -471,7 +485,7 @@ export function GovernanceModule() {
                 onChange={(e) => setFDnd(e.target.value)}
                 className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"
               >
-                <option value="">Todos</option>
+                <option value="">Qualquer um</option>
                 <option value="sim">Sim</option>
                 <option value="nao">Não</option>
               </select>
@@ -491,276 +505,139 @@ export function GovernanceModule() {
               >
                 Limpar pesquisa
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setApplied(true);
-                  toast.success('Lista atualizada');
-                }}
-                className="h-8 rounded-lg border border-slate-200 text-[12px] font-medium inline-flex items-center justify-center gap-1.5 hover:bg-slate-50"
-              >
-                <RefreshCw className="w-3.5 h-3.5" /> Atualizar
-              </button>
             </div>
           </div>
         </aside>
 
-        {/* Área principal */}
-        <div className="flex-1 min-w-0 space-y-3">
-          {showHistory && (
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-slate-100 flex flex-wrap items-center gap-2">
-                <p className="text-[13px] font-semibold">Histórico de alterações de status</p>
-                <select
-                  value={historyRoom}
-                  onChange={(e) => setHistoryRoom(e.target.value)}
-                  className="h-8 rounded-lg border border-slate-200 text-[12px] px-2 ml-auto"
-                >
-                  <option value="all">Todas as UHs</option>
-                  {rooms.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.number}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="max-h-48 overflow-y-auto divide-y divide-slate-50">
-                {logsFiltered.length === 0 ? (
-                  <p className="px-4 py-8 text-center text-[13px] text-slate-400">
-                    Nenhuma alteração registrada nesta sessão
-                  </p>
-                ) : (
-                  logsFiltered.slice(0, 50).map((l) => (
-                    <div
-                      key={l.id}
-                      className="px-4 py-2 text-[12px] flex flex-wrap gap-x-3 gap-y-0.5"
-                    >
-                      <span className="tabular-nums text-slate-400 w-[110px] shrink-0">{l.at}</span>
-                      <span className="font-semibold w-14">{l.roomNumber}</span>
-                      <span className="text-slate-500">{l.user}</span>
-                      {l.occupancy && (
-                        <span className="text-blue-700">Ocup: {OCCUPANCY_LABEL[l.occupancy]}</span>
+        {/* Tabela */}
+        <div className="flex-1 min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="overflow-x-auto max-h-[calc(100vh-260px)]">
+            <table className="w-full text-[12px] min-w-max">
+              <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
+                <tr className="text-left text-[10px] uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2.5 w-10">
+                    <button type="button" onClick={toggleAll} className="text-slate-500" disabled={!searched}>
+                      {allSelectableOn ? (
+                        <CheckSquare className="w-4 h-4 text-blue-600" />
+                      ) : someSelected ? (
+                        <CheckSquare className="w-4 h-4 text-blue-400" />
+                      ) : (
+                        <Square className="w-4 h-4" />
                       )}
-                      {l.governance && (
-                        <span className="text-violet-700">Gov: {GOVERNANCE_LABEL[l.governance]}</span>
-                      )}
-                      {l.note && <span className="text-slate-600 truncate">{l.note}</span>}
-                      <span className="text-[10px] uppercase text-slate-400 ml-auto">{l.source}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-
-          {showChart && (
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-[13px] font-semibold mb-3">Resumo por status de governança</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-                {GOVERNANCE_STATUSES.map((s) => {
-                  const n = rooms.filter((r) => r.governance === s).length;
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => {
-                        setFGov(s);
-                        setApplied(true);
-                      }}
-                      className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-left hover:bg-slate-100"
-                    >
-                      <p className="text-[10px] uppercase text-slate-400 font-semibold">
-                        {GOVERNANCE_LABEL[s]}
-                      </p>
-                      <p className="text-lg font-semibold tabular-nums">{n}</p>
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Tabela de UHs */}
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
-              <table className="w-full text-[12px] min-w-max">
-                <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
-                  <tr className="text-left text-[10px] uppercase tracking-wider text-slate-400">
-                    <th className="px-3 py-2.5 w-10">
-                      <button type="button" onClick={toggleAll} className="text-slate-500">
-                        {allSelectableOn ? (
-                          <CheckSquare className="w-4 h-4 text-blue-600" />
-                        ) : someSelected ? (
-                          <CheckSquare className="w-4 h-4 text-blue-400" />
-                        ) : (
-                          <Square className="w-4 h-4" />
-                        )}
-                      </button>
-                    </th>
-                    <th className="px-2 py-2.5 font-semibold">Número</th>
-                    <th className="px-2 py-2.5 font-semibold">Tipo de UH</th>
-                    <th className="px-2 py-2.5 font-semibold">Status ocupação</th>
-                    <th className="px-2 py-2.5 font-semibold">Status governança</th>
-                    <th className="px-2 py-2.5 font-semibold">Bloqueio</th>
-                    <th className="px-2 py-2.5 font-semibold">Observação UH</th>
-                    <th className="px-2 py-2.5 font-semibold">Check-in</th>
-                    <th className="px-2 py-2.5 font-semibold">Check-out</th>
-                    <th className="px-2 py-2.5 font-semibold">Andar</th>
-                    <th className="px-2 py-2.5 font-semibold">Bloco</th>
-                    <th className="px-2 py-2.5 font-semibold">Hóspede princ.</th>
-                    <th className="px-2 py-2.5 font-semibold">Camareira</th>
-                    <th className="px-2 py-2.5 font-semibold">NDP</th>
+                  </th>
+                  <th className="px-2 py-2.5 font-semibold">UH</th>
+                  <th className="px-2 py-2.5 font-semibold">Tipo de UH</th>
+                  <th className="px-2 py-2.5 font-semibold">Status ocupação</th>
+                  <th className="px-2 py-2.5 font-semibold">Status governança</th>
+                  <th className="px-2 py-2.5 font-semibold">Bloqueio</th>
+                  <th className="px-2 py-2.5 font-semibold">Descrição bloqueio</th>
+                  <th className="px-2 py-2.5 font-semibold">Observação UH</th>
+                  <th className="px-2 py-2.5 font-semibold">Check-in</th>
+                  <th className="px-2 py-2.5 font-semibold">Check-out</th>
+                  <th className="px-2 py-2.5 font-semibold">Andar</th>
+                  <th className="px-2 py-2.5 font-semibold">Bloco</th>
+                  <th className="px-2 py-2.5 font-semibold">Hóspede princ.</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {!searched ? (
+                  <tr>
+                    <td colSpan={13} className="px-4 py-20 text-center text-slate-400">
+                      Informe os parâmetros de pesquisa e clique em <strong>Iniciar pesquisa</strong>.
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {list.length === 0 ? (
-                    <tr>
-                      <td colSpan={14} className="px-4 py-16 text-center text-slate-400">
-                        Nenhum registro encontrado. Ajuste os filtros e clique em Iniciar pesquisa.
-                      </td>
-                    </tr>
-                  ) : (
-                    list.map((room) => {
-                      const guest = guestInRoom(room.id);
-                      const isOn = selected.has(room.id);
-                      const locked = room.occupancy === 'ocupado';
-                      return (
-                        <tr
-                          key={room.id}
-                          onClick={() => !locked && toggleOne(room.id)}
-                          className={cn(
-                            'cursor-pointer',
-                            isOn ? 'bg-blue-50' : 'hover:bg-slate-50',
-                            locked && 'cursor-default'
-                          )}
-                        >
-                          <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              disabled={locked}
-                              onClick={() => toggleOne(room.id)}
-                              className={cn(locked && 'opacity-30 cursor-not-allowed')}
-                            >
-                              {isOn ? (
-                                <CheckSquare className="w-4 h-4 text-blue-600" />
-                              ) : (
-                                <Square className="w-4 h-4 text-slate-400" />
-                              )}
-                            </button>
-                          </td>
-                          <td className="px-2 py-2 font-semibold tabular-nums">{room.number}</td>
-                          <td className="px-2 py-2 text-slate-600">{room.type}</td>
-                          <td className="px-2 py-2">
-                            <span
-                              className={cn(
-                                'inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset',
-                                OCC_STYLE[room.occupancy]
-                              )}
-                            >
-                              {OCCUPANCY_LABEL[room.occupancy]}
-                            </span>
-                          </td>
-                          <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-                            {locked ? (
-                              <span
-                                className={cn(
-                                  'inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset',
-                                  GOV_STYLE[room.governance]
-                                )}
-                              >
-                                {GOVERNANCE_LABEL[room.governance]}
-                              </span>
-                            ) : (
-                              <select
-                                value={room.governance}
-                                onChange={(e) => {
-                                  const g = e.target.value as GovernanceStatus;
-                                  let notes: string | undefined;
-                                  if (g === 'interditado' || g === 'manutencao') {
-                                    notes = window.prompt('Motivo (opcional):') || undefined;
-                                  }
-                                  const res = updateGovernance([room.id], g, notes);
-                                  if (res.ok) toast.success(GOVERNANCE_LABEL[g]);
-                                  else toast.error(res.message);
-                                }}
-                                className="h-7 rounded-md border border-slate-200 text-[11px] px-1 max-w-[120px]"
-                              >
-                                {GOVERNANCE_STATUSES.map((s) => (
-                                  <option key={s} value={s}>
-                                    {GOVERNANCE_LABEL[s]}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-                          </td>
-                          <td className="px-2 py-2 text-slate-500 max-w-[120px] truncate">
-                            {room.occupancy === 'bloqueado'
-                              ? room.blockedReason || 'Bloqueado'
-                              : '—'}
-                          </td>
-                          <td
-                            className="px-2 py-2 text-slate-500 max-w-[140px] truncate"
-                            onClick={(e) => e.stopPropagation()}
-                            title={room.notes}
+                ) : list.length === 0 ? (
+                  <tr>
+                    <td colSpan={13} className="px-4 py-16 text-center text-slate-400">
+                      0 itens encontrados de acordo com o critério de pesquisa.
+                    </td>
+                  </tr>
+                ) : (
+                  list.map((room) => {
+                    const guest = guestInRoom(room.id);
+                    const isOn = selected.has(room.id);
+                    const locked = room.occupancy === 'ocupado';
+                    return (
+                      <tr
+                        key={room.id}
+                        onClick={() => !locked && toggleOne(room.id)}
+                        className={cn(
+                          'cursor-pointer',
+                          isOn ? 'bg-blue-50' : 'hover:bg-slate-50',
+                          locked && 'cursor-default'
+                        )}
+                      >
+                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            disabled={locked}
+                            onClick={() => toggleOne(room.id)}
+                            className={cn(locked && 'opacity-30 cursor-not-allowed')}
                           >
-                            <button
-                              type="button"
-                              className="text-left hover:text-blue-600 truncate max-w-[140px]"
-                              onClick={() => {
-                                const n = window.prompt('Observação da UH:', room.notes || '');
-                                if (n !== null) {
-                                  setRoomNotes(room.id, n);
-                                  toast.success('Observação salva');
-                                }
-                              }}
-                            >
-                              {room.notes || '—'}
-                            </button>
-                          </td>
-                          <td className="px-2 py-2 whitespace-nowrap text-slate-600">
-                            {guest ? formatDateBR(guest.checkIn) : '—'}
-                          </td>
-                          <td className="px-2 py-2 whitespace-nowrap text-slate-600">
-                            {guest ? formatDateBR(guest.checkOut) : '—'}
-                          </td>
-                          <td className="px-2 py-2 whitespace-nowrap">
-                            {room.floor === 0 ? 'Térreo' : `${room.floor}º`}
-                          </td>
-                          <td className="px-2 py-2 text-slate-600">{room.block || '—'}</td>
-                          <td className="px-2 py-2 font-medium max-w-[160px] truncate">
-                            {guest?.guestName || '—'}
-                          </td>
-                          <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-                            <select
-                              value={room.housekeeper || ''}
-                              disabled={locked}
-                              onChange={(e) =>
-                                assignHousekeeper([room.id], e.target.value || undefined)
-                              }
-                              className="h-7 rounded-md border border-slate-200 text-[11px] px-1 max-w-[110px] disabled:opacity-50"
-                            >
-                              <option value="">—</option>
-                              {HOUSEKEEPERS.map((h) => (
-                                <option key={h} value={h}>
-                                  {h.split(' ')[0]}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="px-2 py-2">
-                            {room.dnd ? (
-                              <span className="text-rose-600 font-semibold">S</span>
+                            {isOn ? (
+                              <CheckSquare className="w-4 h-4 text-blue-600" />
                             ) : (
-                              <span className="text-slate-300">N</span>
+                              <Square className="w-4 h-4 text-slate-400" />
                             )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                          </button>
+                        </td>
+                        <td className="px-2 py-2 font-semibold tabular-nums">{room.number}</td>
+                        <td className="px-2 py-2 text-slate-600">{room.type}</td>
+                        <td className="px-2 py-2">
+                          <span
+                            className={cn(
+                              'inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset',
+                              OCC_STYLE[room.occupancy]
+                            )}
+                          >
+                            {OCCUPANCY_LABEL[room.occupancy]}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2">
+                          <span
+                            className={cn(
+                              'inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset',
+                              GOV_STYLE[room.governance]
+                            )}
+                          >
+                            {GOVERNANCE_LABEL[room.governance]}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2">
+                          {room.occupancy === 'bloqueado' ? (
+                            <span className="text-amber-700 font-semibold">Sim</span>
+                          ) : (
+                            <span className="text-slate-400">Não</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2 text-slate-500 max-w-[160px] truncate">
+                          {room.occupancy === 'bloqueado'
+                            ? room.blockedReason || '—'
+                            : '—'}
+                        </td>
+                        <td className="px-2 py-2 text-slate-500 max-w-[140px] truncate">
+                          {room.notes || '—'}
+                        </td>
+                        <td className="px-2 py-2 whitespace-nowrap text-slate-600">
+                          {guest ? formatDateBR(guest.checkIn) : '—'}
+                        </td>
+                        <td className="px-2 py-2 whitespace-nowrap text-slate-600">
+                          {guest ? formatDateBR(guest.checkOut) : '—'}
+                        </td>
+                        <td className="px-2 py-2 whitespace-nowrap">
+                          {room.floor === 0 ? 'Térreo' : `${room.floor}º`}
+                        </td>
+                        <td className="px-2 py-2 text-slate-600">{room.block || '—'}</td>
+                        <td className="px-2 py-2 font-medium max-w-[160px] truncate">
+                          {guest?.guestName || '—'}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

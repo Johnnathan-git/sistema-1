@@ -46,6 +46,16 @@ export function GovernanceModule() {
   const [fBlocked, setFBlocked] = useState('');
   const [fDnd, setFDnd] = useState('');
   const [searched, setSearched] = useState(false);
+  const [applied, setApplied] = useState({
+    number: '',
+    block: '',
+    floor: '',
+    type: '',
+    gov: '' as GovernanceStatus | '',
+    occ: '' as OccupancyStatus | '',
+    blocked: '',
+    dnd: '',
+  });
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -87,21 +97,21 @@ export function GovernanceModule() {
     let rows = [...rooms].sort((a, b) =>
       a.number.localeCompare(b.number, 'pt-BR', { numeric: true })
     );
-    if (fNumber.trim()) {
-      const q = fNumber.trim().toLowerCase();
+    if (applied.number.trim()) {
+      const q = applied.number.trim().toLowerCase();
       rows = rows.filter((r) => r.number.toLowerCase().includes(q));
     }
-    if (fBlock) rows = rows.filter((r) => r.block === fBlock);
-    if (fFloor !== '') rows = rows.filter((r) => String(r.floor) === fFloor);
-    if (fType) rows = rows.filter((r) => r.type === fType);
-    if (fGov) rows = rows.filter((r) => r.governance === fGov);
-    if (fOcc) rows = rows.filter((r) => r.occupancy === fOcc);
-    if (fBlocked === 'sim') rows = rows.filter((r) => r.occupancy === 'bloqueado');
-    if (fBlocked === 'nao') rows = rows.filter((r) => r.occupancy !== 'bloqueado');
-    if (fDnd === 'sim') rows = rows.filter((r) => !!r.dnd);
-    if (fDnd === 'nao') rows = rows.filter((r) => !r.dnd);
+    if (applied.block) rows = rows.filter((r) => r.block === applied.block);
+    if (applied.floor !== '') rows = rows.filter((r) => String(r.floor) === applied.floor);
+    if (applied.type) rows = rows.filter((r) => r.type === applied.type);
+    if (applied.gov) rows = rows.filter((r) => r.governance === applied.gov);
+    if (applied.occ) rows = rows.filter((r) => r.occupancy === applied.occ);
+    if (applied.blocked === 'sim') rows = rows.filter((r) => r.occupancy === 'bloqueado');
+    if (applied.blocked === 'nao') rows = rows.filter((r) => r.occupancy !== 'bloqueado');
+    if (applied.dnd === 'sim') rows = rows.filter((r) => !!r.dnd);
+    if (applied.dnd === 'nao') rows = rows.filter((r) => !r.dnd);
     return rows;
-  }, [rooms, searched, fNumber, fBlock, fFloor, fType, fGov, fOcc, fBlocked, fDnd]);
+  }, [rooms, searched, applied]);
 
   const selectable = list.filter((r) => r.occupancy !== 'ocupado');
   const allSelectableOn =
@@ -142,11 +152,31 @@ export function GovernanceModule() {
     setFOcc('');
     setFBlocked('');
     setFDnd('');
+    setApplied({
+      number: '',
+      block: '',
+      floor: '',
+      type: '',
+      gov: '',
+      occ: '',
+      blocked: '',
+      dnd: '',
+    });
     setSearched(false);
     clearSelection();
   };
 
   const runSearch = () => {
+    setApplied({
+      number: fNumber,
+      block: fBlock,
+      floor: fFloor,
+      type: fType,
+      gov: fGov,
+      occ: fOcc,
+      blocked: fBlocked,
+      dnd: fDnd,
+    });
     setSearched(true);
     clearSelection();
   };

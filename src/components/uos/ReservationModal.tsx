@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePms } from '@/lib/pms-store';
 import { AccountModal } from '@/components/uos/AccountModal';
 import { PensionTab } from '@/components/uos/PensionTab';
@@ -12,7 +12,7 @@ import {
   type RoomType,
 } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
-import { IdCard, LogIn, LogOut, Plus, Save, Ticket, Trash2, Wallet, X } from 'lucide-react';
+import { IdCard, LogIn, LogOut, Plus, Save, Search, Ticket, Trash2, Wallet, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 const ROOM_TYPES: RoomType[] = ['Standard', 'Superior', 'Apartamento', 'Chalé Master', 'Bangalô', 'Suite'];
@@ -22,6 +22,14 @@ const inputCls =
 type ModalTab = 'geral' | 'obs' | 'pensoes' | 'voucher' | 'documentos' | 'logs';
 type Companion = { id: string; name: string; cpf: string; birthDate: string; ageGroup: 'Adulto' | 'Criança' | 'Bebê' };
 
+const PENSION_OPTIONS = [
+  { id: 'NN', label: 'NN – Nenhuma', value: 0 },
+  { id: 'CA', label: 'CA – Café da manhã', value: 45 },
+  { id: 'MP', label: 'MP – Meia pensão', value: 95 },
+  { id: 'PC', label: 'PC – Pensão completa', value: 145 },
+  { id: 'AI', label: 'AI – All inclusive', value: 220 },
+];
+
 function nightsBetween(ci: string, co: string) {
   try {
     const a = new Date(ci + 'T12:00:00').getTime();
@@ -30,6 +38,28 @@ function nightsBetween(ci: string, co: string) {
   } catch {
     return 1;
   }
+}
+
+function eachNight(ci: string, co: string): string[] {
+  const out: string[] = [];
+  try {
+    const start = new Date(ci + 'T12:00:00');
+    const end = new Date(co + 'T12:00:00');
+    const cur = new Date(start);
+    while (cur < end) {
+      out.push(cur.toISOString().slice(0, 10));
+      cur.setDate(cur.getDate() + 1);
+    }
+  } catch {
+    /* ignore */
+  }
+  if (out.length === 0) out.push(ci);
+  return out;
+}
+
+function formatDateShort(iso: string) {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}`;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -69,13 +99,14 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
   const [draft, setDraft] = useState<Reservation | null>(null);
   const [showAccount, setShowAccount] = useState(false);
   const [showFicha, setShowFicha] = useState(false);
-  const [showPickGuest, setShowPickGuest] = useState(false);
+  const [showGuestSearch, setShowGuestSearch] = useState(false);
+  const [guestQuery, setGuestQuery] = useState('');
   const [vehiclePlate, setVehiclePlate] = useState('');
   const [companions, setCompanions] = useState<Companion[]>([]);
   const [titular, setTitular] = useState({ fullName: '', cpf: '', email: '', birthDate: '', cep: '', phone: '' });
   const [dailyRate, setDailyRate] = useState(0);
   const [discountPct, setDiscountPct] = useState(0);
-  const [pensionName, setPensionName] = useState('NN – Nenhuma');
+  const [pensionId, setPensionId] = useState('NN');
   const [packageName, setPackageName] = useState('');
   const [ratePlan, setRatePlan] = useState('Utilizar valor do tarifário');
   const [garantNoShow, setGarantNoShow] = useState(false);
@@ -102,11 +133,35 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
   }, [res, guests]);
 
   const nights = draft ? nightsBetween(draft.checkIn, draft.checkOut) : 1;
-  const projected = (() => {
-    const base = dailyRate * nights;
-    const disc = (base * discountPct) / 100;
-    return Math.max(0, Math.round((base - disc) * 100) / 100);
-  })();
+  const nightDates = draft ? eachNight(draft.checkIn, draft.checkOut) : [];
+  const pensionOpt = PENSION_OPTIONS.find((p) => p.id === pensionId) || PENSION_OPTIONS[0];
+  const pensionPerDay = pensionOpt.value;
+
+  const dayLines = useMemo(() => {
+    return nightDates.map((d) => {
+      const disc = (dailyRate * discountPct) / 100;
+      const diaria = Math.max(0, Math.round((dailyRate - disc) * 100) / 100);
+      const pensao = pensionPerDay;
+      const total = Math.round((diaria + pensao) * 100) / 100;
+      return { date: d, diaria, pensao, total };
+    });
+  }, [nightDates, dailyRate, discountPct, pensionPerDay]);
+
+  const periodTotal = useMemo(() => dayLines.reduce((s, l) => s + l.total, 0), [dayLines]);
+
+  const filteredGuests = useMemo(() => {
+    const q = guestQuery.trim().toLowerCase();
+    if (!q) return guests.slice(0, 12);
+    return guests
+      .filter(
+        (g) =>
+          g.name.toLowerCase().includes(q) ||
+          (g.document || '').toLowerCase().includes(q) ||
+          (g.email || '').toLowerCase().includes(q) ||
+          (g.phone || '').toLowerCase().includes(q)
+      )
+      .slice(0, 15);
+  }, [guests, guestQuery]);
 
   if (!res || !draft) {
     return (
@@ -128,15 +183,21 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
   const canCheckOut = draft.status === 'checkin';
   const editable = draft.status !== 'cancelada' && draft.status !== 'checkout';
 
-  const applyProjected = () => {
-    setDraft({ ...draft, totalAmount: projected });
-    toast.success(`Valor total atualizado: ${formatBRL(projected)}`);
+  const applyPeriodTotal = () => {
+    setDraft({ ...draft, totalAmount: periodTotal });
+    toast.success(`Total do período aplicado: ${formatBRL(periodTotal)}`);
   };
 
   const save = () => {
     const adults = 1 + companions.filter((c) => c.ageGroup === 'Adulto').length;
     const children = companions.filter((c) => c.ageGroup !== 'Adulto').length;
-    const next = { ...draft, guestName: titular.fullName.trim() || draft.guestName, adults, children, totalAmount: projected || draft.totalAmount };
+    const next = {
+      ...draft,
+      guestName: titular.fullName.trim() || draft.guestName,
+      adults,
+      children,
+      totalAmount: periodTotal || draft.totalAmount,
+    };
     setDraft(next);
     upsertReservation(next);
     toast.success('Alterações salvas');
@@ -163,7 +224,14 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
     }
     const adults = 1 + companions.filter((c) => c.ageGroup === 'Adulto').length;
     const children = companions.filter((c) => c.ageGroup !== 'Adulto').length;
-    const next = { ...draft, guestName: titular.fullName.trim(), adults, children, fnrhFilled: true, totalAmount: projected || draft.totalAmount };
+    const next = {
+      ...draft,
+      guestName: titular.fullName.trim(),
+      adults,
+      children,
+      fnrhFilled: true,
+      totalAmount: periodTotal || draft.totalAmount,
+    };
     setDraft(next);
     upsertReservation(next);
     const r = checkIn(next.id);
@@ -191,7 +259,8 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
       phone: g.phone || '',
     });
     setDraft({ ...draft, guestName: g.name, guestId: g.id });
-    setShowPickGuest(false);
+    setShowGuestSearch(false);
+    setGuestQuery('');
     toast.success(`Titular: ${g.name}`);
   };
 
@@ -281,21 +350,33 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
         </div>
       )}
 
-      {showPickGuest && (
+      {showGuestSearch && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <button type="button" className="absolute inset-0 bg-slate-900/50" onClick={() => setShowPickGuest(false)} aria-label="Fechar" />
+          <button type="button" className="absolute inset-0 bg-slate-900/50" onClick={() => { setShowGuestSearch(false); setGuestQuery(''); }} aria-label="Fechar" />
           <div className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
-            <div className="px-4 py-3 border-b flex items-center justify-between">
-              <p className="text-[14px] font-semibold">Selecionar hóspede cadastrado</p>
-              <button type="button" onClick={() => setShowPickGuest(false)} className="h-8 w-8 rounded-lg hover:bg-slate-100 inline-flex items-center justify-center">
-                <X className="w-4 h-4" />
-              </button>
+            <div className="px-4 py-3 border-b">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[14px] font-semibold">Buscar hóspede cadastrado</p>
+                <button type="button" onClick={() => { setShowGuestSearch(false); setGuestQuery(''); }} className="h-8 w-8 rounded-lg hover:bg-slate-100 inline-flex items-center justify-center">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  autoFocus
+                  value={guestQuery}
+                  onChange={(e) => setGuestQuery(e.target.value)}
+                  placeholder="Digite nome ou CPF…"
+                  className="w-full h-10 rounded-lg border border-slate-200 pl-9 pr-3 text-[13px] outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                />
+              </div>
             </div>
             <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
-              {guests.length === 0 ? (
-                <p className="px-4 py-8 text-center text-slate-400 text-[13px]">Nenhum hóspede cadastrado</p>
+              {filteredGuests.length === 0 ? (
+                <p className="px-4 py-8 text-center text-slate-400 text-[13px]">Nenhum hóspede encontrado</p>
               ) : (
-                guests.map((g) => (
+                filteredGuests.map((g) => (
                   <button
                     key={g.id}
                     type="button"
@@ -372,7 +453,7 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                     </div>
                   </Section>
 
-                  <Section title="Hóspede">
+                  <Section title="Hóspede titular">
                     <div className="flex items-start gap-2 mb-2">
                       <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         <Field label="Nome">
@@ -397,9 +478,9 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                             <button
                               type="button"
                               disabled={!editable}
-                              onClick={() => setShowPickGuest(true)}
+                              onClick={() => { setShowGuestSearch(true); setGuestQuery(''); }}
                               className="h-9 w-9 shrink-0 rounded-lg border border-slate-200 bg-white text-slate-700 inline-flex items-center justify-center hover:bg-slate-50 disabled:opacity-40"
-                              title="Adicionar hóspede já cadastrado como titular"
+                              title="Buscar hóspede cadastrado"
                             >
                               <Plus className="w-4 h-4" />
                             </button>
@@ -554,15 +635,6 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
 
                   <Section title="Tarifário">
                     <div className="space-y-2.5">
-                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                        <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Valor previsto</p>
-                        <p className="text-[18px] font-bold tabular-nums text-slate-900 mt-0.5">{formatBRL(projected)}</p>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          {nights} diária{nights !== 1 ? 's' : ''} · {formatBRL(dailyRate)} / dia
-                          {discountPct > 0 ? ` · −${discountPct}%` : ''}
-                        </p>
-                      </div>
-
                       <Field label="Pacote">
                         <input disabled={!editable} value={packageName} onChange={(e) => setPackageName(e.target.value)} placeholder="—" className={inputCls} />
                       </Field>
@@ -576,16 +648,14 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                       </Field>
 
                       <Field label="Pensão">
-                        <select disabled={!editable} value={pensionName} onChange={(e) => setPensionName(e.target.value)} className={inputCls}>
-                          <option>NN – Nenhuma</option>
-                          <option>CA – Café da manhã</option>
-                          <option>MP – Meia pensão</option>
-                          <option>PC – Pensão completa</option>
-                          <option>AI – All inclusive</option>
+                        <select disabled={!editable} value={pensionId} onChange={(e) => setPensionId(e.target.value)} className={inputCls}>
+                          {PENSION_OPTIONS.map((p) => (
+                            <option key={p.id} value={p.id}>{p.label}</option>
+                          ))}
                         </select>
                       </Field>
 
-                      <Field label="Diária (R$)">
+                      <Field label="Diária base (R$)">
                         <input
                           type="number"
                           step="0.01"
@@ -618,13 +688,47 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                         </label>
                       </div>
 
+                      <div className="rounded-lg border border-slate-200 overflow-hidden">
+                        <div className="px-2 py-1.5 bg-slate-50 border-b text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                          Diárias do período ({nights})
+                        </div>
+                        <div className="max-h-44 overflow-y-auto">
+                          <table className="w-full text-[11px]">
+                            <thead className="bg-white sticky top-0 border-b">
+                              <tr className="text-left text-[10px] text-slate-400">
+                                <th className="px-2 py-1">Data</th>
+                                <th className="px-2 py-1 text-right">Diária</th>
+                                <th className="px-2 py-1 text-right">Pensão</th>
+                                <th className="px-2 py-1 text-right">Total</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                              {dayLines.map((l) => (
+                                <tr key={l.date}>
+                                  <td className="px-2 py-1 tabular-nums">{formatDateShort(l.date)}</td>
+                                  <td className="px-2 py-1 text-right tabular-nums">{formatBRL(l.diaria)}</td>
+                                  <td className="px-2 py-1 text-right tabular-nums">{formatBRL(l.pensao)}</td>
+                                  <td className="px-2 py-1 text-right tabular-nums font-medium">{formatBRL(l.total)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot className="bg-slate-50 border-t">
+                              <tr className="font-semibold">
+                                <td className="px-2 py-1.5" colSpan={3}>Total período</td>
+                                <td className="px-2 py-1.5 text-right tabular-nums">{formatBRL(periodTotal)}</td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      </div>
+
                       <button
                         type="button"
                         disabled={!editable}
-                        onClick={applyProjected}
+                        onClick={applyPeriodTotal}
                         className="w-full h-8 rounded-lg border border-slate-200 bg-white text-[12px] font-medium hover:bg-slate-50 disabled:opacity-40"
                       >
-                        Aplicar valor previsto ao total
+                        Aplicar total do período
                       </button>
 
                       <div className="border-t border-slate-100 pt-2 space-y-1 text-[12px]">
@@ -640,11 +744,6 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                           <span className="text-slate-500">Saldo</span>
                           <span className={cn('font-semibold tabular-nums', balance > 0.01 ? 'text-rose-600' : 'text-emerald-600')}>{formatBRL(balance)}</span>
                         </div>
-                        {account && (
-                          <button type="button" onClick={() => setShowAccount(true)} className="text-blue-600 font-medium hover:underline text-[12px] mt-1">
-                            Abrir extrato da conta →
-                          </button>
-                        )}
                       </div>
                     </div>
                   </Section>
@@ -681,22 +780,25 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
           </div>
 
           <div className="px-4 py-3 border-t bg-white flex flex-wrap items-center gap-2 shrink-0">
-            <button type="button" onClick={save} disabled={!editable} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 disabled:opacity-40">
-              <Save className="w-3.5 h-3.5" /> Salvar
-            </button>
             {canCheckIn && (
               <button type="button" onClick={doCheckIn} className="h-9 px-3 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-emerald-700">
                 <LogIn className="w-3.5 h-3.5" /> Check-in
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => setShowAccount(true)}
+              className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50"
+              title="Consumos, pagamentos e diárias"
+            >
+              <Wallet className="w-3.5 h-3.5" /> Conta
+            </button>
+            <button type="button" onClick={save} disabled={!editable} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5 disabled:opacity-40">
+              <Save className="w-3.5 h-3.5" /> Salvar
+            </button>
             {canCheckOut && (
               <button type="button" onClick={doCheckOut} className="h-9 px-3 rounded-lg bg-rose-600 text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-rose-700">
                 <LogOut className="w-3.5 h-3.5" /> Check-out
-              </button>
-            )}
-            {account && (
-              <button type="button" onClick={() => setShowAccount(true)} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] font-medium inline-flex items-center gap-1.5">
-                <Wallet className="w-3.5 h-3.5" /> Conta
               </button>
             )}
             <div className="ml-auto">

@@ -10,7 +10,7 @@ import {
   type Room,
 } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
-import { ArrowLeftRight, DoorOpen, LayoutGrid, List, LogIn, Search, Undo2, Wallet } from 'lucide-react';
+import { ArrowLeftRight, DoorOpen, LayoutGrid, List, LogIn, Printer, RefreshCw, Search, Undo2, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 
 type MainTab = 'checkins' | 'hospedados' | 'chart';
@@ -57,6 +57,18 @@ export function ReceptionModule() {
   const arrivalAdults = arrivals.reduce((s, r) => s + r.adults, 0);
   const arrivalChildren = arrivals.reduce((s, r) => s + r.children, 0);
   const totalPax = inHouse.reduce((s, r) => s + r.adults + r.children, 0);
+
+  const clearFilters = () => {
+    setQ('');
+    setFilterGuest('');
+    setFilterPeriod(today);
+    setFilterRoom('');
+    setFilterType('');
+    setFilterCanal('');
+    setFilterGroup('');
+    setFilterCategory('');
+    setOnlyPreCI(false);
+  };
 
   const filteredArrivals = useMemo(() => {
     let list = arrivals;
@@ -168,7 +180,7 @@ export function ReceptionModule() {
         <AccountModal accountId={modalAccount.accountId} reservationId={modalAccount.reservationId} onClose={() => setModalAccount(null)} />
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-0">
         <div className="flex flex-wrap items-center gap-1">
           {([{ id: 'checkins' as const, label: 'Check-ins previstos', icon: LogIn }, { id: 'hospedados' as const, label: 'Hospedados', icon: List }] as const).map(({ id, label, icon: Icon }) => (
             <button key={id} type="button" onClick={() => setTab(id)} className={cn('px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px inline-flex items-center gap-1.5', tab === id ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800')}>
@@ -189,7 +201,9 @@ export function ReceptionModule() {
           <button type="button" onClick={() => setTab('chart')} className={cn('h-8 px-3 rounded-lg border text-[12px] font-medium inline-flex items-center gap-1.5', tab === 'chart' ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}>
             <LayoutGrid className="w-3.5 h-3.5" /> Chart de ocupação
           </button>
-          <button type="button" onClick={() => { if (window.confirm('Fechar o caixa do dia operacional ' + today.split('-').reverse().join('/') + '?')) toast.success('Caixa fechado para o dia ' + today.split('-').reverse().join('/')); }} className="h-8 px-3 rounded-lg border border-slate-800 bg-slate-900 text-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-800">
+        </div>
+        <div className="ml-auto pb-1">
+          <button type="button" onClick={() => { if (window.confirm('Fechar o caixa do dia operacional ' + today.split('-').reverse().join('/') + '?')) toast.success('Caixa fechado para o dia ' + today.split('-').reverse().join('/')); }} className="h-8 px-3 rounded-lg border border-slate-800 bg-slate-900 text-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-800" title="Fechar caixa do dia">
             <Wallet className="w-3.5 h-3.5" /> Fechar caixa
           </button>
         </div>
@@ -215,9 +229,20 @@ export function ReceptionModule() {
               <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Grupos</span><input value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)} placeholder="Grupo / empresa" className="w-full h-8 rounded-lg border border-slate-200 px-2 outline-none focus:ring-1 focus:ring-blue-400" /></label>
               <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Canal</span><select value={filterCanal} onChange={(e) => setFilterCanal(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option><option value="direto">Direto</option><option value="booking">Booking</option><option value="expedia">Expedia</option><option value="telefone">Telefone</option><option value="walkin">Walk-in</option></select></label>
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <label className="inline-flex items-center gap-2 text-[12px] text-slate-700"><input type="checkbox" checked={onlyPreCI} onChange={(e) => setOnlyPreCI(e.target.checked)} className="rounded border-slate-300" />Somente com Pré-CI</label>
-              <button type="button" onClick={() => { setQ(''); setFilterGuest(''); setFilterPeriod(today); setFilterRoom(''); setFilterType(''); setFilterCanal(''); setFilterGroup(''); setFilterCategory(''); setOnlyPreCI(false); }} className="text-[12px] text-blue-600 hover:underline">Limpar filtros</button>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label className="inline-flex items-center gap-2 text-[12px] text-slate-700 mr-2">
+                <input type="checkbox" checked={onlyPreCI} onChange={(e) => setOnlyPreCI(e.target.checked)} className="rounded border-slate-300" />
+                Somente com Pré-CI
+              </label>
+              <button type="button" onClick={() => { clearFilters(); toast.message('Pesquisa limpa'); }} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[12px] font-medium hover:bg-slate-50">
+                Limpar pesquisa
+              </button>
+              <button type="button" onClick={() => { setFilterPeriod(today); toast.success('Lista atualizada'); }} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50">
+                <RefreshCw className="w-3.5 h-3.5" /> Atualizar
+              </button>
+              <button type="button" onClick={() => { window.print(); toast.message('Enviando para impressão…'); }} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50">
+                <Printer className="w-3.5 h-3.5" /> Imprimir
+              </button>
             </div>
           </div>
 

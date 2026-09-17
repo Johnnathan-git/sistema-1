@@ -67,6 +67,11 @@ interface PmsState {
     category: Account['charges'][0]['category']
   ) => void;
   createAvulsaAccount: (guestName: string) => void;
+  cashOpen: boolean;
+  cashFundo: number;
+  cashOpenedAt: string | null;
+  openCashRegister: (fundo: number) => { ok: boolean; message: string };
+  closeCashRegister: () => { ok: boolean; message: string };
 }
 
 const PmsContext = createContext<PmsState | null>(null);
@@ -90,6 +95,11 @@ export function PmsProvider({ children }: { children: ReactNode }) {
   const [accounts, setAccounts] = useState(INITIAL_ACCOUNTS);
   const [roomLogs, setRoomLogs] = useState<RoomStatusLog[]>([]);
   const [module, setModule] = useState<ModuleId>('recepcao');
+  const [cashOpen, setCashOpen] = useState(true);
+  const [cashFundo, setCashFundo] = useState(200);
+  const [cashOpenedAt, setCashOpenedAt] = useState<string | null>(() =>
+    nowStamp(HOTEL.operationalDate)
+  );
 
   const pushLog = useCallback(
     (entry: Omit<RoomStatusLog, 'id' | 'at' | 'user'> & { at?: string; user?: string }) => {
@@ -107,6 +117,29 @@ export function PmsProvider({ children }: { children: ReactNode }) {
     },
     [hotel.operationalDate]
   );
+
+  const openCashRegister = useCallback(
+    (fundo: number) => {
+      if (cashOpen) return { ok: false, message: 'Caixa já está aberto' };
+      if (Number.isNaN(fundo) || fundo < 0)
+        return { ok: false, message: 'Informe o fundo de caixa em dinheiro' };
+      setCashOpen(true);
+      setCashFundo(fundo);
+      setCashOpenedAt(nowStamp(hotel.operationalDate));
+      return {
+        ok: true,
+        message: `Caixa aberto · fundo R$ ${fundo.toFixed(2).replace('.', ',')}`,
+      };
+    },
+    [cashOpen, hotel.operationalDate]
+  );
+
+  const closeCashRegister = useCallback(() => {
+    if (!cashOpen) return { ok: false, message: 'Caixa já está fechado' };
+    setCashOpen(false);
+    setCashOpenedAt(null);
+    return { ok: true, message: 'Caixa fechado com sucesso' };
+  }, [cashOpen]);
 
   const updateGovernance = useCallback(
     (roomIds: string[], governance: GovernanceStatus, notes?: string) => {
@@ -587,22 +620,26 @@ export function PmsProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const addPayment = useCallback((accountId: string, amount: number, method: string) => {
-    setAccounts((prev) =>
-      prev.map((a) => {
-        if (a.id !== accountId) return a;
-        const payments = [
-          ...a.payments,
-          { id: uid('p'), amount, method, date: HOTEL.operationalDate },
-        ];
-        const charges = a.charges.reduce((s, c) => s + c.amount, 0);
-        const paid = payments.reduce((s, p) => s + p.amount, 0);
-        const status =
-          paid >= charges - 0.01 ? 'quitada' : paid > 0 ? 'parcial' : a.status;
-        return { ...a, payments, status };
-      })
-    );
-  }, []);
+  const addPayment = useCallback(
+    (accountId: string, amount: number, method: string) => {
+      if (!cashOpen) return;
+      setAccounts((prev) =>
+        prev.map((a) => {
+          if (a.id !== accountId) return a;
+          const payments = [
+            ...a.payments,
+            { id: uid('p'), amount, method, date: HOTEL.operationalDate },
+          ];
+          const charges = a.charges.reduce((s, c) => s + c.amount, 0);
+          const paid = payments.reduce((s, p) => s + p.amount, 0);
+          const status =
+            paid >= charges - 0.01 ? 'quitada' : paid > 0 ? 'parcial' : a.status;
+          return { ...a, payments, status };
+        })
+      );
+    },
+    [cashOpen]
+  );
 
   const addCharge = useCallback(
     (
@@ -611,6 +648,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       amount: number,
       category: Account['charges'][0]['category']
     ) => {
+      if (!cashOpen) return;
       setAccounts((prev) =>
         prev.map((a) => {
           if (a.id !== accountId) return a;
@@ -622,7 +660,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
         })
       );
     },
-    []
+    [cashOpen]
   );
 
   const createAvulsaAccount = useCallback((guestName: string) => {
@@ -648,6 +686,11 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       roomLogs,
       module,
       setModule,
+      cashOpen,
+      cashFundo,
+      cashOpenedAt,
+      openCashRegister,
+      closeCashRegister,
       updateGovernance,
       assignHousekeeper,
       setRoomNotes,
@@ -673,6 +716,11 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       accounts,
       roomLogs,
       module,
+      cashOpen,
+      cashFundo,
+      cashOpenedAt,
+      openCashRegister,
+      closeCashRegister,
       updateGovernance,
       assignHousekeeper,
       setRoomNotes,

@@ -162,14 +162,14 @@ export function roomNotReadyReason(room: Room): string | null {
   if (room.governance === 'interditado') return 'UH interditada';
   if (room.governance === 'manutencao') return 'UH em manutenção';
   if (room.governance === 'sujo') return 'UH suja';
-  if (room.governance === 'limpeza') return 'UH em limpeza';
+  if (room.governance === 'limpeza') return 'UH em arrumação';
   if (room.governance === 'inspecao') return 'UH em inspeção';
   if (room.governance !== 'limpo') return 'UH não está limpa';
   return null;
 }
 
 export const OCCUPANCY_LABEL: Record<OccupancyStatus, string> = {
-  livre: 'Livre',
+  livre: 'Vago',
   ocupado: 'Ocupado',
   bloqueado: 'Bloqueado',
 };
@@ -177,7 +177,7 @@ export const OCCUPANCY_LABEL: Record<OccupancyStatus, string> = {
 export const GOVERNANCE_LABEL: Record<GovernanceStatus, string> = {
   limpo: 'Limpo',
   sujo: 'Sujo',
-  limpeza: 'Em limpeza',
+  limpeza: 'Arrumação',
   inspecao: 'Inspeção',
   manutencao: 'Manutenção',
   interditado: 'Interditado',
@@ -187,7 +187,7 @@ export const GOVERNANCE_LABEL: Record<GovernanceStatus, string> = {
 export const ROOM_STATUS_LABEL: Record<string, string> = {
   ...OCCUPANCY_LABEL,
   ...GOVERNANCE_LABEL,
-  livre: 'Livre',
+  livre: 'Vago',
   ocupado: 'Ocupado',
 };
 

@@ -27,7 +27,6 @@ export const GOVERNANCE_STATUSES: GovernanceStatus[] = [
   'sujo',
   'limpeza',
   'inspecao',
-  'manutencao',
   'interditado',
 ];
 
@@ -348,7 +347,12 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       setRooms((prev) =>
         prev.map((r) =>
           r.id === res.roomId
-            ? { ...r, occupancy: 'ocupado' as OccupancyStatus, dnd: false }
+            ? {
+                ...r,
+                occupancy: 'ocupado' as OccupancyStatus,
+                governance: 'sujo' as GovernanceStatus,
+                dnd: false,
+              }
             : r
         )
       );
@@ -356,8 +360,9 @@ export function PmsProvider({ children }: { children: ReactNode }) {
         roomId: res.roomId!,
         roomNumber: res.roomNumber || room.number,
         occupancy: 'ocupado',
+        governance: 'sujo',
         source: 'checkin',
-        note: `Check-in ${res.guestName}`,
+        note: `Check-in ${res.guestName} · UH Suja`,
       });
 
       return {
@@ -429,7 +434,6 @@ export function PmsProvider({ children }: { children: ReactNode }) {
     [reservations, accounts, pushLog]
   );
 
-  /** Cancela check-in: volta para confirmada e libera UH (suja). */
   const cancelCheckIn = useCallback(
     (reservationId: string) => {
       const res = reservations.find((r) => r.id === reservationId);
@@ -472,7 +476,6 @@ export function PmsProvider({ children }: { children: ReactNode }) {
     [reservations, pushLog]
   );
 
-  /** Transfere hóspede in-house para outra UH livre/pronta. */
   const transferRoom = useCallback(
     (reservationId: string, newRoomId: string) => {
       const res = reservations.find((r) => r.id === reservationId);
@@ -525,6 +528,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
             return {
               ...r,
               occupancy: 'ocupado' as OccupancyStatus,
+              governance: 'sujo' as GovernanceStatus,
               dnd: false,
             };
           }
@@ -550,6 +554,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
         roomId: newRoomId,
         roomNumber: newRoom.number,
         occupancy: 'ocupado',
+        governance: 'sujo',
         source: 'sistema',
         note: `Transferência entrada · ${res.guestName} de ${res.roomNumber}`,
       });
@@ -593,7 +598,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
         const charges = a.charges.reduce((s, c) => s + c.amount, 0);
         const paid = payments.reduce((s, p) => s + p.amount, 0);
         const status =
-          paid >= charges - 0.01 ? 'quitada' : paid > 0 ? 'parcial' : 'aberta';
+          paid >= charges - 0.01 ? 'quitada' : paid > 0 ? 'parcial' : a.status;
         return { ...a, payments, status };
       })
     );
@@ -611,19 +616,9 @@ export function PmsProvider({ children }: { children: ReactNode }) {
           if (a.id !== accountId) return a;
           const charges = [
             ...a.charges,
-            {
-              id: uid('c'),
-              description,
-              amount,
-              date: HOTEL.operationalDate,
-              category,
-            },
+            { id: uid('c'), description, amount, date: HOTEL.operationalDate, category },
           ];
-          const totalC = charges.reduce((s, c) => s + c.amount, 0);
-          const paid = a.payments.reduce((s, p) => s + p.amount, 0);
-          const status =
-            paid >= totalC - 0.01 ? 'quitada' : paid > 0 ? 'parcial' : 'aberta';
-          return { ...a, charges, status };
+          return { ...a, charges, status: a.status === 'quitada' ? 'parcial' : a.status };
         })
       );
     },

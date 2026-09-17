@@ -12,18 +12,18 @@ import { Ban, CheckSquare, Eraser, History, Square, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 const OCC_STYLE: Record<OccupancyStatus, string> = {
-  livre: 'bg-emerald-600 text-white',
-  ocupado: 'bg-blue-600 text-white',
-  bloqueado: 'bg-slate-700 text-white',
+  livre: 'bg-emerald-100 text-emerald-800',
+  ocupado: 'bg-blue-100 text-blue-800',
+  bloqueado: 'bg-slate-200 text-slate-700',
 };
 
 const GOV_STYLE: Record<GovernanceStatus, string> = {
-  limpo: 'bg-emerald-600 text-white',
-  sujo: 'bg-rose-600 text-white',
-  limpeza: 'bg-amber-500 text-white',
-  inspecao: 'bg-violet-600 text-white',
-  manutencao: 'bg-orange-600 text-white',
-  interditado: 'bg-slate-800 text-white',
+  limpo: 'bg-emerald-100 text-emerald-800',
+  sujo: 'bg-rose-100 text-rose-800',
+  limpeza: 'bg-amber-100 text-amber-900',
+  inspecao: 'bg-violet-100 text-violet-800',
+  manutencao: 'bg-orange-100 text-orange-900',
+  interditado: 'bg-slate-200 text-slate-700',
 };
 
 export function GovernanceModule() {

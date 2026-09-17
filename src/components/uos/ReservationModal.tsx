@@ -469,12 +469,9 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                         <Field label="Nome">
                           <div className="flex gap-1">
                             <input
-                              disabled={!editable}
+                              disabled
                               value={titular.fullName}
-                              onChange={(e) => {
-                                setTitular({ ...titular, fullName: e.target.value });
-                                setDraft({ ...draft, guestName: e.target.value });
-                              }}
+                              readOnly
                               className={inputCls}
                             />
                             <button
@@ -497,27 +494,28 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                           </div>
                         </Field>
                         <Field label="E-mail">
-                          <input disabled={!editable} type="email" value={titular.email} onChange={(e) => setTitular({ ...titular, email: e.target.value })} className={inputCls} />
+                          <input disabled readOnly type="email" value={titular.email} className={inputCls} />
                         </Field>
                         <Field label="Cidade / UF">
-                          <input disabled={!editable} defaultValue="" placeholder="—" className={inputCls} />
+                          <input disabled readOnly value="" placeholder="—" className={inputCls} />
                         </Field>
                         <Field label="CEP">
-                          <input disabled={!editable} value={titular.cep} onChange={(e) => setTitular({ ...titular, cep: e.target.value })} className={inputCls} placeholder="00000-000" />
+                          <input disabled readOnly value={titular.cep} className={inputCls} placeholder="00000-000" />
                         </Field>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 border-t border-slate-100 pt-2.5 mt-1">
                       <Field label="CPF *">
-                        <input disabled={!editable} value={titular.cpf} onChange={(e) => setTitular({ ...titular, cpf: e.target.value })} className={inputCls} placeholder="000.000.000-00" />
+                        <input disabled readOnly value={titular.cpf} className={inputCls} placeholder="000.000.000-00" />
                       </Field>
                       <Field label="Nascimento *">
-                        <input disabled={!editable} type="date" value={titular.birthDate} onChange={(e) => setTitular({ ...titular, birthDate: e.target.value })} className={inputCls} />
+                        <input disabled readOnly type="date" value={titular.birthDate} className={inputCls} />
                       </Field>
                       <Field label="Celular *">
-                        <input disabled={!editable} value={titular.phone} onChange={(e) => setTitular({ ...titular, phone: e.target.value })} className={inputCls} placeholder="(00) 00000-0000" />
+                        <input disabled readOnly value={titular.phone} className={inputCls} placeholder="(00) 00000-0000" />
                       </Field>
                     </div>
+                    <p className="mt-2 text-[11px] text-slate-400">Dados do titular vêm da Ficha (ícone) ou da busca (+). Edição apenas por esses atalhos.</p>
                   </Section>
 
                   <Section title="Acomodações">

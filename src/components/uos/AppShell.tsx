@@ -11,6 +11,7 @@ import {
   Settings,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { toast } from 'sonner';
 
 const NAV: {
   section: string;
@@ -45,6 +46,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       (r.status === 'confirmada' || r.status === 'pendente')
   ).length;
 
+  const opDateBR = hotel.operationalDate.split('-').reverse().join('/');
+
   const titles: Record<ModuleId, { title: string; subtitle: string }> = {
     recepcao: {
       title: 'Recepção',
@@ -62,6 +65,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       title: 'Governança',
       subtitle: 'Ocupação · arrumação · camareira · bloqueio e histórico',
     },
+  };
+
+  const closeCash = () => {
+    if (window.confirm(`Fechar o caixa do dia operacional ${opDateBR}?`)) {
+      toast.success(`Caixa fechado para o dia ${opDateBR}`);
+    }
   };
 
   return (
@@ -169,14 +178,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="ml-auto flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 h-9">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                Data op.
-              </span>
-              <span className="text-[13px] font-semibold tabular-nums">
-                {hotel.operationalDate.split('-').reverse().join('/')}
-              </span>
-            </div>
+            <button
+              type="button"
+              onClick={closeCash}
+              className="h-9 px-3 rounded-lg border border-slate-800 bg-slate-900 text-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-800"
+              title="Fechar caixa do dia operacional"
+            >
+              <Wallet className="w-3.5 h-3.5" />
+              Fechar caixa
+              <span className="text-slate-300 font-normal tabular-nums">{opDateBR}</span>
+            </button>
             <button
               type="button"
               className="relative h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50"

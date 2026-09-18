@@ -1,6 +1,6 @@
 /**
  * Auditoria Life — PMS Hotel
- * Checklist diário POP-FIN-001 + uploads Hits/Getnet/Santander
+ * Checklist POP-FIN-001 + Hits×Getnet + Getnet×Santander + taxas por perfil
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -11,15 +11,14 @@ import {
   FileText,
   Link2,
   Loader2,
-  Plus,
   Scale,
   Settings2,
-  Trash2,
   Upload,
   X,
   XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { TaxasFeeMatrix } from '@/components/uos/TaxasFeeMatrix';
 import {
   parseHitsText,
   parseGetnetText,
@@ -40,7 +39,6 @@ import {
   DEFAULT_FEES,
   CHECKLIST,
   LS_AUDIT,
-  LS_FEES,
 } from '@/lib/auditoria-core';
 
 type TabId = 'checklist' | 'hits_getnet' | 'getnet_bank' | 'taxas';
@@ -72,13 +70,7 @@ export function AuditoriaLifeModule() {
     for (const c of CHECKLIST) init[c.id] = { status: '', notes: '' };
     return init;
   });
-  const [fees, setFees] = useState<FeeRule[]>(() => {
-    try {
-      const raw = localStorage.getItem(LS_FEES);
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return DEFAULT_FEES;
-  });
+  const [fees, setFees] = useState<FeeRule[]>(DEFAULT_FEES);
   const [hits, setHits] = useState<HitsPayment[]>([]);
   const [getnet, setGetnet] = useState<GetnetSale[]>([]);
   const [bank, setBank] = useState<BankLine[]>([]);
@@ -89,9 +81,6 @@ export function AuditoriaLifeModule() {
   useEffect(() => {
     localStorage.setItem(LS_AUDIT, JSON.stringify({ header, answers }));
   }, [header, answers]);
-  useEffect(() => {
-    localStorage.setItem(LS_FEES, JSON.stringify(fees));
-  }, [fees]);
 
   const hitsGetnetMatches = useMemo(() => reconcileHitsGetnet(hits, getnet), [hits, getnet]);
   const bankMatches = useMemo(() => reconcileGetnetBank(getnet, bank, fees), [getnet, bank, fees]);
@@ -323,12 +312,8 @@ export function AuditoriaLifeModule() {
                         <td className="px-3 py-2">
                           <StatusPill side={m.side} />
                         </td>
-                        <td className="px-3 py-2">
-                          {m.hits ? `${formatDateBR(m.hits.date)} · ${m.hits.guest}` : '—'}
-                        </td>
-                        <td className="px-3 py-2">
-                          {m.getnet ? `${formatDateBR(m.getnet.date)} · ${m.getnet.brand}` : '—'}
-                        </td>
+                        <td className="px-3 py-2">{m.hits ? `${formatDateBR(m.hits.date)} · ${m.hits.guest}` : '—'}</td>
+                        <td className="px-3 py-2">{m.getnet ? `${formatDateBR(m.getnet.date)} · ${m.getnet.brand}` : '—'}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{m.hits ? formatBRL(m.hits.net) : '—'}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{m.getnet ? formatBRL(m.getnet.net) : '—'}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{m.delta != null ? formatBRL(m.delta) : '—'}</td>
@@ -345,7 +330,8 @@ export function AuditoriaLifeModule() {
       {tab === 'getnet_bank' && (
         <div className="space-y-3">
           <p className="text-[12px] text-slate-500 max-w-3xl">
-            Antecipação automática: líquido Getnet por data prevista (ou D+1) × créditos Antecipação Getnet no Santander.
+            Antecipação automática: líquido Getnet por data prevista (ou D+1) × créditos Antecipação Getnet no
+            Santander. Usa o <strong>perfil de taxas ativo</strong> (aba Taxas).
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <UploadCard title="Getnet — Vendas Detalhado" count={getnet.length} onFile={(f) => loadFile('getnet', f)} onPaste={() => setPasteOpen('getnet')} />
@@ -388,99 +374,7 @@ export function AuditoriaLifeModule() {
         </div>
       )}
 
-      {tab === 'taxas' && (
-        <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-          <div className="px-4 py-2 border-b bg-slate-50/80 text-[12px] font-semibold flex justify-between">
-            <span>Tabela de taxas</span>
-            <button
-              type="button"
-              onClick={() =>
-                setFees((p) => [
-                  ...p,
-                  { id: `f-${Date.now()}`, label: 'Nova', brand: '*', modality: '*', feePercent: 0, feeFixed: 0, active: true },
-                ])
-              }
-              className="h-7 px-2 rounded-md border text-[11px] inline-flex items-center gap-1"
-            >
-              <Plus className="w-3 h-3" /> Incluir
-            </button>
-          </div>
-          <table className="w-full text-[12px]">
-            <thead className="border-b">
-              <tr className="text-left text-[10px] uppercase text-slate-400">
-                <th className="px-3 py-2">Rótulo</th>
-                <th className="px-3 py-2">Bandeira</th>
-                <th className="px-3 py-2">Modalidade</th>
-                <th className="px-3 py-2 text-right">%</th>
-                <th className="px-3 py-2">Ativo</th>
-                <th className="px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {fees.map((f) => (
-                <tr key={f.id}>
-                  <td className="px-3 py-1.5">
-                    <input
-                      className={inputCls}
-                      value={f.label}
-                      onChange={(e) => setFees((p) => p.map((x) => (x.id === f.id ? { ...x, label: e.target.value } : x)))}
-                    />
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <select
-                      className={inputCls}
-                      value={f.brand}
-                      onChange={(e) => setFees((p) => p.map((x) => (x.id === f.id ? { ...x, brand: e.target.value } : x)))}
-                    >
-                      <option value="*">*</option>
-                      <option value="mastercard">Master</option>
-                      <option value="visa">Visa</option>
-                      <option value="elo">Elo</option>
-                    </select>
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <select
-                      className={inputCls}
-                      value={f.modality}
-                      onChange={(e) => setFees((p) => p.map((x) => (x.id === f.id ? { ...x, modality: e.target.value } : x)))}
-                    >
-                      <option value="*">*</option>
-                      <option value="debito">Débito</option>
-                      <option value="credito_vista">Crédito vista</option>
-                      <option value="credito_parcelado">Parcelado</option>
-                    </select>
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <input
-                      type="number"
-                      step="0.01"
-                      className={inputCls + ' text-right'}
-                      value={f.feePercent}
-                      onChange={(e) =>
-                        setFees((p) =>
-                          p.map((x) => (x.id === f.id ? { ...x, feePercent: parseFloat(e.target.value) || 0 } : x))
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <input
-                      type="checkbox"
-                      checked={f.active}
-                      onChange={(e) => setFees((p) => p.map((x) => (x.id === f.id ? { ...x, active: e.target.checked } : x)))}
-                    />
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <button type="button" onClick={() => setFees((p) => p.filter((x) => x.id !== f.id))} className="text-rose-600">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {tab === 'taxas' && <TaxasFeeMatrix onActiveFeesChange={setFees} />}
 
       {pasteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -539,7 +433,7 @@ function UploadCard({
           <Upload className="w-3.5 h-3.5" /> Upload
           <input
             type="file"
-            accept=".pdf,.csv,.txt,application/pdf,text/csv,text/plain"
+            accept=".csv,.txt,text/csv,text/plain"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];

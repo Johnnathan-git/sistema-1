@@ -97,7 +97,6 @@ export function TaxasFeeMatrix({ hotelId, hotelName, onActiveFeesChange }: Props
   const [draft, setDraft] = useState<FeeRule[] | null>(null);
   const editing = draft !== null;
 
-  // Troca de hotel: recarrega taxas daquele hotel
   useEffect(() => {
     const loaded = loadFees(hotelId);
     setFees(loaded);
@@ -147,9 +146,6 @@ export function TaxasFeeMatrix({ hotelId, hotelName, onActiveFeesChange }: Props
     setDraft(defaultFeesForHotel(hotelId));
     toast.message('Valores padrão carregados — clique em Salvar para gravar');
   };
-
-  const inputCls =
-    'w-full h-8 rounded-md border border-slate-200 bg-white px-2 text-[12px] outline-none focus:ring-2 focus:ring-blue-500/20';
 
   return (
     <div className="space-y-3">
@@ -211,48 +207,57 @@ export function TaxasFeeMatrix({ hotelId, hotelName, onActiveFeesChange }: Props
           )}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-[12px] min-w-[520px]">
+          <table className="w-full text-[12px] table-fixed min-w-[560px]">
+            <colgroup>
+              <col style={{ width: '22%' }} />
+              <col style={{ width: '19.5%' }} />
+              <col style={{ width: '19.5%' }} />
+              <col style={{ width: '19.5%' }} />
+              <col style={{ width: '19.5%' }} />
+            </colgroup>
             <thead>
-              <tr className="border-b text-left text-[10px] uppercase text-slate-400">
-                <th className="px-3 py-2 sticky left-0 bg-white">Transação</th>
+              <tr className="border-b text-[10px] uppercase text-slate-400">
+                <th className="px-3 py-2.5 text-left font-semibold sticky left-0 bg-white">Transação</th>
                 {BRANDS.map((b) => (
                   <th
                     key={b.key}
-                    className="px-2 py-2 text-center font-semibold text-slate-600 normal-case tracking-normal text-[11px]"
+                    className="px-2 py-2.5 text-center font-semibold text-slate-600 normal-case tracking-normal text-[12px]"
                   >
                     {b.label}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-slate-100">
               {MODS.map((mod) => (
-                <tr key={mod.key} className="hover:bg-slate-50/50">
-                  <td className="px-3 py-1.5 font-medium text-slate-700 sticky left-0 bg-white whitespace-nowrap">
+                <tr key={mod.key} className="hover:bg-slate-50/60">
+                  <td className="px-3 py-2 font-medium text-slate-700 sticky left-0 bg-white whitespace-nowrap">
                     {mod.label}
                   </td>
                   {BRANDS.map((b) => {
                     const v = matrix[mod.key]?.[b.key] ?? 0;
                     return (
-                      <td key={b.key} className="px-1.5 py-1">
+                      <td key={b.key} className="px-2 py-1.5 text-center align-middle">
                         {editing ? (
-                          <div className="relative">
+                          <div className="inline-flex items-center justify-center gap-0.5 max-w-[100px] mx-auto">
                             <input
                               type="number"
                               step="0.01"
                               min={0}
-                              className={cn(inputCls, 'text-right tabular-nums pr-5 h-8')}
+                              className="w-[72px] h-8 rounded-md border border-slate-200 bg-white px-1.5 text-center text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                               value={v}
                               onChange={(e) => setCell(mod.key, b.key, parseFloat(e.target.value) || 0)}
                             />
-                            <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none">
-                              %
-                            </span>
+                            <span className="text-[10px] text-slate-400">%</span>
                           </div>
                         ) : (
-                          <div className="h-8 flex items-center justify-end px-2 tabular-nums text-slate-800">
-                            {v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
-                          </div>
+                          <span className="inline-block min-w-[4.5rem] text-center tabular-nums text-[13px] text-slate-800">
+                            {v.toLocaleString('pt-BR', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                            %
+                          </span>
                         )}
                       </td>
                     );

@@ -1,4 +1,6 @@
-/* Auditoria Life — core: checklist, parsers, conciliação */
+/* Auditoria Life — core: checklist, parsers, conciliação
+ * PDF: use "Colar texto" (pdftotext) ou upload CSV/TXT — sem pdfjs-dist
+ */
 
 export type MatchSide = 'both' | 'hits_only' | 'getnet_only' | 'value_diff';
 
@@ -74,7 +76,6 @@ export interface BankMatchRow {
 }
 
 export const LS_AUDIT = 'pms-auditoria-life-v1';
-/** v2 força recarga das taxas Final ao Cliente % */
 export const LS_FEES = 'pms-auditoria-fees-v2';
 
 export const CHECKLIST: { id: number; title: string; bullets: string[]; fridayOnly?: boolean }[] = [
@@ -93,7 +94,7 @@ export const CHECKLIST: { id: number; title: string; bullets: string[]; fridayOn
   { id: 13, title: 'Conciliação do depósito semanal', fridayOnly: true, bullets: ['Concilia o valor depositado (comprovante) com o relatório "Pagamentos efetuados" no Hits do período.', 'Caso haja divergência: contata o responsável para resolver.', 'Caso não haja divergência: segue o fluxo normal da auditoria.'] },
 ];
 
-/** Final ao Cliente % = MDR bruta + TX D+1 (antecipação) — tabelas Santander */
+/** Final ao Cliente % = MDR + TX D+1 (antecipação) */
 export const DEFAULT_FEES: FeeRule[] = [
   { id: 'visa-deb', label: 'Visa Débito', brand: 'visa', modality: 'debito', feePercent: 0.79, feeFixed: 0, active: true },
   { id: 'visa-av', label: 'Visa Crédito à vista', brand: 'visa', modality: 'credito_vista', feePercent: 2.97, feeFixed: 0, active: true },
@@ -171,29 +172,13 @@ function moneyEq(a: number, b: number, tol = 0.05) {
   return Math.abs(a - b) <= tol;
 }
 
+/** Lê CSV/TXT. PDF não suportado no browser sem pdfjs — use Colar texto. */
 export async function fileToText(file: File): Promise<string> {
   const name = file.name.toLowerCase();
-  if (name.endsWith('.csv') || name.endsWith('.txt') || file.type.startsWith('text/')) return file.text();
   if (name.endsWith('.pdf') || file.type === 'application/pdf') {
-    try {
-      // @ts-expect-error optional
-      const pdfjs = await import('pdfjs-dist');
-      try {
-        // @ts-expect-error
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
-      } catch {}
-      const data = new Uint8Array(await file.arrayBuffer());
-      const doc = await pdfjs.getDocument({ data }).promise;
-      const parts: string[] = [];
-      for (let i = 1; i <= doc.numPages; i++) {
-        const page = await doc.getPage(i);
-        const content = await page.getTextContent();
-        parts.push(content.items.map((it: { str?: string }) => it.str || '').join(' '));
-      }
-      return parts.join('\n');
-    } catch {
-      throw new Error('Não foi possível ler o PDF. Use CSV/TXT ou cole o texto (pdftotext).');
-    }
+    throw new Error(
+      'PDF não é lido automaticamente neste ambiente. Exporte como TXT/CSV ou use "Colar texto" (pdftotext).'
+    );
   }
   return file.text();
 }
@@ -206,22 +191,52 @@ export function parseHitsText(raw: string): HitsPayment[] {
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    if (/^(Cielo|PIX|Dinheiro|Getnet|Stone|Rede|Elo|Visa|Master)/i.test(trimmed) && !/^\d{2}\/\d{2}/.test(trimmed) && !/\$/.test(trimmed)) {
+    if (
+      /^(Cielo|PIX|Dinheiro|Getnet|Stone|Rede|Elo|Visa|Master)/i.test(trimmed) &&
+      !/^\d{2}\/\d{2}/.test(trimmed) &&
+      !/\$/.test(trimmed)
+    ) {
       method = trimmed.replace(/\s+/g, ' ').trim();
       continue;
     }
     if (/^Sub Total/i.test(trimmed)) continue;
-    const m = trimmed.match(/^(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+(\$?[\d.]+,\d{2})\s+(\$?[\d.]+,\d{2})\s+(\$?[\d.]+,\d{2})\s+(\$?[\d.]+,\d{2})\s*$/);
+    const m = trimmed.match(
+      /^(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+(\$?[\d.]+,\d{2})\s+(\$?[\d.]+,\d{2})\s+(\$?[\d.]+,\d{2})\s+(\$?[\d.]+,\d{2})\s*$/
+    );
     if (m) {
-      out.push({ id: `h-${++idx}`, date: toISODate(m[1]), pgto: m[2], op: m[3], due: toISODate(m[4]), guest: m[5].trim(), method, amount: parseBRNumber(m[6]), fee: parseBRNumber(m[8]), net: parseBRNumber(m[9]) });
+      out.push({
+        id: `h-${++idx}`,
+        date: toISODate(m[1]),
+        pgto: m[2],
+        op: m[3],
+        due: toISODate(m[4]),
+        guest: m[5].trim(),
+        method,
+        amount: parseBRNumber(m[6]),
+        fee: parseBRNumber(m[8]),
+        net: parseBRNumber(m[9]),
+      });
       continue;
     }
-    const loose = trimmed.match(/^(\d{2}\/\d{2}\/\d{2,4})\s+(#\d+)\s+([A-Z])\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+)$/);
+    const loose = trimmed.match(
+      /^(\d{2}\/\d{2}\/\d{2,4})\s+(#\d+)\s+([A-Z])\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+)$/
+    );
     if (loose) {
       const money = [...loose[5].matchAll(/\$?\s*([\d.]+,\d{2})/g)].map((x) => parseBRNumber(x[1]));
       if (money.length >= 3) {
         const guest = loose[5].replace(/\$?\s*[\d.]+,\d{2}/g, '').replace(/\s+/g, ' ').trim();
-        out.push({ id: `h-${++idx}`, date: toISODate(loose[1]), pgto: loose[2], op: loose[3], due: toISODate(loose[4]), guest, method, amount: money[0], fee: money.length >= 4 ? money[2] : 0, net: money[money.length - 1] });
+        out.push({
+          id: `h-${++idx}`,
+          date: toISODate(loose[1]),
+          pgto: loose[2],
+          op: loose[3],
+          due: toISODate(loose[4]),
+          guest,
+          method,
+          amount: money[0],
+          fee: money.length >= 4 ? money[2] : 0,
+          net: money[money.length - 1],
+        });
       }
     }
   }
@@ -244,18 +259,51 @@ export function parseGetnetText(raw: string): GetnetSale[] {
     if (!brandM && amounts.length < 2) return;
     if (!statusM && amounts.length < 2) return;
     const saleDate = dates[0] ? toISODate(dates[0][1]) : '';
-    const settleDate = dates.length > 1 ? toISODate(dates[dates.length - 1][1]) : saleDate ? addDaysISO(saleDate, 1) : '';
-    let gross = 0, fee = 0, net = 0;
-    if (amounts.length >= 3) { gross = Math.abs(amounts[0]); fee = Math.abs(amounts[1]); net = Math.abs(amounts[2]); }
-    else if (amounts.length === 2) { gross = Math.abs(amounts[0]); net = Math.abs(amounts[1]); fee = Math.max(0, gross - net); }
-    else if (amounts.length === 1) { gross = net = Math.abs(amounts[0]); }
+    const settleDate =
+      dates.length > 1 ? toISODate(dates[dates.length - 1][1]) : saleDate ? addDaysISO(saleDate, 1) : '';
+    let gross = 0,
+      fee = 0,
+      net = 0;
+    if (amounts.length >= 3) {
+      gross = Math.abs(amounts[0]);
+      fee = Math.abs(amounts[1]);
+      net = Math.abs(amounts[2]);
+    } else if (amounts.length === 2) {
+      gross = Math.abs(amounts[0]);
+      net = Math.abs(amounts[1]);
+      fee = Math.max(0, gross - net);
+    } else if (amounts.length === 1) {
+      gross = net = Math.abs(amounts[0]);
+    }
     if (!gross && !net) return;
-    out.push({ id: `g-${++idx}`, date: saleDate, time: dates[0]?.[2], brand: brandM?.[1] || '', modality: modM?.[1] || '', form: formM?.[1] || '', status: statusM?.[1] || '', installments: parcM ? Number(parcM[1]) : 1, settleDate, auth: authM?.[1] || '', cv: '', terminal: '', card: '', gross, fee, net });
+    out.push({
+      id: `g-${++idx}`,
+      date: saleDate,
+      time: dates[0]?.[2],
+      brand: brandM?.[1] || '',
+      modality: modM?.[1] || '',
+      form: formM?.[1] || '',
+      status: statusM?.[1] || '',
+      installments: parcM ? Number(parcM[1]) : 1,
+      settleDate,
+      auth: authM?.[1] || '',
+      cv: '',
+      terminal: '',
+      card: '',
+      gross,
+      fee,
+      net,
+    });
   };
   if (blocks.length > 1) for (const b of blocks) pushFromChunk(b);
   else for (const p of raw.split(/(?=\b(?:Negada|Aprovada|Autorizada)\b)/i)) pushFromChunk(p);
   const seen = new Set<string>();
-  return out.filter((s) => { const k = `${s.date}|${s.auth}|${s.net}|${s.gross}|${s.status}`; if (seen.has(k)) return false; seen.add(k); return true; });
+  return out.filter((s) => {
+    const k = `${s.date}|${s.auth}|${s.net}|${s.gross}|${s.status}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 export function parseSantanderText(raw: string): BankLine[] {
@@ -269,56 +317,99 @@ export function parseSantanderText(raw: string): BankLine[] {
     if (!pendingDate || !pendingAmount) return;
     const d = desc.toLowerCase();
     let kind: BankLine['kind'] = 'other';
-    if (d.includes('getnet') || d.includes('antecipacao getnet') || d.includes('antecipação getnet')) kind = 'getnet';
+    if (d.includes('getnet') || d.includes('antecipacao getnet') || d.includes('antecipação getnet'))
+      kind = 'getnet';
     else if (d.includes('cielo')) kind = 'cielo';
     else if (d.includes('pix')) kind = 'pix';
     else if (pendingAmount < 0) kind = 'debit_out';
-    out.push({ id: `b-${++idx}`, date: pendingDate, description: desc.trim() || 'Crédito', amount: pendingAmount, ref: pendingRef, kind });
-    pendingDate = ''; pendingAmount = 0; pendingRef = '';
+    out.push({
+      id: `b-${++idx}`,
+      date: pendingDate,
+      description: desc.trim() || 'Crédito',
+      amount: pendingAmount,
+      ref: pendingRef,
+      kind,
+    });
+    pendingDate = '';
+    pendingAmount = 0;
+    pendingRef = '';
   };
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const m = line.match(/^\s*(\d{2}\/\d{2}\/\d{4})(?:\s+(.+?))?\s{2,}(-?[\d.]+,\d{2})\s+([\d.]+,\d{2})\s*$/);
+    const m = line.match(
+      /^\s*(\d{2}\/\d{2}\/\d{4})(?:\s+(.+?))?\s{2,}(-?[\d.]+,\d{2})\s+([\d.]+,\d{2})\s*$/
+    );
     if (m) {
       if (pendingDate) flush(pendingRef || 'Movimento');
       pendingDate = toISODate(m[1]);
       const mid = (m[2] || '').trim();
       pendingRef = '';
       if (/^\d+$/.test(mid.replace(/\s/g, ''))) pendingRef = mid;
-      else if (mid) { pendingAmount = parseBRNumber(m[3]); flush(mid); continue; }
+      else if (mid) {
+        pendingAmount = parseBRNumber(m[3]);
+        flush(mid);
+        continue;
+      }
       pendingAmount = parseBRNumber(m[3]);
       continue;
     }
     const descOnly = line.trim();
-    if (pendingDate && descOnly && !/^\d{2}\/\d{2}/.test(descOnly) && !/Saldo|Página|Santander/i.test(descOnly)) flush(descOnly);
+    if (
+      pendingDate &&
+      descOnly &&
+      !/^\d{2}\/\d{2}/.test(descOnly) &&
+      !/Saldo|Página|Santander/i.test(descOnly)
+    )
+      flush(descOnly);
   }
   if (pendingDate) flush(pendingRef || 'Movimento');
   return out;
 }
 
 export function reconcileHitsGetnet(hits: HitsPayment[], getnet: GetnetSale[]): HitsGetnetMatch[] {
-  const gPool = getnet.filter((g) => /aprovada|autorizada/i.test(g.status) || !g.status).filter((g) => g.net > 0 || g.gross > 0).map((g) => ({ g, used: false }));
+  const gPool = getnet
+    .filter((g) => /aprovada|autorizada/i.test(g.status) || !g.status)
+    .filter((g) => g.net > 0 || g.gross > 0)
+    .map((g) => ({ g, used: false }));
   const matches: HitsGetnetMatch[] = [];
   let i = 0;
   for (const h of hits) {
-    if (/dinheiro|pix/i.test(h.method)) { matches.push({ id: `m-${++i}`, side: 'hits_only', hits: h }); continue; }
-    let best = -1, bestScore = Infinity;
+    if (/dinheiro|pix/i.test(h.method)) {
+      matches.push({ id: `m-${++i}`, side: 'hits_only', hits: h });
+      continue;
+    }
+    let best = -1;
+    let bestScore = Infinity;
     for (let j = 0; j < gPool.length; j++) {
       if (gPool[j].used) continue;
       const g = gPool[j].g;
-      const dayDiff = Math.abs((new Date(h.date + 'T12:00:00').getTime() - new Date(g.date + 'T12:00:00').getTime()) / 86400000);
+      const dayDiff = Math.abs(
+        (new Date(h.date + 'T12:00:00').getTime() - new Date(g.date + 'T12:00:00').getTime()) / 86400000
+      );
       if (dayDiff > 1) continue;
-      const score = Math.min(Math.abs(h.net - g.net), Math.abs(h.amount - g.gross)) + dayDiff * 0.01;
-      if (score < bestScore) { bestScore = score; best = j; }
+      const score =
+        Math.min(Math.abs(h.net - g.net), Math.abs(h.amount - g.gross)) + dayDiff * 0.01;
+      if (score < bestScore) {
+        bestScore = score;
+        best = j;
+      }
     }
     if (best >= 0 && bestScore <= 1.0) {
       const g = gPool[best].g;
       gPool[best].used = true;
-      matches.push({ id: `m-${++i}`, side: moneyEq(h.net, g.net) ? 'both' : 'value_diff', hits: h, getnet: g, delta: h.net - g.net });
+      matches.push({
+        id: `m-${++i}`,
+        side: moneyEq(h.net, g.net) ? 'both' : 'value_diff',
+        hits: h,
+        getnet: g,
+        delta: h.net - g.net,
+      });
     } else matches.push({ id: `m-${++i}`, side: 'hits_only', hits: h });
   }
   for (const { g, used } of gPool) {
-    if (!used && (g.net > 0 || g.gross > 0) && /aprovada|autorizada/i.test(g.status || 'x')) matches.push({ id: `m-${++i}`, side: 'getnet_only', getnet: g });
+    if (!used && (g.net > 0 || g.gross > 0) && /aprovada|autorizada/i.test(g.status || 'x')) {
+      matches.push({ id: `m-${++i}`, side: 'getnet_only', getnet: g });
+    }
   }
   return matches;
 }
@@ -326,12 +417,22 @@ export function reconcileHitsGetnet(hits: HitsPayment[], getnet: GetnetSale[]): 
 function applyFeeRules(sale: GetnetSale, rules: FeeRule[]) {
   if (sale.fee > 0 && sale.net > 0) return { fee: sale.fee, net: sale.net };
   const b = sale.brand.toLowerCase();
-  const brand = b.includes('master') ? 'mastercard' : b.includes('visa') ? 'visa' : b.includes('elo') ? 'elo' : b.includes('amex') || b.includes('american') ? 'amex' : '*';
+  const brand = b.includes('master')
+    ? 'mastercard'
+    : b.includes('visa')
+      ? 'visa'
+      : b.includes('elo')
+        ? 'elo'
+        : b.includes('amex') || b.includes('american')
+          ? 'amex'
+          : '*';
   const form = `${sale.modality} ${sale.form}`.toLowerCase();
   let modality = 'credito_vista';
   if (/débito|debito/.test(form)) modality = 'debito';
-  else if (sale.installments >= 2 && sale.installments <= 6) modality = `parcelado_${sale.installments}`;
-  else if (/parcel/.test(form)) modality = `parcelado_${Math.min(6, Math.max(2, sale.installments || 2))}`;
+  else if (sale.installments >= 2 && sale.installments <= 6)
+    modality = `parcelado_${sale.installments}`;
+  else if (/parcel/.test(form))
+    modality = `parcelado_${Math.min(6, Math.max(2, sale.installments || 2))}`;
   const rule =
     rules.find((r) => r.active && r.brand === brand && r.modality === modality) ||
     rules.find((r) => r.active && r.brand === brand && r.modality === 'credito_vista') ||
@@ -341,11 +442,17 @@ function applyFeeRules(sale: GetnetSale, rules: FeeRule[]) {
   return { fee, net: sale.gross - fee };
 }
 
-export function reconcileGetnetBank(getnet: GetnetSale[], bank: BankLine[], fees: FeeRule[]): BankMatchRow[] {
-  const sales = getnet.filter((g) => /aprovada|autorizada/i.test(g.status) || (!g.status && g.gross > 0)).map((g) => {
-    const { net } = applyFeeRules(g, fees);
-    return { ...g, effectiveNet: net, settle: g.settleDate || addDaysISO(g.date, 1) };
-  });
+export function reconcileGetnetBank(
+  getnet: GetnetSale[],
+  bank: BankLine[],
+  fees: FeeRule[]
+): BankMatchRow[] {
+  const sales = getnet
+    .filter((g) => /aprovada|autorizada/i.test(g.status) || (!g.status && g.gross > 0))
+    .map((g) => {
+      const { net } = applyFeeRules(g, fees);
+      return { ...g, effectiveNet: net, settle: g.settleDate || addDaysISO(g.date, 1) };
+    });
   const bySettle = new Map<string, { net: number; ids: string[] }>();
   for (const s of sales) {
     const prev = bySettle.get(s.settle) || { net: 0, ids: [] };
@@ -374,7 +481,17 @@ export function reconcileGetnetBank(getnet: GetnetSale[], bank: BankLine[], fees
     else if (exp.net > 0 && bankCredit === 0) status = 'faltando_banco';
     else if (!moneyEq(exp.net, bankCredit, 1.0)) status = 'divergencia';
     if (exp.net === 0 && bankCredit === 0) continue;
-    rows.push({ id: `bm-${++i}`, settleDate: day, expectedNet: exp.net, bankCredit, delta, status, getnetIds: exp.ids, bankIds: byBankDay.get(day)?.ids || [], detail: status === 'ok' ? 'OK' : status });
+    rows.push({
+      id: `bm-${++i}`,
+      settleDate: day,
+      expectedNet: exp.net,
+      bankCredit,
+      delta,
+      status,
+      getnetIds: exp.ids,
+      bankIds: byBankDay.get(day)?.ids || [],
+      detail: status === 'ok' ? 'OK' : status,
+    });
   }
   return rows;
 }

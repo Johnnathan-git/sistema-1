@@ -1,11 +1,12 @@
 /**
- * Auditoria Life — PMS Hotel
- * Checklist POP-FIN-001 + Hits×Getnet + Getnet×Santander + taxas por perfil
+ * Auditoria Life — seletor de hotel → checklist + conciliações + taxas
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   AlertTriangle,
+  ArrowLeft,
+  Building2,
   CheckCircle2,
   ClipboardCheck,
   FileText,
@@ -38,17 +39,106 @@ import {
   type BankMatchRow,
   DEFAULT_FEES,
   CHECKLIST,
-  LS_AUDIT,
 } from '@/lib/auditoria-core';
+import {
+  AUDIT_HOTELS,
+  LS_HOTEL,
+  auditStorageKey,
+  defaultFeesForHotel,
+  feesStorageKey,
+  type HotelId,
+} from '@/lib/auditoria-hotels';
 
 type TabId = 'checklist' | 'hits_getnet' | 'getnet_bank' | 'taxas';
 type AuditStatus = 'conforme' | 'divergencia' | 'na' | '';
 
+function loadHotel(): HotelId | null {
+  try {
+    const v = localStorage.getItem(LS_HOTEL);
+    if (v === 'santa-eliza' || v === 'varshana') return v;
+  } catch {}
+  return null;
+}
+
 export function AuditoriaLifeModule() {
+  const [hotelId, setHotelId] = useState<HotelId | null>(() => loadHotel());
+
+  if (!hotelId) {
+    return (
+      <HotelPicker
+        onSelect={(id) => {
+          localStorage.setItem(LS_HOTEL, id);
+          setHotelId(id);
+        }}
+      />
+    );
+  }
+
+  const hotel = AUDIT_HOTELS.find((h) => h.id === hotelId)!;
+
+  return (
+    <AuditoriaHotelWorkspace
+      hotelId={hotelId}
+      hotelName={hotel.name}
+      onChangeHotel={() => {
+        localStorage.removeItem(LS_HOTEL);
+        setHotelId(null);
+      }}
+    />
+  );
+}
+
+function HotelPicker({ onSelect }: { onSelect: (id: HotelId) => void }) {
+  return (
+    <div className="max-w-3xl mx-auto space-y-6 pt-4">
+      <div className="text-center space-y-1">
+        <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white mb-2">
+          <ClipboardCheck className="w-6 h-6" />
+        </div>
+        <h2 className="text-[20px] font-semibold text-slate-900">Auditoria Life</h2>
+        <p className="text-[13px] text-slate-500">Selecione o hotel para abrir o checklist e as conciliações</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {AUDIT_HOTELS.map((h) => (
+          <button
+            key={h.id}
+            type="button"
+            onClick={() => onSelect(h.id)}
+            className="text-left rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-slate-400 hover:shadow-md transition-all group"
+          >
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center group-hover:bg-slate-900 group-hover:text-white transition-colors">
+                <Building2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold text-slate-900">{h.name}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{h.city}</p>
+                <p className="text-[12px] text-slate-500 mt-2 leading-relaxed">{h.description}</p>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AuditoriaHotelWorkspace({
+  hotelId,
+  hotelName,
+  onChangeHotel,
+}: {
+  hotelId: HotelId;
+  hotelName: string;
+  onChangeHotel: () => void;
+}) {
   const [tab, setTab] = useState<TabId>('checklist');
+  const storageKey = auditStorageKey(hotelId);
+
   const [header, setHeader] = useState(() => {
     try {
-      const raw = localStorage.getItem(LS_AUDIT);
+      const raw = localStorage.getItem(storageKey);
       if (raw) return JSON.parse(raw).header;
     } catch {}
     return {
@@ -63,14 +153,51 @@ export function AuditoriaLifeModule() {
   });
   const [answers, setAnswers] = useState<Record<number, { status: AuditStatus; notes: string }>>(() => {
     try {
-      const raw = localStorage.getItem(LS_AUDIT);
+      const raw = localStorage.getItem(storageKey);
       if (raw) return JSON.parse(raw).answers || {};
     } catch {}
     const init: Record<number, { status: AuditStatus; notes: string }> = {};
     for (const c of CHECKLIST) init[c.id] = { status: '', notes: '' };
     return init;
   });
-  const [fees, setFees] = useState<FeeRule[]>(DEFAULT_FEES);
+
+  // Recarrega checklist ao trocar hotel (via remount do parent, mas reforçamos)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data.header) setHeader(data.header);
+        if (data.answers) setAnswers(data.answers);
+      } else {
+        setHeader({
+          date: todayISO(),
+          analyst: '',
+          period: 'Dia completo',
+          sentToGoAt: '',
+          analystSign: '',
+          goSign: '',
+          goReceivedAt: '',
+        });
+        const init: Record<number, { status: AuditStatus; notes: string }> = {};
+        for (const c of CHECKLIST) init[c.id] = { status: '', notes: '' };
+        setAnswers(init);
+      }
+    } catch {}
+    setTab('checklist');
+    setHits([]);
+    setGetnet([]);
+    setBank([]);
+  }, [hotelId, storageKey]);
+
+  const [fees, setFees] = useState<FeeRule[]>(() => {
+    try {
+      const raw = localStorage.getItem(feesStorageKey(hotelId));
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return defaultFeesForHotel(hotelId);
+  });
+
   const [hits, setHits] = useState<HitsPayment[]>([]);
   const [getnet, setGetnet] = useState<GetnetSale[]>([]);
   const [bank, setBank] = useState<BankLine[]>([]);
@@ -79,8 +206,8 @@ export function AuditoriaLifeModule() {
   const [pasteText, setPasteText] = useState('');
 
   useEffect(() => {
-    localStorage.setItem(LS_AUDIT, JSON.stringify({ header, answers }));
-  }, [header, answers]);
+    localStorage.setItem(storageKey, JSON.stringify({ header, answers }));
+  }, [header, answers, storageKey]);
 
   const hitsGetnetMatches = useMemo(() => reconcileHitsGetnet(hits, getnet), [hits, getnet]);
   const bankMatches = useMemo(() => reconcileGetnetBank(getnet, bank, fees), [getnet, bank, fees]);
@@ -109,7 +236,7 @@ export function AuditoriaLifeModule() {
       } else {
         const rows = parseSantanderText(text);
         setBank(rows);
-        toast.success(`Santander: ${rows.length} linha(s)`);
+        toast.success(`Extrato: ${rows.length} linha(s)`);
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Falha ao ler arquivo');
@@ -128,7 +255,7 @@ export function AuditoriaLifeModule() {
       toast.success('Getnet processado');
     } else {
       setBank(parseSantanderText(pasteText));
-      toast.success('Santander processado');
+      toast.success('Extrato processado');
     }
     setPasteOpen(null);
     setPasteText('');
@@ -146,11 +273,19 @@ export function AuditoriaLifeModule() {
     <div className="space-y-4 pb-10">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
+          <button
+            type="button"
+            onClick={onChangeHotel}
+            className="text-[11px] text-slate-500 hover:text-slate-800 inline-flex items-center gap-1 mb-1"
+          >
+            <ArrowLeft className="w-3 h-3" /> Trocar hotel
+          </button>
           <h2 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
-            <ClipboardCheck className="w-4 h-4 text-slate-500" /> Auditoria Life
+            <ClipboardCheck className="w-4 h-4 text-slate-500" />
+            Auditoria · {hotelName}
           </h2>
           <p className="text-[12px] text-slate-500 mt-0.5">
-            POP-FIN-001 · Checklist · Hits × Getnet · Getnet × Santander
+            Checklist · Hits × Getnet · Getnet × banco · Taxas deste hotel
           </p>
         </div>
         {busy && (
@@ -165,7 +300,7 @@ export function AuditoriaLifeModule() {
           [
             { id: 'checklist' as const, label: 'Checklist', icon: ClipboardCheck },
             { id: 'hits_getnet' as const, label: 'Hits × Getnet', icon: Link2 },
-            { id: 'getnet_bank' as const, label: 'Getnet × Santander', icon: Scale },
+            { id: 'getnet_bank' as const, label: 'Getnet × Banco', icon: Scale },
             { id: 'taxas' as const, label: 'Taxas', icon: Settings2 },
           ] as const
         ).map(({ id, label, icon: Icon }) => (
@@ -258,7 +393,7 @@ export function AuditoriaLifeModule() {
 
           <button
             type="button"
-            onClick={() => toast.success('Auditoria salva (localStorage)')}
+            onClick={() => toast.success(`Auditoria de ${hotelName} salva`)}
             className="h-9 px-4 rounded-lg bg-slate-900 text-white text-[12px] font-semibold"
           >
             Salvar auditoria do dia
@@ -330,12 +465,11 @@ export function AuditoriaLifeModule() {
       {tab === 'getnet_bank' && (
         <div className="space-y-3">
           <p className="text-[12px] text-slate-500 max-w-3xl">
-            Antecipação automática: líquido Getnet por data prevista (ou D+1) × créditos Antecipação Getnet no
-            Santander. Usa o <strong>perfil de taxas ativo</strong> (aba Taxas).
+            Líquido esperado usa as <strong>taxas deste hotel</strong>. Antecipação D+1 × créditos no extrato.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <UploadCard title="Getnet — Vendas Detalhado" count={getnet.length} onFile={(f) => loadFile('getnet', f)} onPaste={() => setPasteOpen('getnet')} />
-            <UploadCard title="Extrato Santander" count={bank.length} onFile={(f) => loadFile('bank', f)} onPaste={() => setPasteOpen('bank')} />
+            <UploadCard title="Extrato bancário" count={bank.length} onFile={(f) => loadFile('bank', f)} onPaste={() => setPasteOpen('bank')} />
           </div>
           <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
             <table className="w-full text-[12px]">
@@ -352,7 +486,7 @@ export function AuditoriaLifeModule() {
                 {bankMatches.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
-                      Envie Getnet + Santander
+                      Envie Getnet + extrato
                     </td>
                   </tr>
                 ) : (
@@ -374,7 +508,9 @@ export function AuditoriaLifeModule() {
         </div>
       )}
 
-      {tab === 'taxas' && <TaxasFeeMatrix onActiveFeesChange={setFees} />}
+      {tab === 'taxas' && (
+        <TaxasFeeMatrix hotelId={hotelId} hotelName={hotelName} onActiveFeesChange={setFees} />
+      )}
 
       {pasteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -390,7 +526,7 @@ export function AuditoriaLifeModule() {
                 className="w-full min-h-[200px] rounded-lg border p-3 text-[12px] font-mono"
                 value={pasteText}
                 onChange={(e) => setPasteText(e.target.value)}
-                placeholder="Cole o texto extraído do PDF (pdftotext) ou CSV…"
+                placeholder="Cole o texto extraído do PDF ou CSV…"
               />
             </div>
             <div className="px-5 py-3 border-t flex justify-end gap-2">

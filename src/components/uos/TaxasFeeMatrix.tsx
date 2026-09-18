@@ -1,20 +1,17 @@
 /**
- * Matriz de taxas: linhas = modalidade, colunas = bandeira.
- * Perfis por hotel (ex.: Santander Life, outro hotel com taxa de link).
+ * Matriz de taxas por hotel.
+ * Visualização bloqueada por padrão → Editar → Salvar / Cancelar.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Copy, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Check, Pencil, RotateCcw, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { DEFAULT_FEES, type FeeRule } from '@/lib/auditoria-core';
-
-export interface FeeProfile {
-  id: string;
-  name: string;
-  hotelLabel: string;
-  channel: 'maquina' | 'link' | 'misto';
-  fees: FeeRule[];
-}
+import type { FeeRule } from '@/lib/auditoria-core';
+import {
+  type HotelId,
+  defaultFeesForHotel,
+  feesStorageKey,
+} from '@/lib/auditoria-hotels';
 
 const BRANDS = [
   { key: 'visa', label: 'Visa' },
@@ -32,9 +29,6 @@ const MODS = [
   { key: 'parcelado_5', label: 'Parcelado 5x' },
   { key: 'parcelado_6', label: 'Parcelado 6x' },
 ] as const;
-
-const LS_PROFILES = 'pms-auditoria-fee-profiles-v1';
-const LS_ACTIVE = 'pms-auditoria-fee-active-v1';
 
 function buildLabel(brand: string, mod: string) {
   const b =
@@ -61,14 +55,14 @@ function feesToMatrix(fees: FeeRule[]): Record<string, Record<string, number>> {
   return m;
 }
 
-function matrixToFees(matrix: Record<string, Record<string, number>>): FeeRule[] {
+function matrixToFees(matrix: Record<string, Record<string, number>>, hotelId: HotelId): FeeRule[] {
   const out: FeeRule[] = [];
   for (const mod of MODS) {
     for (const brand of BRANDS) {
       const pct = matrix[mod.key]?.[brand.key];
       if (pct === undefined || pct === null) continue;
       out.push({
-        id: `${brand.key}-${mod.key}`,
+        id: `${hotelId}-${brand.key}-${mod.key}`,
         label: buildLabel(brand.key, mod.key),
         brand: brand.key,
         modality: mod.key,
@@ -81,126 +75,77 @@ function matrixToFees(matrix: Record<string, Record<string, number>>): FeeRule[]
   return out;
 }
 
-function defaultProfile(): FeeProfile {
-  return {
-    id: 'santander-life',
-    name: 'Santander · Final ao Cliente %',
-    hotelLabel: 'Life / Santa Eliza',
-    channel: 'maquina',
-    fees: DEFAULT_FEES,
-  };
-}
-
-function emptyMatrix(): Record<string, Record<string, number>> {
-  const m: Record<string, Record<string, number>> = {};
-  for (const mod of MODS) {
-    m[mod.key] = {};
-    for (const b of BRANDS) m[mod.key][b.key] = 0;
-  }
-  return m;
+function loadFees(hotelId: HotelId): FeeRule[] {
+  try {
+    const raw = localStorage.getItem(feesStorageKey(hotelId));
+    if (raw) {
+      const parsed = JSON.parse(raw) as FeeRule[];
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    }
+  } catch {}
+  return defaultFeesForHotel(hotelId);
 }
 
 interface Props {
-  /** Notifica o módulo pai com as taxas ativas (para conciliação) */
+  hotelId: HotelId;
+  hotelName: string;
   onActiveFeesChange: (fees: FeeRule[]) => void;
 }
 
-export function TaxasFeeMatrix({ onActiveFeesChange }: Props) {
-  const [profiles, setProfiles] = useState<FeeProfile[]>(() => {
-    try {
-      const raw = localStorage.getItem(LS_PROFILES);
-      if (raw) {
-        const parsed = JSON.parse(raw) as FeeProfile[];
-        if (Array.isArray(parsed) && parsed.length) return parsed;
-      }
-    } catch {}
-    return [defaultProfile()];
-  });
+export function TaxasFeeMatrix({ hotelId, hotelName, onActiveFeesChange }: Props) {
+  const [fees, setFees] = useState<FeeRule[]>(() => loadFees(hotelId));
+  const [draft, setDraft] = useState<FeeRule[] | null>(null);
+  const editing = draft !== null;
 
-  const [activeId, setActiveId] = useState(() => {
-    try {
-      return localStorage.getItem(LS_ACTIVE) || 'santander-life';
-    } catch {
-      return 'santander-life';
-    }
-  });
-
-  const active = profiles.find((p) => p.id === activeId) || profiles[0];
-
-  const matrix = useMemo(() => feesToMatrix(active?.fees || DEFAULT_FEES), [active]);
+  // Troca de hotel: recarrega taxas daquele hotel
+  useEffect(() => {
+    const loaded = loadFees(hotelId);
+    setFees(loaded);
+    setDraft(null);
+    onActiveFeesChange(loaded);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotelId]);
 
   useEffect(() => {
-    localStorage.setItem(LS_PROFILES, JSON.stringify(profiles));
-  }, [profiles]);
+    if (!editing) onActiveFeesChange(fees);
+  }, [fees, editing, onActiveFeesChange]);
 
-  useEffect(() => {
-    localStorage.setItem(LS_ACTIVE, activeId);
-  }, [activeId]);
+  const display = editing ? draft! : fees;
+  const matrix = useMemo(() => feesToMatrix(display), [display]);
 
-  useEffect(() => {
-    if (active?.fees) onActiveFeesChange(active.fees);
-  }, [active, onActiveFeesChange]);
+  const startEdit = () => {
+    setDraft(fees.map((f) => ({ ...f })));
+  };
+
+  const cancelEdit = () => {
+    setDraft(null);
+    toast.message('Edição cancelada');
+  };
+
+  const saveEdit = () => {
+    if (!draft) return;
+    setFees(draft);
+    localStorage.setItem(feesStorageKey(hotelId), JSON.stringify(draft));
+    setDraft(null);
+    onActiveFeesChange(draft);
+    toast.success(`Taxas de ${hotelName} salvas`);
+  };
 
   const setCell = (mod: string, brand: string, value: number) => {
-    setProfiles((prev) =>
-      prev.map((p) => {
-        if (p.id !== activeId) return p;
-        const m = feesToMatrix(p.fees);
-        if (!m[mod]) m[mod] = {};
-        m[mod][brand] = value;
-        return { ...p, fees: matrixToFees(m) };
-      })
-    );
+    if (!draft) return;
+    const m = feesToMatrix(draft);
+    if (!m[mod]) m[mod] = {};
+    m[mod][brand] = value;
+    setDraft(matrixToFees(m, hotelId));
   };
 
-  const addProfile = () => {
-    const id = `perfil-${Date.now()}`;
-    const neu: FeeProfile = {
-      id,
-      name: 'Novo perfil',
-      hotelLabel: 'Hotel',
-      channel: 'link',
-      fees: matrixToFees(emptyMatrix()),
-    };
-    setProfiles((p) => [...p, neu]);
-    setActiveId(id);
-    toast.success('Perfil criado — preencha a matriz');
-  };
-
-  const cloneProfile = () => {
-    if (!active) return;
-    const id = `perfil-${Date.now()}`;
-    setProfiles((p) => [
-      ...p,
-      {
-        ...active,
-        id,
-        name: `${active.name} (cópia)`,
-        fees: active.fees.map((f) => ({ ...f, id: `${f.id}-c` })),
-      },
-    ]);
-    setActiveId(id);
-    toast.success('Perfil duplicado');
-  };
-
-  const removeProfile = () => {
-    if (profiles.length <= 1) {
-      toast.error('Mantenha ao menos um perfil');
+  const resetDefaults = () => {
+    if (!editing) {
+      toast.message('Clique em Editar para restaurar o padrão');
       return;
     }
-    setProfiles((p) => p.filter((x) => x.id !== activeId));
-    setActiveId(profiles.find((x) => x.id !== activeId)!.id);
-  };
-
-  const resetSantander = () => {
-    setProfiles((p) =>
-      p.map((x) => (x.id === activeId ? { ...x, fees: DEFAULT_FEES } : x))
-    );
-    toast.success('Tabela Santander restaurada neste perfil');
-  };
-
-  const updateMeta = (patch: Partial<FeeProfile>) => {
-    setProfiles((p) => p.map((x) => (x.id === activeId ? { ...x, ...patch } : x)));
+    setDraft(defaultFeesForHotel(hotelId));
+    toast.message('Valores padrão carregados — clique em Salvar para gravar');
   };
 
   const inputCls =
@@ -208,70 +153,62 @@ export function TaxasFeeMatrix({ onActiveFeesChange }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="space-y-0.5 text-[12px] min-w-[200px] flex-1">
-            <span className="text-[10px] uppercase text-slate-400 font-semibold">Perfil ativo (hotel / canal)</span>
-            <select
-              className={inputCls + ' h-9'}
-              value={activeId}
-              onChange={(e) => setActiveId(e.target.value)}
-            >
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} · {p.hotelLabel}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="flex flex-wrap gap-1.5">
-            <button type="button" onClick={addProfile} className="h-9 px-2.5 rounded-lg border text-[11px] font-medium inline-flex items-center gap-1">
-              <Plus className="w-3.5 h-3.5" /> Novo perfil
-            </button>
-            <button type="button" onClick={cloneProfile} className="h-9 px-2.5 rounded-lg border text-[11px] font-medium inline-flex items-center gap-1">
-              <Copy className="w-3.5 h-3.5" /> Duplicar
-            </button>
-            <button type="button" onClick={resetSantander} className="h-9 px-2.5 rounded-lg border text-[11px] font-medium inline-flex items-center gap-1">
-              <RotateCcw className="w-3.5 h-3.5" /> Restaurar Santander
-            </button>
-            <button type="button" onClick={removeProfile} className="h-9 px-2.5 rounded-lg border text-[11px] font-medium text-rose-600 inline-flex items-center gap-1">
-              <Trash2 className="w-3.5 h-3.5" /> Excluir
-            </button>
-          </div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-[13px] font-semibold text-slate-900">Taxas · {hotelName}</p>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            Final ao Cliente % (MDR + antecipação). Usadas na conciliação Getnet × banco deste hotel.
+          </p>
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <label className="space-y-0.5 text-[12px]">
-            <span className="text-[10px] uppercase text-slate-400 font-semibold">Nome do perfil</span>
-            <input className={inputCls} value={active?.name || ''} onChange={(e) => updateMeta({ name: e.target.value })} />
-          </label>
-          <label className="space-y-0.5 text-[12px]">
-            <span className="text-[10px] uppercase text-slate-400 font-semibold">Hotel</span>
-            <input className={inputCls} value={active?.hotelLabel || ''} onChange={(e) => updateMeta({ hotelLabel: e.target.value })} />
-          </label>
-          <label className="space-y-0.5 text-[12px]">
-            <span className="text-[10px] uppercase text-slate-400 font-semibold">Canal</span>
-            <select
-              className={inputCls}
-              value={active?.channel || 'maquina'}
-              onChange={(e) => updateMeta({ channel: e.target.value as FeeProfile['channel'] })}
+        <div className="flex flex-wrap gap-1.5">
+          {!editing ? (
+            <button
+              type="button"
+              onClick={startEdit}
+              className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[12px] font-semibold inline-flex items-center gap-1.5"
             >
-              <option value="maquina">Máquina / POS</option>
-              <option value="link">Link de pagamento</option>
-              <option value="misto">Misto</option>
-            </select>
-          </label>
+              <Pencil className="w-3.5 h-3.5" /> Editar taxas
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={resetDefaults}
+                className="h-9 px-2.5 rounded-lg border text-[11px] font-medium inline-flex items-center gap-1"
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Padrão
+              </button>
+              <button
+                type="button"
+                onClick={cancelEdit}
+                className="h-9 px-2.5 rounded-lg border text-[11px] font-medium inline-flex items-center gap-1"
+              >
+                <X className="w-3.5 h-3.5" /> Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={saveEdit}
+                className="h-9 px-3 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold inline-flex items-center gap-1.5"
+              >
+                <Check className="w-3.5 h-3.5" /> Salvar edição
+              </button>
+            </>
+          )}
         </div>
-
-        <p className="text-[11px] text-slate-500 leading-relaxed">
-          Valores = <strong>Final ao Cliente %</strong> (MDR + antecipação). A conciliação Getnet × Santander
-          usa o <strong>perfil ativo</strong>. Crie um perfil por hotel ou por canal (ex.: taxa de link diferente).
-        </p>
       </div>
 
+      {editing && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+          Modo edição ativo — altere os % e clique em <strong>Salvar edição</strong>.
+        </div>
+      )}
+
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="px-4 py-2 border-b bg-slate-50/80 text-[12px] font-semibold">
-          Matriz · % Final ao Cliente
+        <div className="px-4 py-2 border-b bg-slate-50/80 text-[12px] font-semibold flex items-center justify-between">
+          <span>Matriz · % Final ao Cliente</span>
+          {!editing && (
+            <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Somente leitura</span>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-[12px] min-w-[520px]">
@@ -279,7 +216,10 @@ export function TaxasFeeMatrix({ onActiveFeesChange }: Props) {
               <tr className="border-b text-left text-[10px] uppercase text-slate-400">
                 <th className="px-3 py-2 sticky left-0 bg-white">Transação</th>
                 {BRANDS.map((b) => (
-                  <th key={b.key} className="px-2 py-2 text-center font-semibold text-slate-600 normal-case tracking-normal text-[11px]">
+                  <th
+                    key={b.key}
+                    className="px-2 py-2 text-center font-semibold text-slate-600 normal-case tracking-normal text-[11px]"
+                  >
                     {b.label}
                   </th>
                 ))}
@@ -295,23 +235,25 @@ export function TaxasFeeMatrix({ onActiveFeesChange }: Props) {
                     const v = matrix[mod.key]?.[b.key] ?? 0;
                     return (
                       <td key={b.key} className="px-1.5 py-1">
-                        <div className="relative">
-                          <input
-                            type="number"
-                            step="0.01"
-                            min={0}
-                            className={cn(
-                              inputCls,
-                              'text-right tabular-nums pr-5 h-8',
-                              v === 0 && mod.key === 'debito' && b.key === 'amex' ? 'text-slate-400' : ''
-                            )}
-                            value={v}
-                            onChange={(e) => setCell(mod.key, b.key, parseFloat(e.target.value) || 0)}
-                          />
-                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none">
-                            %
-                          </span>
-                        </div>
+                        {editing ? (
+                          <div className="relative">
+                            <input
+                              type="number"
+                              step="0.01"
+                              min={0}
+                              className={cn(inputCls, 'text-right tabular-nums pr-5 h-8')}
+                              value={v}
+                              onChange={(e) => setCell(mod.key, b.key, parseFloat(e.target.value) || 0)}
+                            />
+                            <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none">
+                              %
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="h-8 flex items-center justify-end px-2 tabular-nums text-slate-800">
+                            {v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
+                          </div>
+                        )}
                       </td>
                     );
                   })}

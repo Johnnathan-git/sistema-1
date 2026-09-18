@@ -5,7 +5,6 @@ import { AccountsModule } from '@/components/uos/AccountsModule';
 import { ReservationsModule } from '@/components/uos/ReservationsModule';
 import { GovernanceModule } from '@/components/uos/GovernanceModule';
 import { AuditoriaLifeModule } from '@/components/uos/AuditoriaLifeModule';
-import { AprovacaoModule } from '@/components/uos/AprovacaoModule';
 import { PmsProvider, usePms } from '@/lib/pms-store';
 import { Toaster } from 'sonner';
 
@@ -35,8 +34,6 @@ function ModuleSwitch() {
       return <GovernanceModule />;
     case 'auditoria':
       return <AuditoriaLifeModule />;
-    case 'aprovacao':
-      return <AprovacaoModule />;
     default:
       return <ReceptionModule />;
   }

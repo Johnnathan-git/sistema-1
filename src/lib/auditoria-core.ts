@@ -74,7 +74,8 @@ export interface BankMatchRow {
 }
 
 export const LS_AUDIT = 'pms-auditoria-life-v1';
-export const LS_FEES = 'pms-auditoria-fees-v1';
+/** v2 força recarga das taxas Final ao Cliente % */
+export const LS_FEES = 'pms-auditoria-fees-v2';
 
 export const CHECKLIST: { id: number; title: string; bullets: string[]; fridayOnly?: boolean }[] = [
   { id: 1, title: 'Conciliação Hits vs. Getnet', bullets: ['Confere se todos os recebimentos registrados no sistema Hits estão conciliados com os recebimentos do portal Getnet.'] },
@@ -92,14 +93,36 @@ export const CHECKLIST: { id: number; title: string; bullets: string[]; fridayOn
   { id: 13, title: 'Conciliação do depósito semanal', fridayOnly: true, bullets: ['Concilia o valor depositado (comprovante) com o relatório "Pagamentos efetuados" no Hits do período.', 'Caso haja divergência: contata o responsável para resolver.', 'Caso não haja divergência: segue o fluxo normal da auditoria.'] },
 ];
 
+/** Final ao Cliente % = MDR bruta + TX D+1 (antecipação) — tabelas Santander */
 export const DEFAULT_FEES: FeeRule[] = [
-  { id: 'f1', label: 'Master Débito', brand: 'mastercard', modality: 'debito', feePercent: 1.2, feeFixed: 0, active: true },
-  { id: 'f2', label: 'Master Crédito à vista', brand: 'mastercard', modality: 'credito_vista', feePercent: 2.5, feeFixed: 0, active: true },
-  { id: 'f3', label: 'Master Crédito parcelado', brand: 'mastercard', modality: 'credito_parcelado', feePercent: 3.2, feeFixed: 0, active: true },
-  { id: 'f4', label: 'Visa Débito', brand: 'visa', modality: 'debito', feePercent: 1.2, feeFixed: 0, active: true },
-  { id: 'f5', label: 'Visa Crédito à vista', brand: 'visa', modality: 'credito_vista', feePercent: 2.5, feeFixed: 0, active: true },
-  { id: 'f6', label: 'Elo Débito', brand: 'elo', modality: 'debito', feePercent: 1.3, feeFixed: 0, active: true },
-  { id: 'f7', label: 'Elo Crédito', brand: 'elo', modality: 'credito_vista', feePercent: 2.6, feeFixed: 0, active: true },
+  { id: 'visa-deb', label: 'Visa Débito', brand: 'visa', modality: 'debito', feePercent: 0.79, feeFixed: 0, active: true },
+  { id: 'visa-av', label: 'Visa Crédito à vista', brand: 'visa', modality: 'credito_vista', feePercent: 2.97, feeFixed: 0, active: true },
+  { id: 'visa-p2', label: 'Visa Parcelado 2x', brand: 'visa', modality: 'parcelado_2', feePercent: 4.01, feeFixed: 0, active: true },
+  { id: 'visa-p3', label: 'Visa Parcelado 3x', brand: 'visa', modality: 'parcelado_3', feePercent: 4.77, feeFixed: 0, active: true },
+  { id: 'visa-p4', label: 'Visa Parcelado 4x', brand: 'visa', modality: 'parcelado_4', feePercent: 5.53, feeFixed: 0, active: true },
+  { id: 'visa-p5', label: 'Visa Parcelado 5x', brand: 'visa', modality: 'parcelado_5', feePercent: 6.3, feeFixed: 0, active: true },
+  { id: 'visa-p6', label: 'Visa Parcelado 6x', brand: 'visa', modality: 'parcelado_6', feePercent: 7.08, feeFixed: 0, active: true },
+  { id: 'master-deb', label: 'Master Débito', brand: 'mastercard', modality: 'debito', feePercent: 0.79, feeFixed: 0, active: true },
+  { id: 'master-av', label: 'Master Crédito à vista', brand: 'mastercard', modality: 'credito_vista', feePercent: 2.97, feeFixed: 0, active: true },
+  { id: 'master-p2', label: 'Master Parcelado 2x', brand: 'mastercard', modality: 'parcelado_2', feePercent: 4.01, feeFixed: 0, active: true },
+  { id: 'master-p3', label: 'Master Parcelado 3x', brand: 'mastercard', modality: 'parcelado_3', feePercent: 4.77, feeFixed: 0, active: true },
+  { id: 'master-p4', label: 'Master Parcelado 4x', brand: 'mastercard', modality: 'parcelado_4', feePercent: 5.53, feeFixed: 0, active: true },
+  { id: 'master-p5', label: 'Master Parcelado 5x', brand: 'mastercard', modality: 'parcelado_5', feePercent: 6.3, feeFixed: 0, active: true },
+  { id: 'master-p6', label: 'Master Parcelado 6x', brand: 'mastercard', modality: 'parcelado_6', feePercent: 7.08, feeFixed: 0, active: true },
+  { id: 'elo-deb', label: 'Elo Débito', brand: 'elo', modality: 'debito', feePercent: 1.29, feeFixed: 0, active: true },
+  { id: 'elo-av', label: 'Elo Crédito à vista', brand: 'elo', modality: 'credito_vista', feePercent: 3.46, feeFixed: 0, active: true },
+  { id: 'elo-p2', label: 'Elo Parcelado 2x', brand: 'elo', modality: 'parcelado_2', feePercent: 4.5, feeFixed: 0, active: true },
+  { id: 'elo-p3', label: 'Elo Parcelado 3x', brand: 'elo', modality: 'parcelado_3', feePercent: 5.25, feeFixed: 0, active: true },
+  { id: 'elo-p4', label: 'Elo Parcelado 4x', brand: 'elo', modality: 'parcelado_4', feePercent: 6.01, feeFixed: 0, active: true },
+  { id: 'elo-p5', label: 'Elo Parcelado 5x', brand: 'elo', modality: 'parcelado_5', feePercent: 6.78, feeFixed: 0, active: true },
+  { id: 'elo-p6', label: 'Elo Parcelado 6x', brand: 'elo', modality: 'parcelado_6', feePercent: 7.55, feeFixed: 0, active: true },
+  { id: 'amex-deb', label: 'Amex Débito', brand: 'amex', modality: 'debito', feePercent: 0, feeFixed: 0, active: true },
+  { id: 'amex-av', label: 'Amex Crédito à vista', brand: 'amex', modality: 'credito_vista', feePercent: 3.95, feeFixed: 0, active: true },
+  { id: 'amex-p2', label: 'Amex Parcelado 2x', brand: 'amex', modality: 'parcelado_2', feePercent: 4.99, feeFixed: 0, active: true },
+  { id: 'amex-p3', label: 'Amex Parcelado 3x', brand: 'amex', modality: 'parcelado_3', feePercent: 5.74, feeFixed: 0, active: true },
+  { id: 'amex-p4', label: 'Amex Parcelado 4x', brand: 'amex', modality: 'parcelado_4', feePercent: 6.49, feeFixed: 0, active: true },
+  { id: 'amex-p5', label: 'Amex Parcelado 5x', brand: 'amex', modality: 'parcelado_5', feePercent: 7.25, feeFixed: 0, active: true },
+  { id: 'amex-p6', label: 'Amex Parcelado 6x', brand: 'amex', modality: 'parcelado_6', feePercent: 8.02, feeFixed: 0, active: true },
 ];
 
 export function parseBRNumber(s: string): number {
@@ -150,9 +173,7 @@ function moneyEq(a: number, b: number, tol = 0.05) {
 
 export async function fileToText(file: File): Promise<string> {
   const name = file.name.toLowerCase();
-  if (name.endsWith('.csv') || name.endsWith('.txt') || file.type.startsWith('text/')) {
-    return file.text();
-  }
+  if (name.endsWith('.csv') || name.endsWith('.txt') || file.type.startsWith('text/')) return file.text();
   if (name.endsWith('.pdf') || file.type === 'application/pdf') {
     try {
       // @ts-expect-error optional
@@ -219,6 +240,7 @@ export function parseGetnetText(raw: string): GetnetSale[] {
     const dates = [...chunk.matchAll(/(\d{2}\/\d{2}\/\d{4})(?:\s+(\d{2}:\d{2}))?/g)];
     const amounts = [...chunk.matchAll(/-?R\$\s*([\d.]*\d,\d{2})/g)].map((x) => parseBRNumber(x[0]));
     const authM = chunk.match(/Autoriza[cç][aã]o[^0-9A-Z]*([0-9A-Z]{4,})/i);
+    const parcM = chunk.match(/\b0?(\d{1,2})\s*(?:\n|$)/);
     if (!brandM && amounts.length < 2) return;
     if (!statusM && amounts.length < 2) return;
     const saleDate = dates[0] ? toISODate(dates[0][1]) : '';
@@ -228,7 +250,7 @@ export function parseGetnetText(raw: string): GetnetSale[] {
     else if (amounts.length === 2) { gross = Math.abs(amounts[0]); net = Math.abs(amounts[1]); fee = Math.max(0, gross - net); }
     else if (amounts.length === 1) { gross = net = Math.abs(amounts[0]); }
     if (!gross && !net) return;
-    out.push({ id: `g-${++idx}`, date: saleDate, time: dates[0]?.[2], brand: brandM?.[1] || '', modality: modM?.[1] || '', form: formM?.[1] || '', status: statusM?.[1] || '', installments: 1, settleDate, auth: authM?.[1] || '', cv: '', terminal: '', card: '', gross, fee, net });
+    out.push({ id: `g-${++idx}`, date: saleDate, time: dates[0]?.[2], brand: brandM?.[1] || '', modality: modM?.[1] || '', form: formM?.[1] || '', status: statusM?.[1] || '', installments: parcM ? Number(parcM[1]) : 1, settleDate, auth: authM?.[1] || '', cv: '', terminal: '', card: '', gross, fee, net });
   };
   if (blocks.length > 1) for (const b of blocks) pushFromChunk(b);
   else for (const p of raw.split(/(?=\b(?:Negada|Aprovada|Autorizada)\b)/i)) pushFromChunk(p);
@@ -303,9 +325,17 @@ export function reconcileHitsGetnet(hits: HitsPayment[], getnet: GetnetSale[]): 
 
 function applyFeeRules(sale: GetnetSale, rules: FeeRule[]) {
   if (sale.fee > 0 && sale.net > 0) return { fee: sale.fee, net: sale.net };
-  const brand = sale.brand.toLowerCase().includes('master') ? 'mastercard' : sale.brand.toLowerCase().includes('visa') ? 'visa' : sale.brand.toLowerCase().includes('elo') ? 'elo' : '*';
-  const mod = /debito|débito/i.test(sale.modality + sale.form) ? 'debito' : /parcel/i.test(sale.form) ? 'credito_parcelado' : 'credito_vista';
-  const rule = rules.find((r) => r.active && (r.brand === brand || r.brand === '*') && (r.modality === mod || r.modality === '*')) || rules.find((r) => r.active && r.brand === '*');
+  const b = sale.brand.toLowerCase();
+  const brand = b.includes('master') ? 'mastercard' : b.includes('visa') ? 'visa' : b.includes('elo') ? 'elo' : b.includes('amex') || b.includes('american') ? 'amex' : '*';
+  const form = `${sale.modality} ${sale.form}`.toLowerCase();
+  let modality = 'credito_vista';
+  if (/débito|debito/.test(form)) modality = 'debito';
+  else if (sale.installments >= 2 && sale.installments <= 6) modality = `parcelado_${sale.installments}`;
+  else if (/parcel/.test(form)) modality = `parcelado_${Math.min(6, Math.max(2, sale.installments || 2))}`;
+  const rule =
+    rules.find((r) => r.active && r.brand === brand && r.modality === modality) ||
+    rules.find((r) => r.active && r.brand === brand && r.modality === 'credito_vista') ||
+    rules.find((r) => r.active && r.brand === '*');
   if (!rule) return { fee: sale.fee, net: sale.net || sale.gross };
   const fee = (sale.gross * rule.feePercent) / 100 + rule.feeFixed;
   return { fee, net: sale.gross - fee };

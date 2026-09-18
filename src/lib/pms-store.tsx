@@ -20,7 +20,13 @@ import type {
 } from './pms-types';
 import { isRoomReadyForCheckIn, roomNotReadyReason } from './pms-types';
 
-export type ModuleId = 'recepcao' | 'contas' | 'reservas' | 'governanca' | 'fiscal';
+export type ModuleId =
+  | 'recepcao'
+  | 'contas'
+  | 'reservas'
+  | 'governanca'
+  | 'fiscal'
+  | 'auditoria';
 
 export const GOVERNANCE_STATUSES: GovernanceStatus[] = [
   'limpo',
@@ -310,7 +316,6 @@ export function PmsProvider({ children }: { children: ReactNode }) {
     [rooms, pushLog]
   );
 
-  // Remaining methods + provider value restored from backup in follow-up if needed
   const value = useMemo(
     () => ({
       hotel,

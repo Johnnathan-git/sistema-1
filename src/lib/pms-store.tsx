@@ -26,7 +26,8 @@ export type ModuleId =
   | 'reservas'
   | 'governanca'
   | 'fiscal'
-  | 'auditoria';
+  | 'auditoria'
+  | 'aprovacao';
 
 export const GOVERNANCE_STATUSES: GovernanceStatus[] = [
   'limpo',

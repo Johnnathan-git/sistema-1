@@ -5,7 +5,6 @@ import {
   Building2,
   CalendarRange,
   ClipboardCheck,
-  BadgeCheck,
   DoorOpen,
   Search,
   Sparkles,
@@ -39,10 +38,7 @@ const NAV: {
   },
   {
     section: 'Backoffice',
-    items: [
-      { id: 'auditoria', label: 'Auditoria Life', icon: ClipboardCheck },
-      { id: 'aprovacao', label: 'Aprovação', icon: BadgeCheck },
-    ],
+    items: [{ id: 'auditoria', label: 'Auditoria Life', icon: ClipboardCheck }],
   },
 ];
 
@@ -107,11 +103,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     },
     auditoria: {
       title: 'Auditoria Life',
-      subtitle: 'Checklist diário · PMS × Adquirente · Adquirente × Banco · taxas',
-    },
-    aprovacao: {
-      title: 'Aprovação',
-      subtitle: 'Fila de auditorias enviadas · aprovar ou contestar',
+      subtitle: 'Checklist · PMS × Adquirente · Adquirente × Banco · taxas · aprovação',
     },
   };
 

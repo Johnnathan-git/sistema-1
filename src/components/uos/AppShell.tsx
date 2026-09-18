@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import {
   Building2,
   CalendarRange,
+  ClipboardCheck,
   DoorOpen,
   Search,
   Sparkles,
@@ -18,7 +19,7 @@ import { CashReportModal } from '@/components/uos/CashReportModal';
 
 const NAV: {
   section: string;
-  items: { id: ModuleId; label: string; icon: typeof DoorOpen }[];
+  items: { id: ModuleId | 'auditoria'; label: string; icon: typeof DoorOpen }[];
 }[] = [
   {
     section: 'Recepção',
@@ -35,11 +36,11 @@ const NAV: {
     section: 'Operações',
     items: [{ id: 'governanca', label: 'Governança', icon: Sparkles }],
   },
+  {
+    section: 'Backoffice',
+    items: [{ id: 'auditoria', label: 'Auditoria Life', icon: ClipboardCheck }],
+  },
 ];
-
-function formatBRL(n: number) {
-  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const {
@@ -50,8 +51,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     reservations,
     accounts,
     cashOpen,
-    cashFundo,
-    cashOpenedAt,
     openCashRegister,
     closeCashRegister,
   } = usePms();
@@ -72,34 +71,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const opDateBR = hotel.operationalDate.split('-').reverse().join('/');
 
-  const totalsByMethod = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const acc of accounts) {
-      for (const p of acc.payments) {
-        if (p.date !== hotel.operationalDate) continue;
-        const key = (p.method || 'OUTROS').toUpperCase();
-        map.set(key, (map.get(key) || 0) + p.amount);
-      }
-    }
-    const defaults = ['DINHEIRO', 'PIX', 'DÉBITO', 'CRÉDITO À VISTA', 'CRÉDITO PARCELADO'];
-    for (const d of defaults) {
-      if (!map.has(d)) map.set(d, 0);
-    }
-    return Array.from(map.entries())
-      .map(([tipo, valor]) => ({ tipo, valor }))
-      .sort((a, b) => a.tipo.localeCompare(b.tipo, 'pt-BR'));
-  }, [accounts, hotel.operationalDate]);
-
-  const totalSistema = totalsByMethod.reduce((s, r) => s + r.valor, 0);
-
-  const doCloseCash = () => {
-    const res = closeCashRegister();
-    setCloseModal(false);
-    setConfirmClose(false);
-    if (res.ok) toast.success(res.message);
-    else toast.error(res.message);
-  };
-
   const doOpenCash = () => {
     const n = parseFloat(fundoInput.replace(/\./g, '').replace(',', '.')) || 0;
     const res = openCashRegister(n);
@@ -109,7 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     } else toast.error(res.message);
   };
 
-  const titles: Record<ModuleId, { title: string; subtitle: string }> = {
+  const titles: Record<string, { title: string; subtitle: string }> = {
     recepcao: {
       title: 'Recepção',
       subtitle: 'Operação do dia · chegadas, hospedados e saídas',
@@ -126,7 +97,17 @@ export function AppShell({ children }: { children: ReactNode }) {
       title: 'Governança',
       subtitle: 'Ocupação · arrumação · camareira · bloqueio e histórico',
     },
+    fiscal: {
+      title: 'Fiscal e Contábil',
+      subtitle: 'Naturezas fiscais · livro · apuração (legado)',
+    },
+    auditoria: {
+      title: 'Auditoria Life',
+      subtitle: 'Checklist diário POP-FIN-001 · conciliação Hits × Getnet · Getnet × Santander',
+    },
   };
+
+  const title = titles[module] || titles.recepcao;
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#eef1f6] text-slate-900 antialiased">
@@ -194,7 +175,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <li key={item.id}>
                       <button
                         type="button"
-                        onClick={() => setModule(item.id)}
+                        onClick={() => setModule(item.id as ModuleId)}
                         className={cn(
                           'w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-all text-left',
                           active
@@ -289,10 +270,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
 
         <div className="px-6 pt-5 pb-1">
-          <h1 className="text-[22px] font-semibold tracking-tight text-slate-900">
-            {titles[module].title}
-          </h1>
-          <p className="text-[13px] text-slate-500 mt-0.5">{titles[module].subtitle}</p>
+          <h1 className="text-[22px] font-semibold tracking-tight text-slate-900">{title.title}</h1>
+          <p className="text-[13px] text-slate-500 mt-0.5">{title.subtitle}</p>
         </div>
 
         <main className="flex-1 overflow-y-auto px-6 pb-8 pt-4">{children}</main>
@@ -307,7 +286,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         />
       )}
 
-      {/* Abertura de caixa */}
       {openModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-xl">

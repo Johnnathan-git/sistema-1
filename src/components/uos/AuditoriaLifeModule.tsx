@@ -1,5 +1,5 @@
 /**
- * Auditoria Life — abas estilo Recepção + modal de detalhe no Histórico
+ * Auditoria Life — abas estilo Recepção + modal Histórico + checklist sob demanda
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -122,6 +122,7 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
   const [approvedBy, setApprovedBy] = useState<string | undefined>();
   const [tick, setTick] = useState(0);
   const [modalRecord, setModalRecord] = useState<AuditRecord | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
 
   const isLocked = recordStatus === 'aprovado' || recordStatus === 'aguardando';
 
@@ -134,6 +135,7 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
     setRecordStatus('rascunho');
     setSubmittedAt(undefined); setApprovedAt(undefined); setApprovedBy(undefined);
     setModalRecord(null);
+    setFormOpen(false);
   }, [hotelId]);
 
   const history = useMemo(() => { void tick; return recordsForHotel(hotelId); }, [hotelId, tick]);
@@ -154,14 +156,38 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
   const canSubmit = !isLocked && missingCount === 0 && !!header.analyst.trim();
 
   function startNewAudit() {
-    setHeader({ date: todayISO(), analyst: '', period: 'Dia completo', sentToGoAt: '' });
-    setAnswers(emptyAnswers());
-    setCurrentRecordId(null);
-    setRecordStatus('rascunho');
-    setSubmittedAt(undefined); setApprovedAt(undefined); setApprovedBy(undefined);
+    let restored = false;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data && data.header && data.answers) {
+          setHeader({
+            date: data.header.date || todayISO(),
+            analyst: data.header.analyst || '',
+            period: data.header.period || 'Dia completo',
+            sentToGoAt: '',
+          });
+          setAnswers({ ...emptyAnswers(), ...data.answers });
+          setCurrentRecordId(data.recordId || null);
+          setRecordStatus(data.status === 'contestado' ? 'contestado' : 'rascunho');
+          setSubmittedAt(undefined);
+          setApprovedAt(undefined);
+          setApprovedBy(undefined);
+          restored = true;
+        }
+      }
+    } catch {}
+    if (!restored) {
+      setHeader({ date: todayISO(), analyst: '', period: 'Dia completo', sentToGoAt: '' });
+      setAnswers(emptyAnswers());
+      setCurrentRecordId(null);
+      setRecordStatus('rascunho');
+      setSubmittedAt(undefined); setApprovedAt(undefined); setApprovedBy(undefined);
+    }
     setModalRecord(null);
+    setFormOpen(true);
     setTab('checklist');
-    try { localStorage.removeItem(storageKey); } catch {}
   }
 
   function openRecord(r: AuditRecord) {
@@ -181,6 +207,7 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
     setApprovedAt(r.approvedAt);
     setApprovedBy(r.approvedBy);
     setModalRecord(null);
+    setFormOpen(true);
     setTab('checklist');
   }
 
@@ -208,22 +235,30 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
     setAnswers((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
   };
 
-  const saveDraft = () => {
-    if (isLocked) { toast.error('Auditoria bloqueada'); return; }
-    const now = new Date().toISOString();
-    const id = currentRecordId || newRecordId();
-    const prev = getRecord(id);
-    upsertRecord({
-      id, hotelId, hotelName,
-      header: { ...header, sentToGoAt: '' }, answers,
-      status: recordStatus === 'contestado' ? 'contestado' : 'rascunho',
-      createdAt: prev?.createdAt || now, updatedAt: now, contestComment: prev?.contestComment,
-    });
-    setCurrentRecordId(id);
-    setRecordStatus(recordStatus === 'contestado' ? 'contestado' : 'rascunho');
-    setTick((t) => t + 1);
-    toast.success('Rascunho salvo');
-  };
+  const persistMemory = useCallback(() => {
+    if (isLocked || !formOpen) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({
+        header: { ...header, sentToGoAt: '' },
+        answers,
+        recordId: currentRecordId,
+        status: recordStatus === 'contestado' ? 'contestado' : 'rascunho',
+        updatedAt: new Date().toISOString(),
+      }));
+    } catch {}
+  }, [isLocked, formOpen, header, answers, currentRecordId, recordStatus, storageKey]);
+
+  useEffect(() => {
+    if (!formOpen || isLocked) return;
+    const t = window.setTimeout(() => persistMemory(), 400);
+    return () => window.clearTimeout(t);
+  }, [header, answers, formOpen, isLocked, persistMemory]);
+
+  useEffect(() => {
+    if (tab !== 'checklist' && formOpen && !isLocked) {
+      persistMemory();
+    }
+  }, [tab, formOpen, isLocked, persistMemory]);
 
   const submitForApproval = () => {
     if (isLocked) return;
@@ -240,6 +275,7 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
     setHeader(nextHeader); setCurrentRecordId(id); setRecordStatus('aguardando');
     setSubmittedAt(now); setApprovedAt(undefined); setApprovedBy(undefined);
     setTick((t) => t + 1);
+    try { localStorage.removeItem(storageKey); } catch {}
     toast.success('Enviada para aprovação');
   };
 
@@ -304,95 +340,123 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
 
       {tab === 'checklist' && (
         <div className="space-y-3">
-          {recordStatus === 'aprovado' && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[13px] text-emerald-950 flex flex-wrap items-center justify-between gap-2">
-              <span className="inline-flex items-center gap-1.5"><Eye className="w-4 h-4" /> Aprovada · somente leitura · {approvedAt ? formatDateTimeBR(approvedAt) : ''}</span>
-              <button type="button" onClick={startNewAudit} className="text-[12px] font-semibold text-emerald-900 underline">Nova auditoria</button>
-            </div>
-          )}
-          {recordStatus === 'aguardando' && (
-            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-[13px] text-blue-950">
-              Aguardando aprovação · enviada {submittedAt ? formatDateTimeBR(submittedAt) : '—'} · veja a aba Aprovação
-            </div>
-          )}
-          {recordStatus === 'contestado' && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-[13px] text-amber-950">
-              Contestada — corrija e envie novamente
-              {currentRecordId && getRecord(currentRecordId)?.contestComment && (
-                <span className="block text-[12px] mt-1">Motivo: {getRecord(currentRecordId)?.contestComment}</span>
-              )}
-            </div>
-          )}
-
-          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
-              <label className="space-y-0.5">
-                <span className="text-[10px] uppercase text-slate-400 font-semibold">Data da auditoria</span>
-                <input type="date" className={isLocked ? inputLocked : inputCls} value={header.date} disabled={isLocked} onChange={(e) => setHeader({ ...header, date: e.target.value })} />
-              </label>
-              <label className="space-y-0.5">
-                <span className="text-[10px] uppercase text-slate-400 font-semibold">Analista financeira</span>
-                <input className={isLocked ? inputLocked : inputCls} value={header.analyst} disabled={isLocked} onChange={(e) => setHeader({ ...header, analyst: e.target.value })} placeholder="Nome" />
-              </label>
-            </div>
-            {(submittedAt || approvedAt) && (
-              <div className="mt-2 pt-2 border-t border-slate-100 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-slate-600">
-                {submittedAt && <span>Envio: <strong className="text-slate-900">{formatDateTimeBR(submittedAt)}</strong></span>}
-                {approvedAt && <span>Aprovação: <strong className="text-slate-900">{formatDateTimeBR(approvedAt)}</strong> ({approvedBy || 'GO'})</span>}
+          {!formOpen ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm">
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 mb-3">
+                <ClipboardCheck className="w-6 h-6" />
               </div>
-            )}
-          </div>
-
-          {!isLocked && (
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={saveDraft} className="h-9 px-4 rounded-lg bg-slate-900 text-white text-[12px] font-semibold">Salvar rascunho</button>
-              <button type="button" onClick={submitForApproval} disabled={!canSubmit} className="h-9 px-4 rounded-lg bg-blue-600 text-white text-[12px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Enviar para aprovação</button>
-              {missingCount > 0 && <span className="self-center text-[12px] text-amber-800">Faltam {missingCount} item(ns) obrigatório(s)</span>}
+              <p className="text-[15px] font-semibold text-slate-900">Checklist do dia</p>
+              <p className="text-[13px] text-slate-500 mt-1 max-w-sm mx-auto">
+                Clique em <strong>Nova auditoria</strong> para iniciar o preenchimento. O progresso fica guardado se você mudar de aba.
+              </p>
+              <button
+                type="button"
+                onClick={startNewAudit}
+                className="mt-5 h-10 px-5 rounded-lg bg-slate-900 text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-slate-800"
+              >
+                <Plus className="w-4 h-4" /> Nova auditoria
+              </button>
             </div>
-          )}
+          ) : (
+            <>
+              {recordStatus === 'aprovado' && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[13px] text-emerald-950 flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5"><Eye className="w-4 h-4" /> Aprovada · somente leitura · {approvedAt ? formatDateTimeBR(approvedAt) : ''}</span>
+                  <button type="button" onClick={startNewAudit} className="text-[12px] font-semibold text-emerald-900 underline">Nova auditoria</button>
+                </div>
+              )}
+              {recordStatus === 'aguardando' && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-[13px] text-blue-950">
+                  Aguardando aprovação · enviada {submittedAt ? formatDateTimeBR(submittedAt) : '—'} · veja a aba Aprovação
+                </div>
+              )}
+              {recordStatus === 'contestado' && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-[13px] text-amber-950">
+                  Contestada — corrija e envie novamente
+                  {currentRecordId && getRecord(currentRecordId)?.contestComment && (
+                    <span className="block text-[12px] mt-1">Motivo: {getRecord(currentRecordId)?.contestComment}</span>
+                  )}
+                </div>
+              )}
 
-          <div className="space-y-2">
-            {visibleItems.map((item) => {
-              const a = answers[item.id] || { status: '' as ItemStatus, notes: '' };
-              return (
-                <div key={item.id} className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                  <div className="px-4 py-2.5 border-b bg-slate-50/80 flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-semibold text-slate-900">
-                        <span className="text-slate-400 font-medium mr-1">{String(item.id).padStart(2, '0')}.</span>
-                        {item.title}
-                      </p>
-                      {item.fridayOnly && (
-                        <span className="inline-block mt-1 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">
-                          Obrigatório às sextas · comprovante de depósito
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex gap-1.5 shrink-0">
-                      <button type="button" disabled={isLocked} onClick={() => setAnswer(item.id, { status: 'conforme' })} className={cn('h-8 px-3 rounded-md text-[11px] font-bold uppercase border disabled:cursor-not-allowed', a.status === 'conforme' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-500')}>Conforme</button>
-                      <button type="button" disabled={isLocked} onClick={() => setAnswer(item.id, { status: 'divergencia' })} className={cn('h-8 px-3 rounded-md text-[11px] font-bold uppercase border disabled:cursor-not-allowed', a.status === 'divergencia' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-slate-500 border-slate-200 hover:border-rose-500')}>Divergência</button>
-                    </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
+                  <label className="space-y-0.5">
+                    <span className="text-[10px] uppercase text-slate-400 font-semibold">Data da auditoria</span>
+                    <input type="date" className={isLocked ? inputLocked : inputCls} value={header.date} disabled={isLocked} onChange={(e) => setHeader({ ...header, date: e.target.value })} />
+                  </label>
+                  <label className="space-y-0.5">
+                    <span className="text-[10px] uppercase text-slate-400 font-semibold">Analista financeira</span>
+                    <input className={isLocked ? inputLocked : inputCls} value={header.analyst} disabled={isLocked} onChange={(e) => setHeader({ ...header, analyst: e.target.value })} placeholder="Nome" />
+                  </label>
+                </div>
+                {(submittedAt || approvedAt) && (
+                  <div className="mt-2 pt-2 border-t border-slate-100 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-slate-600">
+                    {submittedAt && <span>Envio: <strong className="text-slate-900">{formatDateTimeBR(submittedAt)}</strong></span>}
+                    {approvedAt && <span>Aprovação: <strong className="text-slate-900">{formatDateTimeBR(approvedAt)}</strong> ({approvedBy || 'GO'})</span>}
                   </div>
-                  <div className="px-4 py-3 space-y-2">
-                    <ul className="text-[12px] text-slate-600 list-disc pl-4 space-y-0.5">{item.bullets.map((b) => <li key={b}>{b}</li>)}</ul>
-                    <textarea
-                      className={cn('w-full min-h-[56px] rounded-lg border px-2.5 py-2 text-[13px]', isLocked ? 'bg-slate-50 border-slate-100 cursor-not-allowed' : 'border-slate-200')}
-                      value={a.notes}
-                      disabled={isLocked}
-                      onChange={(e) => setAnswer(item.id, { notes: e.target.value })}
-                      placeholder={isLocked ? '' : (item.fridayOnly ? 'Referência do comprovante / resolutiva…' : 'Resolutiva…')}
-                    />
+                )}
+              </div>
+
+              <div className="space-y-2">
+                {visibleItems.map((item) => {
+                  const a = answers[item.id] || { status: '' as ItemStatus, notes: '' };
+                  return (
+                    <div key={item.id} className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                      <div className="px-4 py-2.5 border-b bg-slate-50/80 flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-semibold text-slate-900">
+                            <span className="text-slate-400 font-medium mr-1">{String(item.id).padStart(2, '0')}.</span>
+                            {item.title}
+                          </p>
+                          {item.fridayOnly && (
+                            <span className="inline-block mt-1 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">
+                              Obrigatório às sextas · comprovante de depósito
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex gap-1.5 shrink-0">
+                          <button type="button" disabled={isLocked} onClick={() => setAnswer(item.id, { status: 'conforme' })} className={cn('h-8 px-3 rounded-md text-[11px] font-bold uppercase border disabled:cursor-not-allowed', a.status === 'conforme' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-500')}>Conforme</button>
+                          <button type="button" disabled={isLocked} onClick={() => setAnswer(item.id, { status: 'divergencia' })} className={cn('h-8 px-3 rounded-md text-[11px] font-bold uppercase border disabled:cursor-not-allowed', a.status === 'divergencia' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-slate-500 border-slate-200 hover:border-rose-500')}>Divergência</button>
+                        </div>
+                      </div>
+                      <div className="px-4 py-3 space-y-2">
+                        <ul className="text-[12px] text-slate-600 list-disc pl-4 space-y-0.5">{item.bullets.map((b) => <li key={b}>{b}</li>)}</ul>
+                        <textarea
+                          className={cn('w-full min-h-[56px] rounded-lg border px-2.5 py-2 text-[13px]', isLocked ? 'bg-slate-50 border-slate-100 cursor-not-allowed' : 'border-slate-200')}
+                          value={a.notes}
+                          disabled={isLocked}
+                          onChange={(e) => setAnswer(item.id, { notes: e.target.value })}
+                          placeholder={isLocked ? '' : (item.fridayOnly ? 'Referência do comprovante / resolutiva…' : 'Resolutiva…')}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {!isLocked && (
+                <div className="sticky bottom-0 z-10 -mx-1 px-1 pt-2 pb-1 bg-gradient-to-t from-[#eef1f6] via-[#eef1f6] to-transparent">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={submitForApproval}
+                      disabled={!canSubmit}
+                      className="h-10 px-5 rounded-lg bg-blue-600 text-white text-[13px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-500"
+                    >
+                      Salvar e enviar para aprovação
+                    </button>
+                    {missingCount > 0 ? (
+                      <span className="text-[12px] text-amber-800">Faltam {missingCount} item(ns) obrigatório(s)</span>
+                    ) : !header.analyst.trim() ? (
+                      <span className="text-[12px] text-amber-800">Informe o nome da analista</span>
+                    ) : (
+                      <span className="text-[12px] text-emerald-700">Pronto para enviar</span>
+                    )}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-
-          {!isLocked && (
-            <div className="flex flex-wrap gap-2 pt-1">
-              <button type="button" onClick={saveDraft} className="h-9 px-4 rounded-lg bg-slate-900 text-white text-[12px] font-semibold">Salvar rascunho</button>
-              <button type="button" onClick={submitForApproval} disabled={!canSubmit} className="h-9 px-4 rounded-lg bg-blue-600 text-white text-[12px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Enviar para aprovação</button>
-            </div>
+              )}
+            </>
           )}
         </div>
       )}

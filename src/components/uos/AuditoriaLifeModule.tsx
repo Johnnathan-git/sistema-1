@@ -1,6 +1,5 @@
 /**
- * Auditoria Life
- * checklistMode: hub | form | history
+ * Auditoria Life — padrão de navegação igual à Recepção (abas underline)
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -23,7 +22,7 @@ import {
   statusLabel, upsertRecord, getRecord, type AuditRecord,
 } from '@/lib/auditoria-workflow';
 
-type TabId = 'checklist' | 'hits_getnet' | 'getnet_bank' | 'taxas' | 'aprovacao';
+type TabId = 'checklist' | 'historico' | 'hits_getnet' | 'getnet_bank' | 'taxas' | 'aprovacao';
 
 function formatDateTimeBR(iso?: string) {
   if (!iso) return '—';
@@ -59,9 +58,7 @@ function loadHotel(): HotelId | null {
 export function AuditoriaLifeModule() {
   const [hotelId, setHotelId] = useState<HotelId | null>(() => loadHotel());
   if (!hotelId) {
-    return (
-      <HotelPicker onSelect={(id) => { localStorage.setItem(LS_HOTEL, id); setHotelId(id); }} />
-    );
+    return <HotelPicker onSelect={(id) => { localStorage.setItem(LS_HOTEL, id); setHotelId(id); }} />;
   }
   const hotel = AUDIT_HOTELS.find((h) => h.id === hotelId)!;
   return (
@@ -124,14 +121,11 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
   const [approvedAt, setApprovedAt] = useState<string | undefined>();
   const [approvedBy, setApprovedBy] = useState<string | undefined>();
   const [tick, setTick] = useState(0);
-  const [checklistMode, setChecklistMode] = useState<'hub' | 'form' | 'history'>('hub');
 
   const isLocked = recordStatus === 'aprovado' || recordStatus === 'aguardando';
-  const isViewingHistory = isLocked && currentRecordId != null;
 
   useEffect(() => {
     setTab('checklist');
-    setChecklistMode('hub');
     setHits([]); setGetnet([]); setBank([]);
     setHeader({ date: todayISO(), analyst: '', period: 'Dia completo', sentToGoAt: '' });
     setAnswers(emptyAnswers());
@@ -155,7 +149,6 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
   const visibleItems = CHECKLIST;
   const requiredItems = CHECKLIST.filter((c) => !c.fridayOnly || friday);
   const missingCount = requiredItems.filter((c) => !answers[c.id]?.status).length;
-  const filledCount = visibleItems.filter((c) => answers[c.id]?.status).length;
   const canSubmit = !isLocked && missingCount === 0 && !!header.analyst.trim();
 
   function startNewAudit() {
@@ -164,7 +157,7 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
     setCurrentRecordId(null);
     setRecordStatus('rascunho');
     setSubmittedAt(undefined); setApprovedAt(undefined); setApprovedBy(undefined);
-    setChecklistMode('form');
+    setTab('checklist');
     try { localStorage.removeItem(storageKey); } catch {}
   }
 
@@ -177,7 +170,6 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
     setApprovedAt(r.approvedAt);
     setApprovedBy(r.approvedBy);
     setTab('checklist');
-    setChecklistMode('form');
   }
 
   const loadFile = useCallback(async (kind: 'hits' | 'getnet' | 'bank', file: File) => {
@@ -244,221 +236,192 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
 
   return (
     <div className="space-y-4 pb-10">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <button type="button" onClick={onChangeHotel} className="text-[11px] text-slate-500 hover:text-slate-800 inline-flex items-center gap-1 mb-1">
-            <ArrowLeft className="w-3 h-3" /> Trocar hotel
-          </button>
-          <h2 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
-            <ClipboardCheck className="w-4 h-4 text-slate-500" /> Auditoria · {hotelName}
-          </h2>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button type="button" onClick={onChangeHotel} className="text-[11px] text-slate-500 hover:text-slate-800 inline-flex items-center gap-1">
+          <ArrowLeft className="w-3 h-3" /> Trocar hotel · {hotelName}
+        </button>
         {busy && <span className="inline-flex items-center gap-1.5 text-[12px] text-blue-700"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Processando…</span>}
       </div>
 
-      <div className="flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-slate-50/80 p-1 w-fit">
-        {([
-          { id: 'checklist' as const, label: 'Checklist', icon: ClipboardCheck },
-          { id: 'hits_getnet' as const, label: 'PMS × Adquirente', icon: Link2 },
-          { id: 'getnet_bank' as const, label: 'Adquirente × Banco', icon: Scale },
-          { id: 'taxas' as const, label: 'Taxas', icon: Settings2 },
-          { id: 'aprovacao' as const, label: 'Aprovação', icon: CheckCircle2 },
-        ] as const).map(({ id, label, icon: Icon }) => (
-          <button key={id} type="button" onClick={() => setTab(id)} className={cn('h-8 px-2.5 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5', tab === id ? 'bg-white border border-slate-200 shadow-sm' : 'text-slate-600')}>
-            <Icon className="w-3.5 h-3.5" /> {label}
-            {id === 'aprovacao' && pendingApproval.length > 0 && (
-              <span className="ml-0.5 text-[10px] font-bold bg-blue-600 text-white rounded-full min-w-[16px] h-4 px-1 inline-flex items-center justify-center">{pendingApproval.length}</span>
-            )}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-0">
+        <div className="flex flex-wrap items-center gap-1">
+          {([
+            { id: 'checklist' as const, label: 'Checklist', icon: ClipboardCheck },
+            { id: 'historico' as const, label: 'Histórico', icon: History },
+            { id: 'hits_getnet' as const, label: 'PMS × Adquirente', icon: Link2 },
+            { id: 'getnet_bank' as const, label: 'Adquirente × Banco', icon: Scale },
+            { id: 'taxas' as const, label: 'Taxas', icon: Settings2 },
+            { id: 'aprovacao' as const, label: 'Aprovação', icon: CheckCircle2 },
+          ] as const).map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={cn(
+                'px-3 py-2.5 text-[13px] font-medium border-b-2 -mb-px inline-flex items-center gap-1.5',
+                tab === id ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800'
+              )}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {label}
+              {id === 'aprovacao' && pendingApproval.length > 0 && (
+                <span className="ml-0.5 text-[10px] font-bold bg-blue-600 text-white rounded-full min-w-[16px] h-4 px-1 inline-flex items-center justify-center">
+                  {pendingApproval.length}
+                </span>
+              )}
+              {id === 'historico' && history.length > 0 && tab !== 'historico' && (
+                <span className="ml-0.5 text-[10px] font-semibold text-slate-400">{history.length}</span>
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto pb-1">
+          <button type="button" onClick={startNewAudit} className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-slate-50">
+            <Plus className="w-3.5 h-3.5" /> Nova auditoria
           </button>
-        ))}
+        </div>
       </div>
 
       {tab === 'checklist' && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
-              {([
-                { id: 'hub' as const, label: 'Início', icon: ClipboardCheck },
-                { id: 'form' as const, label: 'Auditoria', icon: FileText },
-                { id: 'history' as const, label: 'Histórico', icon: History },
-              ] as const).map(({ id, label, icon: Icon }) => (
-                <button key={id} type="button" onClick={() => setChecklistMode(id)} className={cn('h-8 px-3 rounded-md text-[12px] font-medium inline-flex items-center gap-1.5', checklistMode === id ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50')}>
-                  <Icon className="w-3.5 h-3.5" /> {label}
-                </button>
-              ))}
+        <div className="space-y-3">
+          {recordStatus === 'aprovado' && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[13px] text-emerald-950 flex flex-wrap items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5"><Eye className="w-4 h-4" /> Aprovada · somente leitura · {approvedAt ? formatDateTimeBR(approvedAt) : ''}</span>
+              <button type="button" onClick={startNewAudit} className="text-[12px] font-semibold text-emerald-900 underline">Nova auditoria</button>
             </div>
+          )}
+          {recordStatus === 'aguardando' && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-[13px] text-blue-950">
+              Aguardando aprovação · enviada {submittedAt ? formatDateTimeBR(submittedAt) : '—'} · veja a aba Aprovação
+            </div>
+          )}
+          {recordStatus === 'contestado' && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-[13px] text-amber-950">
+              Contestada — corrija e envie novamente
+              {currentRecordId && getRecord(currentRecordId)?.contestComment && (
+                <span className="block text-[12px] mt-1">Motivo: {getRecord(currentRecordId)?.contestComment}</span>
+              )}
+            </div>
+          )}
+
+          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
+              <label className="space-y-0.5">
+                <span className="text-[10px] uppercase text-slate-400 font-semibold">Data da auditoria</span>
+                <input type="date" className={isLocked ? inputLocked : inputCls} value={header.date} disabled={isLocked} onChange={(e) => setHeader({ ...header, date: e.target.value })} />
+              </label>
+              <label className="space-y-0.5">
+                <span className="text-[10px] uppercase text-slate-400 font-semibold">Analista financeira</span>
+                <input className={isLocked ? inputLocked : inputCls} value={header.analyst} disabled={isLocked} onChange={(e) => setHeader({ ...header, analyst: e.target.value })} placeholder="Nome" />
+              </label>
+            </div>
+            {(submittedAt || approvedAt) && (
+              <div className="mt-2 pt-2 border-t border-slate-100 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-slate-600">
+                {submittedAt && <span>Envio: <strong className="text-slate-900">{formatDateTimeBR(submittedAt)}</strong></span>}
+                {approvedAt && <span>Aprovação: <strong className="text-slate-900">{formatDateTimeBR(approvedAt)}</strong> ({approvedBy || 'GO'})</span>}
+              </div>
+            )}
           </div>
 
-          {checklistMode === 'hub' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button type="button" onClick={startNewAudit} className="group text-left rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:border-slate-400 hover:shadow-md transition-all">
-                  <div className="h-11 w-11 rounded-xl bg-slate-900 text-white flex items-center justify-center mb-4"><Plus className="w-5 h-5" /></div>
-                  <p className="text-[15px] font-semibold text-slate-900">Nova auditoria</p>
-                  <p className="text-[13px] text-slate-500 mt-1">Checklist do dia (POP-FIN-001), incl. comprovante de depósito.</p>
-                </button>
-                <button type="button" onClick={() => setChecklistMode('history')} className="group text-left rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:border-slate-400 hover:shadow-md transition-all">
-                  <div className="h-11 w-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center mb-4 group-hover:bg-slate-900 group-hover:text-white transition-colors"><History className="w-5 h-5" /></div>
-                  <p className="text-[15px] font-semibold text-slate-900">Histórico</p>
-                  <p className="text-[13px] text-slate-500 mt-1">Auditorias salvas, enviadas e aprovadas deste hotel.</p>
-                  {history.length > 0 && <p className="text-[12px] font-medium text-slate-700 mt-3">{history.length} registro(s)</p>}
-                </button>
-              </div>
-              {history.length > 0 && (
-                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                  <div className="px-4 py-3 border-b bg-slate-50/80 flex justify-between">
-                    <span className="text-[12px] font-semibold">Últimas auditorias</span>
-                    <button type="button" onClick={() => setChecklistMode('history')} className="text-[11px] font-medium text-blue-700 hover:underline">Ver todas</button>
-                  </div>
-                  <div className="divide-y">
-                    {history.slice(0, 5).map((r) => (
-                      <button key={r.id} type="button" onClick={() => openRecord(r)} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex justify-between gap-3">
-                        <div>
-                          <p className="text-[13px] font-medium">{formatDateBR(r.header.date)}</p>
-                          <p className="text-[11px] text-slate-500">{r.header.analyst || '—'}</p>
-                        </div>
-                        <span className={cn('text-[10px] font-bold uppercase px-2 py-0.5 rounded text-white', r.status === 'aprovado' && 'bg-emerald-600', r.status === 'aguardando' && 'bg-blue-600', r.status === 'contestado' && 'bg-amber-500', r.status === 'rascunho' && 'bg-slate-400')}>{statusLabel(r.status)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+          {!isLocked && (
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={saveDraft} className="h-9 px-4 rounded-lg bg-slate-900 text-white text-[12px] font-semibold">Salvar rascunho</button>
+              <button type="button" onClick={submitForApproval} disabled={!canSubmit} className="h-9 px-4 rounded-lg bg-blue-600 text-white text-[12px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Enviar para aprovação</button>
+              {missingCount > 0 && <span className="self-center text-[12px] text-amber-800">Faltam {missingCount} item(ns) obrigatório(s)</span>}
             </div>
           )}
 
-          {checklistMode === 'history' && (
-            <div className="space-y-3">
-              <div className="flex justify-between items-center gap-2">
-                <div>
-                  <h3 className="text-[14px] font-semibold">Histórico de auditorias</h3>
-                  <p className="text-[12px] text-slate-500">Clique para abrir · aprovadas são somente leitura</p>
+          <div className="space-y-2">
+            {visibleItems.map((item) => {
+              const a = answers[item.id] || { status: '' as ItemStatus, notes: '' };
+              return (
+                <div key={item.id} className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  <div className="px-4 py-2.5 border-b bg-slate-50/80 flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-semibold text-slate-900">
+                        <span className="text-slate-400 font-medium mr-1">{String(item.id).padStart(2, '0')}.</span>
+                        {item.title}
+                      </p>
+                      {item.fridayOnly && (
+                        <span className="inline-block mt-1 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">
+                          Obrigatório às sextas · comprovante de depósito
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      <button type="button" disabled={isLocked} onClick={() => setAnswer(item.id, { status: 'conforme' })} className={cn('h-8 px-3 rounded-md text-[11px] font-bold uppercase border disabled:cursor-not-allowed', a.status === 'conforme' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-500')}>Conforme</button>
+                      <button type="button" disabled={isLocked} onClick={() => setAnswer(item.id, { status: 'divergencia' })} className={cn('h-8 px-3 rounded-md text-[11px] font-bold uppercase border disabled:cursor-not-allowed', a.status === 'divergencia' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-slate-500 border-slate-200 hover:border-rose-500')}>Divergência</button>
+                    </div>
+                  </div>
+                  <div className="px-4 py-3 space-y-2">
+                    <ul className="text-[12px] text-slate-600 list-disc pl-4 space-y-0.5">{item.bullets.map((b) => <li key={b}>{b}</li>)}</ul>
+                    <textarea
+                      className={cn('w-full min-h-[56px] rounded-lg border px-2.5 py-2 text-[13px]', isLocked ? 'bg-slate-50 border-slate-100 cursor-not-allowed' : 'border-slate-200')}
+                      value={a.notes}
+                      disabled={isLocked}
+                      onChange={(e) => setAnswer(item.id, { notes: e.target.value })}
+                      placeholder={isLocked ? '' : (item.fridayOnly ? 'Referência do comprovante / resolutiva…' : 'Resolutiva…')}
+                    />
+                  </div>
                 </div>
-                <button type="button" onClick={startNewAudit} className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[12px] font-semibold inline-flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> Nova</button>
-              </div>
-              <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-                <div className="divide-y max-h-[520px] overflow-y-auto">
+              );
+            })}
+          </div>
+
+          {!isLocked && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button type="button" onClick={saveDraft} className="h-9 px-4 rounded-lg bg-slate-900 text-white text-[12px] font-semibold">Salvar rascunho</button>
+              <button type="button" onClick={submitForApproval} disabled={!canSubmit} className="h-9 px-4 rounded-lg bg-blue-600 text-white text-[12px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Enviar para aprovação</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'historico' && (
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-4 py-2 border-b bg-slate-50/80 text-[12px] font-semibold">Histórico · {history.length}</div>
+            <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
+              <table className="w-full text-[12px]">
+                <thead className="sticky top-0 bg-white z-10 border-b">
+                  <tr className="text-left text-[10px] uppercase text-slate-400">
+                    <th className="px-3 py-2">Data</th>
+                    <th className="px-3 py-2">Analista</th>
+                    <th className="px-3 py-2">Envio</th>
+                    <th className="px-3 py-2">Aprovação</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2 text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
                   {history.length === 0 ? (
-                    <div className="px-4 py-16 text-center text-[13px] text-slate-500">Nenhuma auditoria neste hotel</div>
+                    <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">Nenhuma auditoria neste hotel</td></tr>
                   ) : history.map((r) => (
-                    <button key={r.id} type="button" onClick={() => openRecord(r)} className="w-full text-left px-4 py-3.5 hover:bg-slate-50 flex justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[13px] font-semibold">{formatDateBR(r.header.date)}</span>
-                          <span className={cn('text-[10px] font-bold uppercase px-2 py-0.5 rounded text-white', r.status === 'aprovado' && 'bg-emerald-600', r.status === 'aguardando' && 'bg-blue-600', r.status === 'contestado' && 'bg-amber-500', r.status === 'rascunho' && 'bg-slate-400')}>{statusLabel(r.status)}</span>
-                        </div>
-                        <p className="text-[12px] text-slate-500 mt-0.5">{r.header.analyst || '—'}{r.submittedAt ? ` · enviada ${formatDateTimeBR(r.submittedAt)}` : ''}{r.approvedAt ? ` · aprovada ${formatDateTimeBR(r.approvedAt)}` : ''}</p>
-                      </div>
-                      <span className="text-[11px] text-slate-400">Abrir →</span>
-                    </button>
+                    <tr key={r.id} className="hover:bg-slate-50">
+                      <td className="px-3 py-2 font-semibold">{formatDateBR(r.header.date)}</td>
+                      <td className="px-3 py-2">{r.header.analyst || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600">{r.submittedAt ? formatDateTimeBR(r.submittedAt) : '—'}</td>
+                      <td className="px-3 py-2 text-slate-600">{r.approvedAt ? formatDateTimeBR(r.approvedAt) : '—'}</td>
+                      <td className="px-3 py-2">
+                        <span className={cn(
+                          'text-[10px] font-bold uppercase px-2 py-0.5 rounded text-white',
+                          r.status === 'aprovado' && 'bg-emerald-600',
+                          r.status === 'aguardando' && 'bg-blue-600',
+                          r.status === 'contestado' && 'bg-amber-500',
+                          r.status === 'rascunho' && 'bg-slate-400'
+                        )}>{statusLabel(r.status)}</span>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button type="button" onClick={() => openRecord(r)} className="h-7 px-2 rounded-lg bg-blue-600 text-white text-[11px] font-semibold">
+                          Abrir
+                        </button>
+                      </td>
+                    </tr>
                   ))}
-                </div>
-              </div>
+                </tbody>
+              </table>
             </div>
-          )}
-
-          {checklistMode === 'form' && (
-            <div className="space-y-4">
-              {isViewingHistory && recordStatus === 'aprovado' && (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex flex-wrap justify-between gap-2">
-                  <div className="flex gap-2 text-[13px] text-emerald-950">
-                    <Eye className="w-4 h-4 mt-0.5" />
-                    <div>
-                      <p className="font-semibold">Auditoria aprovada · somente leitura</p>
-                      <p className="text-[12px]">{formatDateBR(header.date)} · {header.analyst || '—'}{submittedAt ? ` · ${formatDateTimeBR(submittedAt)}` : ''}{approvedAt ? ` · aprovada ${formatDateTimeBR(approvedAt)}` : ''}</p>
-                    </div>
-                  </div>
-                  <button type="button" onClick={startNewAudit} className="h-8 px-3 rounded-lg bg-slate-900 text-white text-[11px] font-semibold inline-flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> Nova</button>
-                </div>
-              )}
-              {recordStatus === 'aguardando' && (
-                <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 flex flex-wrap justify-between gap-2 text-[13px] text-blue-950">
-                  <div>
-                    <p className="font-semibold">Aguardando aprovação · bloqueada</p>
-                    <p className="text-[12px]">Enviada {submittedAt ? formatDateTimeBR(submittedAt) : '—'}</p>
-                  </div>
-                  <button type="button" onClick={startNewAudit} className="h-8 px-3 rounded-lg border border-blue-300 text-[11px] font-semibold">Nova</button>
-                </div>
-              )}
-              {recordStatus === 'contestado' && (
-                <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] text-amber-950">
-                  <p className="font-semibold">Contestada — corrija e envie novamente</p>
-                  {currentRecordId && getRecord(currentRecordId)?.contestComment && <p className="text-[12px] mt-1">Motivo: {getRecord(currentRecordId)?.contestComment}</p>}
-                </div>
-              )}
-
-              {!isLocked && (
-                <div className="rounded-xl border bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-                  <div>
-                    <p className="text-[13px] font-semibold">{currentRecordId ? 'Editando auditoria' : 'Nova auditoria'}</p>
-                    <p className="text-[12px] text-slate-500">Progresso: {filledCount}/{visibleItems.length} · {missingCount > 0 ? `${missingCount} obrigatório(s) pendente(s)` : 'pronto para envio'}</p>
-                  </div>
-                  <div className="h-2 w-32 rounded-full bg-slate-100 overflow-hidden">
-                    <div className="h-full bg-slate-900 transition-all" style={{ width: `${visibleItems.length ? (filledCount / visibleItems.length) * 100 : 0}%` }} />
-                  </div>
-                </div>
-              )}
-
-              <div className="rounded-2xl border bg-white p-4 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label className="space-y-0.5 text-[12px]">
-                  <span className="text-[10px] uppercase text-slate-400 font-semibold">Data da auditoria</span>
-                  <input type="date" className={isLocked ? inputLocked : inputCls} value={header.date} disabled={isLocked} onChange={(e) => setHeader({ ...header, date: e.target.value })} />
-                </label>
-                <label className="space-y-0.5 text-[12px]">
-                  <span className="text-[10px] uppercase text-slate-400 font-semibold">Analista financeira</span>
-                  <input className={isLocked ? inputLocked : inputCls} value={header.analyst} disabled={isLocked} onChange={(e) => setHeader({ ...header, analyst: e.target.value })} placeholder="Nome da analista" />
-                </label>
-              </div>
-
-              {(submittedAt || approvedAt || recordStatus === 'aguardando' || recordStatus === 'aprovado') && (
-                <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-                  <div className="px-4 py-2 border-b bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Registro de tramitação</div>
-                  <div className="px-4 py-3">
-                    <ol className="relative border-l border-slate-200 ml-2 space-y-3">
-                      <li className="ml-4"><span className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-white bg-slate-400" /><p className="text-[11px] font-semibold text-slate-500 uppercase">Abertura</p><p className="text-[13px]">Auditoria do dia {formatDateBR(header.date)}{header.analyst ? ` · ${header.analyst}` : ''}</p></li>
-                      {submittedAt && <li className="ml-4"><span className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-white bg-blue-600" /><p className="text-[11px] font-semibold text-blue-700 uppercase">Envio</p><p className="text-[13px]">{formatDateTimeBR(submittedAt)}</p></li>}
-                      {recordStatus === 'aguardando' && !approvedAt && <li className="ml-4"><span className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-white bg-amber-400 animate-pulse" /><p className="text-[11px] font-semibold text-amber-700 uppercase">Em análise</p></li>}
-                      {approvedAt && <li className="ml-4"><span className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-600" /><p className="text-[11px] font-semibold text-emerald-700 uppercase">Aprovação</p><p className="text-[13px]">{formatDateTimeBR(approvedAt)}</p><p className="text-[11px] text-slate-500">Por: {approvedBy || 'GO'}</p></li>}
-                    </ol>
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-3">
-                {visibleItems.map((item) => {
-                  const a = answers[item.id] || { status: '' as ItemStatus, notes: '' };
-                  return (
-                    <div key={item.id} className={cn('rounded-2xl border bg-white shadow-sm overflow-hidden', isLocked && 'opacity-95')}>
-                      <div className="px-4 py-3 border-b bg-slate-50/80 flex flex-wrap items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-[13px] font-semibold"><span className="text-slate-400 mr-1">{String(item.id).padStart(2, '0')}.</span>{item.title}</p>
-                          {item.fridayOnly && <span className="inline-block mt-1 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">Obrigatório às sextas · comprovante de depósito</span>}
-                        </div>
-                        <div className="flex gap-1.5">
-                          <button type="button" disabled={isLocked} onClick={() => setAnswer(item.id, { status: 'conforme' })} className={cn('h-8 px-3 rounded-md text-[11px] font-bold uppercase border disabled:cursor-not-allowed', a.status === 'conforme' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200')}>Conforme</button>
-                          <button type="button" disabled={isLocked} onClick={() => setAnswer(item.id, { status: 'divergencia' })} className={cn('h-8 px-3 rounded-md text-[11px] font-bold uppercase border disabled:cursor-not-allowed', a.status === 'divergencia' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-slate-500 border-slate-200')}>Divergência</button>
-                        </div>
-                      </div>
-                      <div className="px-4 py-3 space-y-2">
-                        <ul className="text-[12px] text-slate-600 list-disc pl-4 space-y-0.5">{item.bullets.map((b) => <li key={b}>{b}</li>)}</ul>
-                        <textarea className={cn('w-full min-h-[64px] rounded-lg border px-2.5 py-2 text-[13px]', isLocked ? 'bg-slate-50 border-slate-100 cursor-not-allowed' : 'border-slate-200')} value={a.notes} disabled={isLocked} onChange={(e) => setAnswer(item.id, { notes: e.target.value })} placeholder={isLocked ? '' : (item.fridayOnly ? 'Referência do comprovante / resolutiva…' : 'Resolutiva…')} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {!isLocked && missingCount > 0 && <p className="text-[12px] text-amber-800">Faltam <strong>{missingCount}</strong> item(ns) obrigatório(s).</p>}
-              {!isLocked && (
-                <div className="sticky bottom-0 z-10 py-3">
-                  <div className="flex flex-wrap gap-2 rounded-xl border bg-white p-3 shadow-md">
-                    <button type="button" onClick={saveDraft} className="h-10 px-4 rounded-lg bg-slate-900 text-white text-[12px] font-semibold">Salvar rascunho</button>
-                    <button type="button" onClick={submitForApproval} disabled={!canSubmit} className="h-10 px-4 rounded-lg bg-blue-600 text-white text-[12px] font-semibold disabled:opacity-40">Enviar para aprovação</button>
-                    <button type="button" onClick={() => setChecklistMode('hub')} className="h-10 px-3 rounded-lg border text-[12px] text-slate-600 ml-auto">Fechar</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -470,17 +433,34 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[{ label: 'Conciliados', value: hgStats.both, tone: 'text-emerald-700' }, { label: 'Dif. valor', value: hgStats.diff, tone: 'text-amber-700' }, { label: 'Só PMS', value: hgStats.ho, tone: 'text-rose-700' }, { label: 'Só Adquirente', value: hgStats.go, tone: 'text-rose-700' }].map((k) => (
-              <div key={k.label} className="rounded-xl border bg-white px-3 py-2.5 shadow-sm"><p className="text-[10px] uppercase text-slate-400 font-semibold">{k.label}</p><p className={cn('text-[18px] font-semibold tabular-nums', k.tone)}>{k.value}</p></div>
+              <div key={k.label} className="rounded-xl border bg-white px-3 py-2.5 shadow-sm">
+                <p className="text-[10px] uppercase text-slate-400 font-semibold">{k.label}</p>
+                <p className={cn('text-[18px] font-semibold tabular-nums', k.tone)}>{k.value}</p>
+              </div>
             ))}
           </div>
           <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
             <div className="px-4 py-2 border-b bg-slate-50/80 text-[12px] font-semibold">Resultado · tol. R$ 0,05</div>
             <div className="overflow-x-auto max-h-[400px]">
               <table className="w-full text-[12px]">
-                <thead className="border-b sticky top-0 bg-white"><tr className="text-left text-[10px] uppercase text-slate-400"><th className="px-3 py-2">Status</th><th className="px-3 py-2">PMS</th><th className="px-3 py-2">Adquirente</th><th className="px-3 py-2 text-right">PMS líq.</th><th className="px-3 py-2 text-right">Adq. líq.</th><th className="px-3 py-2 text-right">Δ</th></tr></thead>
+                <thead className="border-b sticky top-0 bg-white">
+                  <tr className="text-left text-[10px] uppercase text-slate-400">
+                    <th className="px-3 py-2">Status</th><th className="px-3 py-2">PMS</th><th className="px-3 py-2">Adquirente</th>
+                    <th className="px-3 py-2 text-right">PMS líq.</th><th className="px-3 py-2 text-right">Adq. líq.</th><th className="px-3 py-2 text-right">Δ</th>
+                  </tr>
+                </thead>
                 <tbody className="divide-y">
-                  {hitsGetnetMatches.length === 0 ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">Envie os dois relatórios</td></tr> : hitsGetnetMatches.map((m) => (
-                    <tr key={m.id}><td className="px-3 py-2"><StatusPill side={m.side} /></td><td className="px-3 py-2">{m.hits ? `${formatDateBR(m.hits.date)} · ${m.hits.guest}` : '—'}</td><td className="px-3 py-2">{m.getnet ? `${formatDateBR(m.getnet.date)} · ${m.getnet.brand}` : '—'}</td><td className="px-3 py-2 text-right tabular-nums">{m.hits ? formatBRL(m.hits.net) : '—'}</td><td className="px-3 py-2 text-right tabular-nums">{m.getnet ? formatBRL(m.getnet.net) : '—'}</td><td className="px-3 py-2 text-right tabular-nums">{m.delta != null ? formatBRL(m.delta) : '—'}</td></tr>
+                  {hitsGetnetMatches.length === 0 ? (
+                    <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">Envie os dois relatórios</td></tr>
+                  ) : hitsGetnetMatches.map((m) => (
+                    <tr key={m.id}>
+                      <td className="px-3 py-2"><StatusPill side={m.side} /></td>
+                      <td className="px-3 py-2">{m.hits ? `${formatDateBR(m.hits.date)} · ${m.hits.guest}` : '—'}</td>
+                      <td className="px-3 py-2">{m.getnet ? `${formatDateBR(m.getnet.date)} · ${m.getnet.brand}` : '—'}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{m.hits ? formatBRL(m.hits.net) : '—'}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{m.getnet ? formatBRL(m.getnet.net) : '—'}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{m.delta != null ? formatBRL(m.delta) : '—'}</td>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -498,10 +478,23 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
           </div>
           <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
             <table className="w-full text-[12px]">
-              <thead className="border-b"><tr className="text-left text-[10px] uppercase text-slate-400"><th className="px-3 py-2">Liquidação</th><th className="px-3 py-2 text-right">Esperado</th><th className="px-3 py-2 text-right">Banco</th><th className="px-3 py-2 text-right">Δ</th><th className="px-3 py-2">Status</th></tr></thead>
+              <thead className="border-b">
+                <tr className="text-left text-[10px] uppercase text-slate-400">
+                  <th className="px-3 py-2">Liquidação</th><th className="px-3 py-2 text-right">Esperado</th>
+                  <th className="px-3 py-2 text-right">Banco</th><th className="px-3 py-2 text-right">Δ</th><th className="px-3 py-2">Status</th>
+                </tr>
+              </thead>
               <tbody className="divide-y">
-                {bankMatches.length === 0 ? <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-400">Envie adquirente + extrato</td></tr> : bankMatches.map((r) => (
-                  <tr key={r.id}><td className="px-3 py-2">{formatDateBR(r.settleDate)}</td><td className="px-3 py-2 text-right tabular-nums">{formatBRL(r.expectedNet)}</td><td className="px-3 py-2 text-right tabular-nums">{formatBRL(r.bankCredit)}</td><td className="px-3 py-2 text-right tabular-nums">{formatBRL(r.delta)}</td><td className="px-3 py-2"><BankStatus status={r.status} /></td></tr>
+                {bankMatches.length === 0 ? (
+                  <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-400">Envie adquirente + extrato</td></tr>
+                ) : bankMatches.map((r) => (
+                  <tr key={r.id}>
+                    <td className="px-3 py-2">{formatDateBR(r.settleDate)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatBRL(r.expectedNet)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatBRL(r.bankCredit)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatBRL(r.delta)}</td>
+                    <td className="px-3 py-2"><BankStatus status={r.status} /></td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -513,15 +506,16 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
 
       {tab === 'aprovacao' && (
         <div className="space-y-3">
-          <p className="text-[12px] text-slate-500">Fila da analista · aprovar ou contestar</p>
           {pendingApproval.length === 0 ? (
-            <div className="rounded-2xl border border-dashed px-4 py-10 text-center text-[13px] text-slate-400">Nenhuma auditoria aguardando</div>
+            <div className="rounded-2xl border border-dashed px-4 py-12 text-center text-[13px] text-slate-400">Nenhuma auditoria aguardando</div>
           ) : pendingApproval.map((r) => (
             <div key={r.id} className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
               <div className="flex flex-wrap justify-between gap-2">
                 <div>
                   <p className="text-[14px] font-semibold">{r.hotelName}</p>
-                  <p className="text-[12px] text-slate-500">{formatDateBR(r.header.date)} · {r.header.analyst || '—'} · enviada {r.submittedAt ? formatDateTimeBR(r.submittedAt) : '—'}</p>
+                  <p className="text-[12px] text-slate-500">
+                    {formatDateBR(r.header.date)} · {r.header.analyst || '—'} · enviada {r.submittedAt ? formatDateTimeBR(r.submittedAt) : '—'}
+                  </p>
                 </div>
                 <div className="flex gap-1.5">
                   <button type="button" onClick={() => {
@@ -550,8 +544,13 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
       {pasteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl border overflow-hidden">
-            <div className="px-5 py-3 border-b bg-slate-50 flex justify-between"><p className="font-semibold text-[14px]">Colar texto — {pasteOpen}</p><button type="button" onClick={() => setPasteOpen(null)}><X className="w-4 h-4" /></button></div>
-            <div className="p-4"><textarea className="w-full min-h-[200px] rounded-lg border p-3 text-[12px] font-mono" value={pasteText} onChange={(e) => setPasteText(e.target.value)} /></div>
+            <div className="px-5 py-3 border-b bg-slate-50 flex justify-between">
+              <p className="font-semibold text-[14px]">Colar texto — {pasteOpen}</p>
+              <button type="button" onClick={() => setPasteOpen(null)}><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4">
+              <textarea className="w-full min-h-[200px] rounded-lg border p-3 text-[12px] font-mono" value={pasteText} onChange={(e) => setPasteText(e.target.value)} />
+            </div>
             <div className="px-5 py-3 border-t flex justify-end gap-2">
               <button type="button" onClick={() => setPasteOpen(null)} className="h-9 px-4 rounded-lg border text-[12px]">Cancelar</button>
               <button type="button" onClick={applyPaste} className="h-9 px-4 rounded-lg bg-blue-600 text-white text-[12px] font-semibold">Processar</button>
@@ -566,7 +565,13 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
 function UploadCard({ title, count, onFile, onPaste }: { title: string; count: number; onFile: (f: File) => void; onPaste: () => void }) {
   return (
     <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4 shadow-sm space-y-3">
-      <div className="flex gap-2"><FileText className="w-4 h-4 text-slate-400 mt-0.5" /><div><p className="text-[13px] font-semibold">{title}</p><p className="text-[11px] text-slate-400">{count} registro(s)</p></div></div>
+      <div className="flex gap-2">
+        <FileText className="w-4 h-4 text-slate-400 mt-0.5" />
+        <div>
+          <p className="text-[13px] font-semibold">{title}</p>
+          <p className="text-[11px] text-slate-400">{count} registro(s)</p>
+        </div>
+      </div>
       <div className="flex gap-2">
         <label className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[12px] font-semibold inline-flex items-center gap-1.5 cursor-pointer">
           <Upload className="w-3.5 h-3.5" /> Upload

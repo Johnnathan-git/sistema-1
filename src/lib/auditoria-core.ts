@@ -23,7 +23,7 @@ export const CHECKLIST: { id: number; title: string; bullets: string[]; fridayOn
   { id: 11, title: 'Estornos do dia anterior', bullets: ['Confere todos os estornos realizados no dia, validando se foram devidamente autorizados e justificados.'] },
   { id: 12, title: 'Divergências de cartão (correções)', bullets: ['Caso haja divergências como correção de cartão: bandeira, número de autorização, documento, valor, parcelamento.', 'Contatar de imediato a Líder de Recepção/substituto do dia para que seja feita a correção.'] },
   { id: 13, title: 'Outros pontos identificados', bullets: ['Investigar as causas e o motivo de qualquer outro ponto identificado e registrar na auditoria.'] },
-  { id: 14, title: 'Conciliação do depósito semanal', fridayOnly: true, bullets: ['Concilia o valor depositado (comprovante) com o relatório de pagamentos efetuados no PMS do período.', 'Caso haja divergência: contata o responsável para resolver.', 'Caso não haja divergência: segue o fluxo normal da auditoria.'] },
+  { id: 14, title: 'Comprovante de depósito semanal', fridayOnly: true, bullets: ['Concilia o valor depositado (comprovante bancário) com o relatório de pagamentos efetuados no PMS do período.', 'Caso haja divergência: contata o responsável para resolver.', 'Caso não haja divergência: segue o fluxo normal da auditoria.', 'Registrar referência do comprovante na resolutiva.'] },
 ];
 
 export const DEFAULT_FEES: FeeRule[] = [
@@ -250,27 +250,24 @@ export function reconcileGetnetBank(getnet: GetnetSale[], bank: BankLine[], fees
     bySettle.set(s.settle, prev);
   }
   const byBankDay = new Map<string, { amount: number; ids: string[] }>();
-  for (const b of bank.filter((x) => x.amount > 0)) {
+  for (const b of bank.filter((x) => x.amount > 0 && (x.kind === 'getnet' || x.kind === 'cielo' || x.kind === 'other'))) {
     const prev = byBankDay.get(b.date) || { amount: 0, ids: [] };
-    if (b.kind === 'getnet' || /getnet/i.test(b.description)) {
-      prev.amount += b.amount;
-      prev.ids.push(b.id);
-    }
+    prev.amount += b.amount;
+    prev.ids.push(b.id);
     byBankDay.set(b.date, prev);
   }
   const dates = new Set([...bySettle.keys(), ...byBankDay.keys()]);
   const rows: BankMatchRow[] = [];
   let i = 0;
-  for (const day of [...dates].sort()) {
-    const exp = bySettle.get(day) || { net: 0, ids: [] };
-    const bankCredit = byBankDay.get(day)?.amount || 0;
-    const delta = exp.net - bankCredit;
+  for (const d of [...dates].sort()) {
+    const exp = bySettle.get(d)?.net || 0;
+    const bankAmt = byBankDay.get(d)?.amount || 0;
+    const delta = bankAmt - exp;
     let status: BankMatchRow['status'] = 'ok';
-    if (exp.net === 0 && bankCredit > 0) status = 'sobra_banco';
-    else if (exp.net > 0 && bankCredit === 0) status = 'faltando_banco';
-    else if (!moneyEq(exp.net, bankCredit, 1.0)) status = 'divergencia';
-    if (exp.net === 0 && bankCredit === 0) continue;
-    rows.push({ id: `bm-${++i}`, settleDate: day, expectedNet: exp.net, bankCredit, delta, status, getnetIds: exp.ids, bankIds: byBankDay.get(day)?.ids || [], detail: status === 'ok' ? 'OK' : status });
+    if (exp > 0 && bankAmt === 0) status = 'faltando_banco';
+    else if (exp === 0 && bankAmt > 0) status = 'sobra_banco';
+    else if (!moneyEq(exp, bankAmt)) status = 'divergencia';
+    rows.push({ id: `bm-${++i}`, settleDate: d, expectedNet: exp, bankCredit: bankAmt, delta, status, getnetIds: bySettle.get(d)?.ids || [], bankIds: byBankDay.get(d)?.ids || [], detail: status === 'ok' ? 'Conciliado' : `Δ ${delta.toFixed(2)}` });
   }
   return rows;
 }

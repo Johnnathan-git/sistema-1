@@ -1,5 +1,5 @@
 /**
- * Auditoria Life — abas estilo Recepção + modal Histórico + checklist sob demanda
+ * Auditoria Life — checklist sob demanda, modal histórico, aprovação com abertura completa
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -123,6 +123,8 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
   const [tick, setTick] = useState(0);
   const [modalRecord, setModalRecord] = useState<AuditRecord | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [contestModal, setContestModal] = useState<AuditRecord | null>(null);
+  const [contestReason, setContestReason] = useState('');
 
   const isLocked = recordStatus === 'aprovado' || recordStatus === 'aguardando';
 
@@ -198,6 +200,7 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
     setModalRecord(null);
   }
 
+  /** Abre a auditoria contestada/rascunho já preenchida para ajuste (não a tela vazia) */
   function loadIntoChecklist(r: AuditRecord) {
     setHeader({ ...r.header });
     setAnswers({ ...emptyAnswers(), ...r.answers });
@@ -276,6 +279,7 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
     setSubmittedAt(now); setApprovedAt(undefined); setApprovedBy(undefined);
     setTick((t) => t + 1);
     try { localStorage.removeItem(storageKey); } catch {}
+    setFormOpen(false);
     toast.success('Enviada para aprovação');
   };
 
@@ -357,7 +361,6 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
               {recordStatus === 'aprovado' && (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[13px] text-emerald-950 flex flex-wrap items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5"><Eye className="w-4 h-4" /> Aprovada · somente leitura · {approvedAt ? formatDateTimeBR(approvedAt) : ''}</span>
-                  <button type="button" onClick={startNewAudit} className="text-[12px] font-semibold text-emerald-900 underline">Nova auditoria</button>
                 </div>
               )}
               {recordStatus === 'aguardando' && (
@@ -367,9 +370,9 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
               )}
               {recordStatus === 'contestado' && (
                 <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-[13px] text-amber-950">
-                  Contestada — corrija e envie novamente
+                  Contestada — corrija os itens e envie novamente
                   {currentRecordId && getRecord(currentRecordId)?.contestComment && (
-                    <span className="block text-[12px] mt-1">Motivo: {getRecord(currentRecordId)?.contestComment}</span>
+                    <span className="block text-[12px] mt-1"><strong>Motivo:</strong> {getRecord(currentRecordId)?.contestComment}</span>
                   )}
                 </div>
               )}
@@ -431,24 +434,22 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
               </div>
 
               {!isLocked && (
-                <div className="sticky bottom-0 z-10 -mx-1 px-1 pt-2 pb-1 bg-gradient-to-t from-[#eef1f6] via-[#eef1f6] to-transparent">
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={submitForApproval}
-                      disabled={!canSubmit}
-                      className="h-10 px-5 rounded-lg bg-blue-600 text-white text-[13px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-500"
-                    >
-                      Salvar e enviar para aprovação
-                    </button>
-                    {missingCount > 0 ? (
-                      <span className="text-[12px] text-amber-800">Faltam {missingCount} item(ns) obrigatório(s)</span>
-                    ) : !header.analyst.trim() ? (
-                      <span className="text-[12px] text-amber-800">Informe o nome da analista</span>
-                    ) : (
-                      <span className="text-[12px] text-emerald-700">Pronto para enviar</span>
-                    )}
-                  </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm flex flex-wrap items-center gap-3 mt-2">
+                  <button
+                    type="button"
+                    onClick={submitForApproval}
+                    disabled={!canSubmit}
+                    className="h-10 px-5 rounded-lg bg-blue-600 text-white text-[13px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-500"
+                  >
+                    Salvar e enviar para aprovação
+                  </button>
+                  {missingCount > 0 ? (
+                    <span className="text-[12px] text-amber-800">Faltam {missingCount} item(ns) obrigatório(s)</span>
+                  ) : !header.analyst.trim() ? (
+                    <span className="text-[12px] text-amber-800">Informe o nome da analista</span>
+                  ) : (
+                    <span className="text-[12px] text-emerald-700">Pronto para enviar</span>
+                  )}
                 </div>
               )}
             </>
@@ -598,34 +599,102 @@ function AuditoriaHotelWorkspace({ hotelId, hotelName, onChangeHotel }: { hotelI
             <div className="rounded-2xl border border-dashed px-4 py-12 text-center text-[13px] text-slate-400">Nenhuma auditoria aguardando</div>
           ) : pendingApproval.map((r) => (
             <div key={r.id} className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
-              <div className="flex flex-wrap justify-between gap-2">
+              <div className="flex flex-wrap justify-between gap-2 items-start">
                 <div>
                   <p className="text-[14px] font-semibold">{r.hotelName}</p>
                   <p className="text-[12px] text-slate-500">
                     {formatDateBR(r.header.date)} · {r.header.analyst || '—'} · enviada {r.submittedAt ? formatDateTimeBR(r.submittedAt) : '—'}
                   </p>
                 </div>
-                <div className="flex gap-1.5">
-                  <button type="button" onClick={() => {
-                    const comment = window.prompt('Motivo da contestação (obrigatório):');
-                    if (comment === null) return;
-                    if (!comment.trim()) { toast.error('Informe o motivo'); return; }
-                    upsertRecord({ ...r, status: 'contestado', contestComment: comment.trim(), updatedAt: new Date().toISOString() });
-                    setTick((t) => t + 1);
-                    if (currentRecordId === r.id) setRecordStatus('contestado');
-                    toast.message('Contestada');
-                  }} className="h-8 px-3 rounded-lg border border-amber-400 text-amber-900 text-[11px] font-semibold">Contestar</button>
-                  <button type="button" onClick={() => {
-                    const now = new Date().toISOString();
-                    upsertRecord({ ...r, status: 'aprovado', approvedAt: now, approvedBy: 'GO', updatedAt: now, contestComment: undefined });
-                    setTick((t) => t + 1);
-                    if (currentRecordId === r.id) { setRecordStatus('aprovado'); setApprovedAt(now); setApprovedBy('GO'); }
-                    toast.success('Aprovada');
-                  }} className="h-8 px-3 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold">Aprovar</button>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => openRecord(r)}
+                    className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-semibold hover:bg-slate-50"
+                  >
+                    Abrir auditoria
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setContestReason(''); setContestModal(r); }}
+                    className="h-8 px-3 rounded-lg border border-amber-400 text-amber-900 text-[11px] font-semibold hover:bg-amber-50"
+                  >
+                    Contestar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = new Date().toISOString();
+                      upsertRecord({ ...r, status: 'aprovado', approvedAt: now, approvedBy: 'GO', updatedAt: now, contestComment: undefined });
+                      setTick((t) => t + 1);
+                      if (currentRecordId === r.id) { setRecordStatus('aprovado'); setApprovedAt(now); setApprovedBy('GO'); }
+                      toast.success('Aprovada');
+                    }}
+                    className="h-8 px-3 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-500"
+                  >
+                    Aprovar
+                  </button>
                 </div>
               </div>
+              <p className="text-[11px] text-slate-400">Abra a auditoria para revisar todos os itens antes de aprovar ou contestar.</p>
             </div>
           ))}
+        </div>
+      )}
+
+      {contestModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <button type="button" className="absolute inset-0 bg-slate-900/50" onClick={() => setContestModal(null)} aria-label="Fechar" />
+          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-3.5 border-b bg-[#0c2340] text-white flex items-center justify-between">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-sky-300 font-semibold">Contestação</p>
+                <p className="text-[14px] font-semibold mt-0.5">{contestModal.hotelName} · {formatDateBR(contestModal.header.date)}</p>
+              </div>
+              <button type="button" onClick={() => setContestModal(null)} className="h-8 w-8 rounded-lg border border-white/20 flex items-center justify-center">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-[13px] text-slate-600">Informe o motivo da contestação. A analista verá este texto ao reabrir a auditoria.</p>
+              <label className="block space-y-1">
+                <span className="text-[10px] font-semibold uppercase text-slate-400">Motivo (obrigatório)</span>
+                <textarea
+                  autoFocus
+                  className="w-full min-h-[120px] rounded-lg border border-slate-200 px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400"
+                  value={contestReason}
+                  onChange={(e) => setContestReason(e.target.value)}
+                  placeholder="Descreva o que precisa ser corrigido…"
+                />
+              </label>
+            </div>
+            <div className="px-5 py-3 border-t bg-slate-50 flex justify-end gap-2">
+              <button type="button" onClick={() => setContestModal(null)} className="h-9 px-4 rounded-lg border border-slate-200 text-[13px] font-medium hover:bg-white">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!contestReason.trim()) { toast.error('Informe o motivo da contestação'); return; }
+                  const r = contestModal;
+                  upsertRecord({
+                    ...r,
+                    status: 'contestado',
+                    contestComment: contestReason.trim(),
+                    updatedAt: new Date().toISOString(),
+                  });
+                  setTick((t) => t + 1);
+                  if (currentRecordId === r.id) setRecordStatus('contestado');
+                  setContestModal(null);
+                  setContestReason('');
+                  toast.message('Auditoria contestada — retornou para a analista');
+                }}
+                className="h-9 px-4 rounded-lg bg-amber-500 text-white text-[13px] font-semibold hover:bg-amber-400"
+              >
+                Confirmar contestação
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -696,9 +765,12 @@ function AuditDetailModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-          {record.status === 'contestado' && record.contestComment && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-950">
-              <strong>Contestação:</strong> {record.contestComment}
+          {record.status === 'contestado' && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-950 space-y-1">
+              <p className="font-semibold text-[13px]">Auditoria contestada — ajuste os itens e reenvie</p>
+              {record.contestComment && (
+                <p><span className="font-medium">Motivo do GO:</span> {record.contestComment}</p>
+              )}
             </div>
           )}
 
@@ -738,7 +810,7 @@ function AuditDetailModal({
           </button>
           {canEdit && (
             <button type="button" onClick={onEdit} className="h-9 px-4 rounded-lg bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-500">
-              Editar no checklist
+              {record.status === 'contestado' ? 'Ajustar e reenviar' : 'Continuar edição'}
             </button>
           )}
           {locked && (

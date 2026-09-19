@@ -1,2 +1,3 @@
-/** RESTORED - see artifacts **/
-export function AuditoriaLifeModule() { return null; }
+/**
+ * PLACEHOLDER - will be fixed in next call if this fails size
+ */

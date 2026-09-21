@@ -44,8 +44,8 @@ export function ConciliationPanel({
   rows: { id: string; label: string; detail: string; ok: boolean }[];
 }) {
   return (
-    <div className="space-y-3">
-      <p className="text-[14px] font-semibold text-slate-900">{title}</p>
+    <div className="space-y-4">
+      <p className="text-[15px] font-semibold text-slate-900 tracking-tight">{title}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {(
           [
@@ -53,31 +53,37 @@ export function ConciliationPanel({
             [rightLabel, rightCount, onUploadRight, onPasteRight],
           ] as const
         ).map(([label, count, up, paste]) => (
-          <div key={label} className="rounded-xl border bg-white p-4 space-y-2">
+          <div key={label} className="rounded-xl border border-slate-200/80 bg-white p-4 space-y-3 shadow-sm hover:border-slate-300/80 transition-colors">
             <p className="text-[12px] font-semibold text-slate-700">
-              {label} · {count} linha(s)
+              {label} · <span className="tabular-nums text-slate-500">{count}</span> linha(s)
             </p>
             <div className="flex flex-wrap gap-2">
-              <label className="h-8 px-3 rounded-lg border text-[11px] font-medium cursor-pointer inline-flex items-center gap-1 hover:bg-slate-50">
-                <Upload className="w-3.5 h-3.5" /> Arquivo
+              <label className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-300 transition-all">
+                <Upload className="w-3.5 h-3.5 text-slate-500" /> Arquivo
                 <input type="file" accept=".txt,.csv,text/plain" className="hidden" onChange={(e) => e.target.files?.[0] && up(e.target.files[0])} />
               </label>
-              <button type="button" onClick={paste} className="h-8 px-3 rounded-lg border text-[11px] font-medium hover:bg-slate-50">
+              <button type="button" onClick={paste} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium hover:bg-slate-50 hover:border-slate-300 transition-all">
                 Colar texto
               </button>
             </div>
           </div>
         ))}
       </div>
-      <div className="rounded-xl border bg-white overflow-hidden">
-        <div className="max-h-[420px] overflow-y-auto divide-y">
-          {rows.length === 0 && <p className="px-4 py-8 text-center text-[13px] text-slate-400">Sem dados ainda</p>}
+      <div className="rounded-xl border border-slate-200/80 bg-white overflow-hidden shadow-sm">
+        <div className="max-h-[420px] overflow-y-auto divide-y divide-slate-100">
+          {rows.length === 0 && (
+            <p className="px-4 py-12 text-center text-[13px] text-slate-400">Sem dados ainda</p>
+          )}
           {rows.map((r) => (
-            <div key={r.id} className="px-4 py-2.5 flex items-start gap-2 text-[12px]">
-              {r.ok ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" /> : <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />}
+            <div key={r.id} className="px-4 py-3 flex items-start gap-2.5 text-[12px] hover:bg-slate-50/60 transition-colors">
+              {r.ok ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              )}
               <div className="min-w-0">
                 <p className="font-medium text-slate-800">{r.label}</p>
-                <p className="text-slate-500">{r.detail}</p>
+                <p className="text-slate-500 mt-0.5">{r.detail}</p>
               </div>
             </div>
           ))}
@@ -124,10 +130,12 @@ export function PendenciasPanel({
 
   if (items.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center">
-        <AlertTriangle className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-gradient-to-b from-white to-slate-50/80 px-6 py-16 text-center shadow-sm">
+        <AlertTriangle className="w-11 h-11 text-slate-300 mx-auto mb-3" />
         <p className="text-[15px] font-semibold text-slate-800">Nenhuma pendência aberta</p>
-        <p className="text-[13px] text-slate-500 mt-1">Divergências do checklist aparecem aqui para o hotel resolver e a analista aprovar</p>
+        <p className="text-[13px] text-slate-500 mt-1 max-w-md mx-auto">
+          Divergências do checklist aparecem aqui para o hotel resolver e a analista aprovar
+        </p>
       </div>
     );
   }
@@ -138,7 +146,7 @@ export function PendenciasPanel({
         const a = p.answer;
         const k = `${p.auditId}-${p.itemId}`;
         return (
-          <div key={k} className="rounded-xl border bg-white p-4 space-y-3">
+          <div key={k} className="rounded-xl border border-slate-200/80 bg-white p-4 space-y-3 shadow-sm hover:border-slate-300/80 transition-colors">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="text-[14px] font-semibold text-slate-900">
@@ -151,7 +159,7 @@ export function PendenciasPanel({
               </div>
               <span
                 className={cn(
-                  'text-[10px] font-bold uppercase px-2 py-0.5 rounded',
+                  'text-[10px] font-bold uppercase px-2.5 py-1 rounded-full tracking-wide',
                   a.pendingState === 'open' && 'bg-rose-100 text-rose-800',
                   a.pendingState === 'resolved' && 'bg-amber-100 text-amber-900',
                 )}
@@ -160,33 +168,33 @@ export function PendenciasPanel({
               </span>
             </div>
             {a.notes && (
-              <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-[12px] text-slate-700">
+              <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">
                 <span className="font-semibold text-slate-500">Divergência: </span>
                 {a.notes}
               </div>
             )}
             {a.attachmentDataUrl && (
-              <a href={a.attachmentDataUrl} download={a.attachmentName || 'anexo'} className="text-[12px] text-blue-700 font-medium inline-flex items-center gap-1">
+              <a href={a.attachmentDataUrl} download={a.attachmentName || 'anexo'} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline">
                 <FileText className="w-3.5 h-3.5" /> {a.attachmentName || 'Anexo da analista'}
               </a>
             )}
             {a.analystRejectNote && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-950">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-950">
                 <strong>Recusa da analista:</strong> {a.analystRejectNote}
               </div>
             )}
             {a.pendingState === 'open' && (
               <div className="space-y-2 border-t border-slate-100 pt-3">
-                <p className="text-[11px] font-semibold uppercase text-slate-400">Resolução do hotel</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Resolução do hotel</p>
                 <textarea
-                  className="w-full min-h-[72px] rounded-lg border border-slate-200 px-3 py-2 text-[13px]"
+                  className="w-full min-h-[72px] rounded-xl border border-slate-200 px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all"
                   placeholder="Descreva como a pendência foi resolvida…"
                   value={drafts[k] || ''}
                   onChange={(e) => setDrafts((d) => ({ ...d, [k]: e.target.value }))}
                 />
                 <div className="flex flex-wrap items-center gap-2">
-                  <label className="h-8 px-3 rounded-lg border text-[11px] font-medium cursor-pointer inline-flex items-center gap-1 hover:bg-slate-50">
-                    <Upload className="w-3.5 h-3.5" /> Anexo (opcional)
+                  <label className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-300 transition-all">
+                    <Upload className="w-3.5 h-3.5 text-slate-500" /> Anexo (opcional)
                     <input
                       type="file"
                       accept=".pdf,image/*"
@@ -213,7 +221,7 @@ export function PendenciasPanel({
                       onHotelResolve(p.auditId, p.itemId, drafts[k] || '');
                       setDrafts((d) => ({ ...d, [k]: '' }));
                     }}
-                    className="h-8 px-4 rounded-lg bg-slate-900 text-white text-[12px] font-semibold hover:bg-slate-800"
+                    className="h-8 px-4 rounded-lg bg-gradient-to-r from-slate-900 to-slate-800 text-white text-[12px] font-semibold hover:from-slate-800 hover:to-slate-700 shadow-sm transition-all"
                   >
                     Enviar resolução
                   </button>
@@ -222,24 +230,24 @@ export function PendenciasPanel({
             )}
             {a.pendingState === 'resolved' && (
               <div className="space-y-2 border-t border-slate-100 pt-3">
-                <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-[12px] text-emerald-900">
+                <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-[12px] text-emerald-900">
                   <strong>Resolução hotel:</strong> {a.hotelResolution}
                   {a.hotelResolvedAt && <span className="text-emerald-700"> · {formatDateTimeBR(a.hotelResolvedAt)}</span>}
                 </div>
                 {a.hotelAttachmentDataUrl && (
-                  <a href={a.hotelAttachmentDataUrl} download={a.hotelAttachmentName || 'anexo-hotel'} className="text-[12px] text-blue-700 font-medium inline-flex items-center gap-1">
+                  <a href={a.hotelAttachmentDataUrl} download={a.hotelAttachmentName || 'anexo-hotel'} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline">
                     <FileText className="w-3.5 h-3.5" /> {a.hotelAttachmentName || 'Anexo do hotel'}
                   </a>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => onApprove(p.auditId, p.itemId)} className="h-8 px-4 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold hover:bg-emerald-500">
+                  <button type="button" onClick={() => onApprove(p.auditId, p.itemId)} className="h-8 px-4 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold hover:bg-emerald-500 shadow-sm shadow-emerald-600/20 transition-all">
                     Aprovar
                   </button>
                   <input
                     value={rejectDrafts[k] || ''}
                     onChange={(e) => setRejectDrafts((d) => ({ ...d, [k]: e.target.value }))}
                     placeholder="Justificativa da recusa"
-                    className="h-8 flex-1 min-w-[140px] rounded-lg border px-2 text-[12px]"
+                    className="h-8 flex-1 min-w-[140px] rounded-lg border border-slate-200 px-2.5 text-[12px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400"
                   />
                   <button
                     type="button"
@@ -247,7 +255,7 @@ export function PendenciasPanel({
                       onReject(p.auditId, p.itemId, rejectDrafts[k] || '');
                       setRejectDrafts((d) => ({ ...d, [k]: '' }));
                     }}
-                    className="h-8 px-4 rounded-lg border border-rose-300 text-rose-700 text-[12px] font-semibold hover:bg-rose-50"
+                    className="h-8 px-4 rounded-lg border border-rose-300 text-rose-700 text-[12px] font-semibold hover:bg-rose-50 transition-all"
                   >
                     Recusar
                   </button>
@@ -263,41 +271,41 @@ export function PendenciasPanel({
 
 export function AuditDetailModal({ record, onClose }: { record: AuditRecord; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-xl border flex flex-col">
-        <div className="px-5 py-3 border-b bg-slate-50 flex items-start justify-between gap-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl shadow-slate-900/20 border border-slate-200/80 flex flex-col">
+        <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-start justify-between gap-3">
           <div>
-            <p className="font-semibold text-[15px]">{record.hotelName}</p>
-            <p className="text-[12px] text-slate-500">
+            <p className="font-semibold text-[15px] text-slate-900">{record.hotelName}</p>
+            <p className="text-[12px] text-slate-500 mt-0.5">
               {formatDateBR(record.header.date)} · {record.header.analyst || 'Analista'} · {statusLabel(record.status)}
             </p>
           </div>
-          <button type="button" onClick={onClose}>
+          <button type="button" onClick={onClose} className="h-8 w-8 rounded-lg hover:bg-slate-200/60 inline-flex items-center justify-center text-slate-500 transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-5 space-y-3">
+        <div className="flex-1 overflow-y-auto p-5 space-y-2.5">
           {CHECKLIST.map((item) => {
             const a = record.answers[item.id];
             if (!a?.status) return null;
             return (
-              <div key={item.id} className="rounded-xl border border-slate-100 px-3 py-2">
+              <div key={item.id} className="rounded-xl border border-slate-100 bg-slate-50/40 px-3.5 py-2.5">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[13px] font-medium">
+                  <p className="text-[13px] font-medium text-slate-800">
                     {item.id}. {item.title}
                   </p>
                   {a.status === 'conforme' && (
-                    <span className="text-[10px] font-bold uppercase text-white bg-emerald-600 px-2 py-0.5 rounded">Conforme</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-white bg-emerald-600 px-2.5 py-1 rounded-full">Conforme</span>
                   )}
                   {a.status === 'divergencia' && (
-                    <span className="text-[10px] font-bold uppercase text-white bg-rose-600 px-2 py-0.5 rounded">
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-white bg-rose-600 px-2.5 py-1 rounded-full">
                       Divergência · {a.pendingState}
                     </span>
                   )}
                 </div>
-                {a.notes && <p className="text-[12px] text-slate-600 mt-1">{a.notes}</p>}
+                {a.notes && <p className="text-[12px] text-slate-600 mt-1.5">{a.notes}</p>}
                 {a.hotelResolution && (
-                  <p className="text-[12px] text-emerald-800 mt-1">Resolução hotel: {a.hotelResolution}</p>
+                  <p className="text-[12px] text-emerald-800 mt-1.5">Resolução hotel: {a.hotelResolution}</p>
                 )}
               </div>
             );

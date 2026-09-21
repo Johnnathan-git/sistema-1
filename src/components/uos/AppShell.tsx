@@ -103,7 +103,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     },
     auditoria: {
       title: 'Auditoria Life',
-      subtitle: 'Checklist · PMS × Adquirente · Adquirente × Banco · taxas · aprovação',
+      subtitle: 'Checklist · Pendências · Histórico · conciliações · taxas',
     },
   };
 

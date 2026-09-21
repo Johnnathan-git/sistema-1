@@ -544,10 +544,14 @@ export function AuditoriaHotelWorkspace({
         />
       )}
       {tab === 'taxas' && (
-        <TaxasFeeMatrix hotelId={hotelId} fees={fees} onChange={(f) => {
-          setFees(f);
-          try { localStorage.setItem(feesStorageKey(hotelId), JSON.stringify(f)); } catch {}
-        }} />
+        <TaxasFeeMatrix
+          hotelId={hotelId}
+          hotelName={hotelName}
+          onActiveFeesChange={(f: FeeRule[]) => {
+            setFees(f);
+            try { localStorage.setItem(feesStorageKey(hotelId), JSON.stringify(f)); } catch {}
+          }}
+        />
       )}
       {pasteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

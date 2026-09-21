@@ -1,1 +1,1 @@
-LOAD_ARTIFACT:/home/workdir/artifacts/AuditoriaLifeWorkspace.tsx
+RESTORE_FROM_BLOB_1f08226465e1b1b67620fb9b32da16048553518d

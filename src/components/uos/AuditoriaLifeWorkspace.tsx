@@ -251,7 +251,7 @@ export function AuditoriaHotelWorkspace({
     } else {
       toast.success(
         status === 'pendente' || status === 'aguardando_analista'
-          ? 'Auditoria registrada — divergências foram para Pendências'
+          ? 'Auditoria registrada no Histórico (Pendente) — divergências em Pendências'
           : 'Auditoria registrada',
       );
       resetForm();
@@ -454,7 +454,7 @@ export function AuditoriaHotelWorkspace({
                   <ClipboardCheck className="w-11 h-11 text-sky-300 mx-auto mb-3" />
                   <p className="text-[15px] font-semibold text-slate-800">Nova auditoria</p>
                   <p className="text-[13px] text-slate-500 mt-1 max-w-md mx-auto">
-                    Abra uma auditoria do dia. Divergências vão para Pendências até o hotel resolver e a analista aprovar. Só entra no Histórico quando estiver 100% concluída.
+                    Abra uma auditoria do dia. Divergências vão para Pendências e a auditoria aparece no Histórico com status Pendente até ser 100% concluída.
                   </p>
                   <button
                     type="button"
@@ -547,7 +547,7 @@ export function AuditoriaHotelWorkspace({
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-gradient-to-b from-white to-slate-50/80 px-6 py-16 text-center shadow-sm">
                   <History className="w-11 h-11 text-sky-300 mx-auto mb-3" />
                   <p className="text-[15px] font-semibold text-slate-800">Nenhuma auditoria ainda</p>
-                  <p className="text-[13px] text-slate-500 mt-1">Auditorias 100% concluídas aparecem aqui após aprovação de todas as pendências</p>
+                  <p className="text-[13px] text-slate-500 mt-1">Todas as auditorias registradas aparecem aqui — com status Pendente, Aguardando analista ou Concluída</p>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
@@ -572,6 +572,7 @@ export function AuditoriaHotelWorkspace({
                                 'text-[10px] font-bold uppercase px-2.5 py-1 rounded-full tracking-wide',
                                 r.status === 'fechada' && 'bg-emerald-100 text-emerald-800',
                                 r.status === 'pendente' && 'bg-amber-100 text-amber-900',
+                                r.status === 'aguardando_analista' && 'bg-sky-100 text-sky-900',
                                 r.status === 'em_andamento' && 'bg-slate-100 text-slate-700',
                               )}>{statusLabel(r.status)}</span>
                             </td>

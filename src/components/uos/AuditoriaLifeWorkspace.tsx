@@ -16,8 +16,8 @@ import {
 } from '@/lib/auditoria-hotels';
 import {
   type AuditWorkflowStatus, type ItemAnswer,
-  newRecordId, recordsForHotel, statusLabel, upsertRecord, getRecord, type AuditRecord,
-  emptyItem, deriveStatus, listPendingItems, canCloseAudit, countOpenPendencies,
+  newRecordId, recordsForHotel, historyRecordsForHotel, statusLabel, upsertRecord, getRecord, type AuditRecord,
+  emptyItem, deriveStatus, listPendingItems, canCloseAudit, countOpenPendencies, appendLog,
 } from '@/lib/auditoria-workflow';
 import { ConciliationPanel, PendenciasPanel, AuditDetailModal } from '@/components/uos/AuditoriaLifePanels';
 
@@ -108,7 +108,7 @@ export function AuditoriaHotelWorkspace({
     }
   }, [hotelId]);
 
-  const history = useMemo(() => recordsForHotel(hotelId), [hotelId, tick]);
+  const history = useMemo(() => historyRecordsForHotel(hotelId), [hotelId, tick]);
   const pendingItems = useMemo(() => {
     const items = listPendingItems({ hotelId });
     return items.map((p) => ({
@@ -187,7 +187,17 @@ export function AuditoriaHotelWorkspace({
     }
     const id = newRecordId();
     const now = new Date().toISOString();
-    const status = deriveStatus(answers, false);
+    const requiredIds = CHECKLIST.map((c) => c.id);
+    const allAnswered = requiredIds.every((rid) => answers[rid]?.status);
+    const canClose = allAnswered && canCloseAudit(answers, requiredIds);
+    const status = canClose ? 'fechada' : deriveStatus(answers, false);
+    const analyst = header.analyst.trim();
+    const divCount = Object.values(answers).filter((a) => a.status === 'divergencia').length;
+    const confCount = Object.values(answers).filter((a) => a.status === 'conforme').length;
+    let logs = appendLog(undefined, analyst, `Auditoria registrada (${confCount} conforme, ${divCount} divergência)`);
+    if (canClose) {
+      logs = appendLog(logs, analyst, 'Auditoria concluída — sem pendências');
+    }
     const rec: AuditRecord = {
       id,
       hotelId,
@@ -197,16 +207,25 @@ export function AuditoriaHotelWorkspace({
       status,
       createdAt: now,
       updatedAt: now,
+      closedAt: canClose ? now : undefined,
+      closedBy: canClose ? analyst : undefined,
+      logs,
     };
     upsertRecord(rec);
     setTick((t) => t + 1);
-    toast.success(
-      status === 'pendente'
-        ? 'Auditoria salva — divergências foram para Pendências'
-        : 'Auditoria salva no Histórico',
-    );
-    resetForm();
-    setEtapa('historico');
+    if (canClose) {
+      toast.success('Auditoria registrada e concluída — disponível no Histórico');
+      resetForm();
+      setEtapa('historico');
+    } else {
+      toast.success(
+        status === 'pendente' || status === 'aguardando_analista'
+          ? 'Auditoria registrada — divergências em Pendências'
+          : 'Auditoria registrada',
+      );
+      resetForm();
+      setEtapa('pendencias');
+    }
   };
 
   const hotelResolve = (auditId: string, itemId: number, resolution: string, attName?: string, attData?: string) => {
@@ -224,7 +243,9 @@ export function AuditoriaHotelWorkspace({
     if (attData) ans.hotelAttachmentDataUrl = attData;
     const answers = { ...rec.answers, [itemId]: ans };
     const status = deriveStatus(answers, false);
-    upsertRecord({ ...rec, answers, status, updatedAt: new Date().toISOString() });
+    const itemTitle = CHECKLIST.find((c) => c.id === itemId)?.title || `Item ${itemId}`;
+    const logs = appendLog(rec.logs, 'Hotel', `Resolução enviada no item ${itemId} (${itemTitle})`);
+    upsertRecord({ ...rec, answers, status, updatedAt: new Date().toISOString(), logs });
     setTick((t) => t + 1);
     toast.success('Resolução enviada — aguardando analista');
   };
@@ -239,16 +260,23 @@ export function AuditoriaHotelWorkspace({
     const canClose = canCloseAudit(answers, requiredIds);
     const status = canClose ? 'fechada' : deriveStatus(answers, false);
     const now = new Date().toISOString();
+    const analyst = rec.header.analyst || 'Analista';
+    const itemTitle = CHECKLIST.find((c) => c.id === itemId)?.title || `Item ${itemId}`;
+    let logs = appendLog(rec.logs, analyst, `Aprovou item ${itemId} (${itemTitle})`);
+    if (canClose) {
+      logs = appendLog(logs, analyst, 'Auditoria 100% concluída — enviada ao Histórico');
+    }
     upsertRecord({
       ...rec,
       answers,
       status,
       updatedAt: now,
       closedAt: canClose ? now : rec.closedAt,
-      closedBy: canClose ? rec.header.analyst : rec.closedBy,
+      closedBy: canClose ? analyst : rec.closedBy,
+      logs,
     });
     setTick((t) => t + 1);
-    toast.success(canClose ? 'Item aprovado — auditoria concluída' : 'Item aprovado');
+    toast.success(canClose ? 'Item aprovado — auditoria concluída no Histórico' : 'Item aprovado');
   };
 
   const rejectItem = (auditId: string, itemId: number, reason: string) => {
@@ -265,7 +293,10 @@ export function AuditoriaHotelWorkspace({
     ans.hotelResolvedAt = undefined;
     const answers = { ...rec.answers, [itemId]: ans };
     const status = deriveStatus(answers, false);
-    upsertRecord({ ...rec, answers, status, updatedAt: new Date().toISOString() });
+    const analyst = rec.header.analyst || 'Analista';
+    const itemTitle = CHECKLIST.find((c) => c.id === itemId)?.title || `Item ${itemId}`;
+    const logs = appendLog(rec.logs, analyst, `Recusou item ${itemId} (${itemTitle}): ${reason.trim()}`);
+    upsertRecord({ ...rec, answers, status, updatedAt: new Date().toISOString(), logs });
     setTick((t) => t + 1);
     toast.message('Pendência devolvida ao hotel');
   };
@@ -368,8 +399,8 @@ export function AuditoriaHotelWorkspace({
             {(
               [
                 ['abrir', 'Abrir Auditoria'],
-                ['historico', 'Histórico'],
                 ['pendencias', `Pendências${openCount + resolvedCount ? ` (${openCount + resolvedCount})` : ''}`],
+                ['historico', 'Histórico'],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -393,7 +424,7 @@ export function AuditoriaHotelWorkspace({
                   <ClipboardCheck className="w-11 h-11 text-sky-300 mx-auto mb-3" />
                   <p className="text-[15px] font-semibold text-slate-800">Nova auditoria</p>
                   <p className="text-[13px] text-slate-500 mt-1 max-w-md mx-auto">
-                    Abra uma auditoria do dia. Divergências vão para Pendências; o registro entra no Histórico como pendente até a aprovação.
+                    Abra uma auditoria do dia. Divergências vão para Pendências até o hotel resolver e a analista aprovar. Só entra no Histórico quando estiver 100% concluída.
                   </p>
                   <button
                     type="button"
@@ -405,27 +436,14 @@ export function AuditoriaHotelWorkspace({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
                     <label className="space-y-1">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Data</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Data da auditoria</span>
                       <input type="date" value={header.date} onChange={(e) => setHeader((h) => ({ ...h, date: e.target.value }))} className="h-9 w-full rounded-xl border border-slate-200 px-3 text-[13px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all bg-white" />
                     </label>
                     <label className="space-y-1">
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Analista</span>
                       <input value={header.analyst} onChange={(e) => setHeader((h) => ({ ...h, analyst: e.target.value }))} placeholder="Nome" className="h-9 w-full rounded-xl border border-slate-200 px-3 text-[13px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all bg-white" />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Período</span>
-                      <select value={header.period} onChange={(e) => setHeader((h) => ({ ...h, period: e.target.value }))} className="h-9 w-full rounded-xl border border-slate-200 px-3 text-[13px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all bg-white">
-                        <option>Dia completo</option>
-                        <option>Manhã</option>
-                        <option>Tarde</option>
-                        <option>Noite</option>
-                      </select>
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Enviado ao GO</span>
-                      <input type="datetime-local" value={header.sentToGoAt} onChange={(e) => setHeader((h) => ({ ...h, sentToGoAt: e.target.value }))} className="h-9 w-full rounded-xl border border-slate-200 px-3 text-[13px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all bg-white" />
                     </label>
                   </div>
 
@@ -470,7 +488,7 @@ export function AuditoriaHotelWorkspace({
 
                   <div className="flex flex-wrap justify-end gap-2 pt-2">
                     <button type="button" onClick={resetForm} className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-[13px] font-medium hover:bg-slate-50 transition-all">Cancelar</button>
-                    <button type="button" onClick={saveAudit} className="h-10 px-5 rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 text-white text-[13px] font-semibold hover:from-slate-800 hover:to-slate-700 shadow-md shadow-slate-900/15 transition-all">Salvar auditoria</button>
+                    <button type="button" onClick={saveAudit} className="h-10 px-5 rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 text-white text-[13px] font-semibold hover:from-slate-800 hover:to-slate-700 shadow-md shadow-slate-900/15 transition-all">Registrar auditoria</button>
                   </div>
                 </div>
               )}
@@ -483,7 +501,7 @@ export function AuditoriaHotelWorkspace({
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-gradient-to-b from-white to-slate-50/80 px-6 py-16 text-center shadow-sm">
                   <History className="w-11 h-11 text-sky-300 mx-auto mb-3" />
                   <p className="text-[15px] font-semibold text-slate-800">Nenhuma auditoria ainda</p>
-                  <p className="text-[13px] text-slate-500 mt-1">Abra uma auditoria na aba Abrir Auditoria</p>
+                  <p className="text-[13px] text-slate-500 mt-1">Auditorias 100% concluídas aparecem aqui após aprovação de todas as pendências</p>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">

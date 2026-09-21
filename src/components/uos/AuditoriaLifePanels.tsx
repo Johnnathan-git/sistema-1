@@ -164,7 +164,7 @@ export function PendenciasPanel({
                   a.pendingState === 'resolved' && 'bg-amber-100 text-amber-900',
                 )}
               >
-                {a.pendingState === 'open' ? 'Aguardando hotel' : 'Aguardando analista'}
+                {a.pendingState === 'open' ? 'Aguardando resolução' : 'Aguardando analista'}
               </span>
             </div>
             {a.notes && (

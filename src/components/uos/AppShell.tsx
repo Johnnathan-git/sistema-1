@@ -103,7 +103,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     },
     auditoria: {
       title: 'Auditoria Life',
-      subtitle: 'Etapas · Abrir Auditoria · Histórico · Pendências · conciliações',
+      subtitle: 'Etapas · Abrir Auditoria · Histórico · Pendências · Conciliação · taxas',
     },
   };
 

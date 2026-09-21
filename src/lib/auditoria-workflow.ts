@@ -194,9 +194,19 @@ export function recordsForHotel(hotelId: HotelId): AuditRecord[] {
     .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
 }
 
-/** Histórico: apenas auditorias 100% concluídas (fechada) */
+/**
+ * Histórico: todas as auditorias registradas do hotel.
+ * - Com divergência aberta → status Pendente
+ * - Hotel enviou resolução → Aguardando analista
+ * - 100% aprovada → Concluída
+ */
 export function historyRecordsForHotel(hotelId: HotelId): AuditRecord[] {
-  return recordsForHotel(hotelId).filter((r) => r.status === 'fechada');
+  return recordsForHotel(hotelId).filter((r) =>
+    r.status === 'fechada' ||
+    r.status === 'pendente' ||
+    r.status === 'aguardando_analista' ||
+    r.status === 'em_andamento',
+  );
 }
 
 export function upsertRecord(record: AuditRecord) {

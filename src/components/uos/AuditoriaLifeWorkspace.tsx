@@ -470,9 +470,12 @@ export function AuditoriaHotelWorkspace({
                           </div>
                           {(a.status === 'conforme' || a.status === 'divergencia') && (
                             <div className="space-y-2 border-t border-slate-100 pt-3">
-                              {a.status === 'divergencia' && (
-                                <textarea value={a.notes} onChange={(e) => setAnswer(item.id, { notes: e.target.value })} placeholder="Descreva a divergência…" className="w-full min-h-[64px] rounded-xl border border-slate-200 px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all" />
-                              )}
+                              <textarea
+                                value={a.notes}
+                                onChange={(e) => setAnswer(item.id, { notes: e.target.value })}
+                                placeholder={a.status === 'divergencia' ? 'Descreva a divergência…' : 'Observação (opcional)…'}
+                                className="w-full min-h-[64px] rounded-xl border border-slate-200 px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all"
+                              />
                               <div className="flex flex-wrap items-center gap-2">
                                 <label className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-300 transition-all">
                                   <Upload className="w-3.5 h-3.5 text-slate-500" /> {a.attachmentName ? 'Trocar anexo' : 'Anexar arquivo'}

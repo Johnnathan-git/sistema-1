@@ -40,6 +40,13 @@ export interface AuditHeader {
   sentToGoAt: string;
 }
 
+/** Log de alterações da auditoria (histórico) */
+export interface AuditLogEntry {
+  at: string;
+  user: string;
+  action: string;
+}
+
 export interface AuditRecord {
   id: string;
   hotelId: HotelId;
@@ -54,6 +61,7 @@ export interface AuditRecord {
   approvedAt?: string;
   approvedBy?: string;
   contestComment?: string;
+  logs?: AuditLogEntry[];
 }
 
 /** Item solto na fila de pendências */
@@ -72,6 +80,19 @@ export const LS_RECORDS = 'pms-auditoria-records-v2';
 
 export function emptyItem(): ItemAnswer {
   return { status: '', notes: '', pendingState: 'none' };
+}
+
+export function appendLog(
+  logs: AuditLogEntry[] | undefined,
+  user: string,
+  action: string,
+): AuditLogEntry[] {
+  const entry: AuditLogEntry = {
+    at: new Date().toISOString(),
+    user: (user || 'Sistema').trim() || 'Sistema',
+    action,
+  };
+  return [...(logs || []), entry];
 }
 
 export function loadAllRecords(): AuditRecord[] {
@@ -130,6 +151,15 @@ function normalizeRecord(r: any): AuditRecord {
   if (!['em_andamento', 'pendente', 'aguardando_analista', 'fechada'].includes(status)) {
     status = deriveStatus(answers, false);
   }
+  const logs: AuditLogEntry[] = Array.isArray(r.logs)
+    ? r.logs
+        .filter((l: any) => l && typeof l === 'object')
+        .map((l: any) => ({
+          at: String(l.at || ''),
+          user: String(l.user || 'Sistema'),
+          action: String(l.action || ''),
+        }))
+    : [];
   return {
     id: r.id,
     hotelId: r.hotelId,
@@ -141,6 +171,7 @@ function normalizeRecord(r: any): AuditRecord {
     updatedAt: r.updatedAt || new Date().toISOString(),
     closedAt: r.closedAt || r.approvedAt,
     closedBy: r.closedBy || r.approvedBy,
+    logs,
   };
 }
 
@@ -156,10 +187,16 @@ export function saveAllRecords(records: AuditRecord[]) {
   localStorage.setItem(LS_RECORDS, JSON.stringify(records));
 }
 
+/** Todos os registros do hotel (uso interno) */
 export function recordsForHotel(hotelId: HotelId): AuditRecord[] {
   return loadAllRecords()
     .filter((r) => r.hotelId === hotelId)
     .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+}
+
+/** Histórico: apenas auditorias 100% concluídas (fechada) */
+export function historyRecordsForHotel(hotelId: HotelId): AuditRecord[] {
+  return recordsForHotel(hotelId).filter((r) => r.status === 'fechada');
 }
 
 export function upsertRecord(record: AuditRecord) {

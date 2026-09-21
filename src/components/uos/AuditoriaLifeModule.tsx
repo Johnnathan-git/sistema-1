@@ -82,8 +82,9 @@ export function AuditoriaLifeModule() {
   );
 
   if (!record) return null;
+  const rec: AuditRecord = record;
 
-  const closed = record.status === 'fechada';
+  const closed = rec.status === 'fechada';
 
   function patch(next: Partial<AuditRecord>) {
     setRecord((prev) => (prev ? { ...prev, ...next, updatedAt: new Date().toISOString() } : prev));
@@ -114,22 +115,22 @@ export function AuditoriaLifeModule() {
   }
 
   function save() {
-    const saved = { ...record, status: deriveStatus(record.answers, closed) };
+    const saved: AuditRecord = { ...rec, status: deriveStatus(rec.answers, closed) };
     upsertRecord(saved);
     setRecord(saved);
     toast.success('Auditoria salva');
   }
 
   function close() {
-    if (!canCloseAudit(record.answers, requiredIds)) {
+    if (!canCloseAudit(rec.answers, requiredIds)) {
       toast.error('Existem itens sem resposta ou pendências abertas');
       return;
     }
     const saved: AuditRecord = {
-      ...record,
+      ...rec,
       status: 'fechada',
       closedAt: new Date().toISOString(),
-      closedBy: record.header.analyst || 'Analista',
+      closedBy: rec.header.analyst || 'Analista',
       updatedAt: new Date().toISOString(),
     };
     upsertRecord(saved);

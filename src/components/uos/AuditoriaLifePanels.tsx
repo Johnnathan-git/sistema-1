@@ -270,6 +270,8 @@ export function PendenciasPanel({
 }
 
 export function AuditDetailModal({ record, onClose }: { record: AuditRecord; onClose: () => void }) {
+  const logs = [...(record.logs || [])].reverse();
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
       <div className="w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl shadow-slate-900/20 border border-slate-200/80 flex flex-col">
@@ -284,32 +286,49 @@ export function AuditDetailModal({ record, onClose }: { record: AuditRecord; onC
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-5 space-y-2.5">
-          {CHECKLIST.map((item) => {
-            const a = record.answers[item.id];
-            if (!a?.status) return null;
-            return (
-              <div key={item.id} className="rounded-xl border border-slate-100 bg-slate-50/40 px-3.5 py-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[13px] font-medium text-slate-800">
-                    {item.id}. {item.title}
-                  </p>
-                  {a.status === 'conforme' && (
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-white bg-emerald-600 px-2.5 py-1 rounded-full">Conforme</span>
-                  )}
-                  {a.status === 'divergencia' && (
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-white bg-rose-600 px-2.5 py-1 rounded-full">
-                      Divergência · {a.pendingState}
-                    </span>
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {logs.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Log de alterações</p>
+              <ul className="space-y-1.5 max-h-[160px] overflow-y-auto">
+                {logs.map((l, i) => (
+                  <li key={`${l.at}-${i}`} className="text-[12px] text-slate-700 flex flex-wrap gap-x-2 gap-y-0.5">
+                    <span className="tabular-nums text-slate-500 shrink-0">{formatDateTimeBR(l.at)}</span>
+                    <span className="font-medium text-slate-800">{l.user}</span>
+                    <span className="text-slate-600">{l.action}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="space-y-2.5">
+            {CHECKLIST.map((item) => {
+              const a = record.answers[item.id];
+              if (!a?.status) return null;
+              return (
+                <div key={item.id} className="rounded-xl border border-slate-100 bg-slate-50/40 px-3.5 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[13px] font-medium text-slate-800">
+                      {item.id}. {item.title}
+                    </p>
+                    {a.status === 'conforme' && (
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-white bg-emerald-600 px-2.5 py-1 rounded-full">Conforme</span>
+                    )}
+                    {a.status === 'divergencia' && (
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-white bg-rose-600 px-2.5 py-1 rounded-full">
+                        Divergência · {a.pendingState}
+                      </span>
+                    )}
+                  </div>
+                  {a.notes && <p className="text-[12px] text-slate-600 mt-1.5">{a.notes}</p>}
+                  {a.hotelResolution && (
+                    <p className="text-[12px] text-emerald-800 mt-1.5">Resolução hotel: {a.hotelResolution}</p>
                   )}
                 </div>
-                {a.notes && <p className="text-[12px] text-slate-600 mt-1.5">{a.notes}</p>}
-                {a.hotelResolution && (
-                  <p className="text-[12px] text-emerald-800 mt-1.5">Resolução hotel: {a.hotelResolution}</p>
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

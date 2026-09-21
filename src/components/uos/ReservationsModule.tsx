@@ -200,7 +200,7 @@ function ReservationDetail({
   onOpenAccount,
 }: {
   res: Reservation;
-  rooms: { id: string; number: string; type: string; status: string }[];
+  rooms: { id: string; number: string; type: string; status?: string }[];
   onSave: (r: Reservation) => void;
   onCancelRes: () => void;
   onFnrh: () => void;
@@ -356,7 +356,7 @@ function ReservationForm({
   onCancel,
   onSave,
 }: {
-  rooms: { id: string; number: string; type: string; status: string }[];
+  rooms: { id: string; number: string; type: string; status?: string }[];
   onCancel: () => void;
   onSave: (r: Reservation) => void;
 }) {

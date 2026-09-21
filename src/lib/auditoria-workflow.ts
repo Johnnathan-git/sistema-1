@@ -6,7 +6,11 @@ export type AuditWorkflowStatus =
   | 'em_andamento'
   | 'pendente'
   | 'aguardando_analista'
-  | 'fechada';
+  | 'fechada'
+  | 'rascunho'
+  | 'aguardando'
+  | 'contestado'
+  | 'aprovado';
 
 export type ItemStatus = 'conforme' | 'divergencia' | '';
 

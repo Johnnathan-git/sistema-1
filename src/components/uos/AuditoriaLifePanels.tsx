@@ -127,6 +127,8 @@ export function PendenciasPanel({
 }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [rejectDrafts, setRejectDrafts] = useState<Record<string, string>>({});
+  /** Anexo pendente (só envia junto com a resolução) */
+  const [pendingAtt, setPendingAtt] = useState<Record<string, { name: string; dataUrl: string }>>({});
 
   if (items.length === 0) {
     return (
@@ -145,6 +147,7 @@ export function PendenciasPanel({
       {items.map((p) => {
         const a = p.answer;
         const k = `${p.auditId}-${p.itemId}`;
+        const att = pendingAtt[k];
         return (
           <div key={k} className="rounded-xl border border-slate-200/80 bg-white p-4 space-y-3 shadow-sm hover:border-slate-300/80 transition-colors">
             <div className="flex items-start justify-between gap-2">
@@ -174,7 +177,12 @@ export function PendenciasPanel({
               </div>
             )}
             {a.attachmentDataUrl && (
-              <a href={a.attachmentDataUrl} download={a.attachmentName || 'anexo'} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline">
+              <a
+                href={a.attachmentDataUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline"
+              >
                 <FileText className="w-3.5 h-3.5" /> {a.attachmentName || 'Anexo da analista'}
               </a>
             )}
@@ -188,19 +196,20 @@ export function PendenciasPanel({
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Resolução do hotel</p>
                 <textarea
                   className="w-full min-h-[72px] rounded-xl border border-slate-200 px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all"
-                  placeholder="Descreva como a pendência foi resolvida…"
+                  placeholder="Descreva como a pendência foi resolvida (obrigatório)…"
                   value={drafts[k] || ''}
                   onChange={(e) => setDrafts((d) => ({ ...d, [k]: e.target.value }))}
                 />
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-300 transition-all">
-                    <Upload className="w-3.5 h-3.5 text-slate-500" /> Anexo (opcional)
+                    <Upload className="w-3.5 h-3.5 text-slate-500" /> {att ? 'Trocar anexo' : 'Anexo (opcional)'}
                     <input
                       type="file"
                       accept=".pdf,image/*"
                       className="hidden"
                       onChange={(e) => {
                         const f = e.target.files?.[0];
+                        e.target.value = '';
                         if (!f) return;
                         if (f.size > 2_500_000) {
                           toast.error('Arquivo muito grande');
@@ -208,18 +217,54 @@ export function PendenciasPanel({
                         }
                         const reader = new FileReader();
                         reader.onload = () => {
-                          onHotelResolve(p.auditId, p.itemId, drafts[k] || '', f.name, String(reader.result || ''));
-                          setDrafts((d) => ({ ...d, [k]: '' }));
+                          setPendingAtt((prev) => ({
+                            ...prev,
+                            [k]: { name: f.name, dataUrl: String(reader.result || '') },
+                          }));
+                          toast.message('Anexo pronto — preencha a resolução e clique em Enviar');
                         };
                         reader.readAsDataURL(f);
                       }}
                     />
                   </label>
+                  {att && (
+                    <>
+                      <a
+                        href={att.dataUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-sky-700 font-medium truncate max-w-[160px] hover:underline"
+                      >
+                        {att.name}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setPendingAtt((prev) => {
+                          const next = { ...prev };
+                          delete next[k];
+                          return next;
+                        })}
+                        className="h-7 w-7 rounded-md text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
-                      onHotelResolve(p.auditId, p.itemId, drafts[k] || '');
+                      const text = (drafts[k] || '').trim();
+                      if (!text) {
+                        toast.error('Descreva a resolução (obrigatório)');
+                        return;
+                      }
+                      onHotelResolve(p.auditId, p.itemId, text, att?.name, att?.dataUrl);
                       setDrafts((d) => ({ ...d, [k]: '' }));
+                      setPendingAtt((prev) => {
+                        const next = { ...prev };
+                        delete next[k];
+                        return next;
+                      });
                     }}
                     className="h-8 px-4 rounded-lg bg-gradient-to-r from-slate-900 to-slate-800 text-white text-[12px] font-semibold hover:from-slate-800 hover:to-slate-700 shadow-sm transition-all"
                   >
@@ -235,7 +280,12 @@ export function PendenciasPanel({
                   {a.hotelResolvedAt && <span className="text-emerald-700"> · {formatDateTimeBR(a.hotelResolvedAt)}</span>}
                 </div>
                 {a.hotelAttachmentDataUrl && (
-                  <a href={a.hotelAttachmentDataUrl} download={a.hotelAttachmentName || 'anexo-hotel'} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline">
+                  <a
+                    href={a.hotelAttachmentDataUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline"
+                  >
                     <FileText className="w-3.5 h-3.5" /> {a.hotelAttachmentName || 'Anexo do hotel'}
                   </a>
                 )}
@@ -322,8 +372,28 @@ export function AuditDetailModal({ record, onClose }: { record: AuditRecord; onC
                     )}
                   </div>
                   {a.notes && <p className="text-[12px] text-slate-600 mt-1.5">{a.notes}</p>}
+                  {a.attachmentDataUrl && (
+                    <a
+                      href={a.attachmentDataUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1.5 hover:underline"
+                    >
+                      <FileText className="w-3.5 h-3.5" /> {a.attachmentName || 'Anexo'}
+                    </a>
+                  )}
                   {a.hotelResolution && (
                     <p className="text-[12px] text-emerald-800 mt-1.5">Resolução hotel: {a.hotelResolution}</p>
+                  )}
+                  {a.hotelAttachmentDataUrl && (
+                    <a
+                      href={a.hotelAttachmentDataUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1 hover:underline"
+                    >
+                      <FileText className="w-3.5 h-3.5" /> {a.hotelAttachmentName || 'Anexo hotel'}
+                    </a>
                   )}
                 </div>
               );

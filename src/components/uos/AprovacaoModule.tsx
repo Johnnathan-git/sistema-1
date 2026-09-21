@@ -243,11 +243,15 @@ function AuditRow({ r, onView }: { r: AuditRecord; onView: () => void }) {
 }
 
 function StatusBadge({ status }: { status: AuditWorkflowStatus }) {
-  const map: Record<AuditWorkflowStatus, string> = {
+  const map: Partial<Record<AuditWorkflowStatus, string>> = {
     rascunho: 'bg-slate-100 text-slate-700',
     aguardando: 'bg-blue-100 text-blue-800',
     contestado: 'bg-amber-100 text-amber-900',
     aprovado: 'bg-emerald-100 text-emerald-800',
+    em_andamento: 'bg-slate-100 text-slate-700',
+    pendente: 'bg-amber-100 text-amber-900',
+    aguardando_analista: 'bg-blue-100 text-blue-800',
+    fechada: 'bg-emerald-100 text-emerald-800',
   };
   return (
     <span className={cn('inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold', map[status])}>

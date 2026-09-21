@@ -6,7 +6,11 @@ export type AuditWorkflowStatus =
   | 'em_andamento'
   | 'pendente'
   | 'aguardando_analista'
-  | 'fechada';
+  | 'fechada'
+  | 'rascunho'
+  | 'aguardando'
+  | 'contestado'
+  | 'aprovado';
 
 export type ItemStatus = 'conforme' | 'divergencia' | '';
 
@@ -47,6 +51,9 @@ export interface AuditRecord {
   updatedAt: string;
   closedAt?: string;
   closedBy?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  contestComment?: string;
 }
 
 /** Item solto na fila de pendências */
@@ -182,7 +189,21 @@ export function statusLabel(s: AuditWorkflowStatus): string {
       return 'Aguardando analista';
     case 'fechada':
       return 'Fechada';
+    case 'rascunho':
+      return 'Rascunho';
+    case 'aguardando':
+      return 'Aguardando aprovação';
+    case 'contestado':
+      return 'Contestada';
+    case 'aprovado':
+      return 'Aprovada';
   }
+}
+
+export function recordsPendingApproval(): AuditRecord[] {
+  return loadAllRecords()
+    .filter((r) => r.status === 'aguardando')
+    .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
 }
 
 export function hotelName(id: HotelId) {

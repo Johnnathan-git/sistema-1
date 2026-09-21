@@ -89,10 +89,12 @@ function loadFees(hotelId: HotelId): FeeRule[] {
 interface Props {
   hotelId: HotelId;
   hotelName: string;
-  onActiveFeesChange: (fees: FeeRule[]) => void;
+  onActiveFeesChange?: (fees: FeeRule[]) => void;
 }
 
-export function TaxasFeeMatrix({ hotelId, hotelName, onActiveFeesChange }: Props) {
+const noop = () => {};
+
+export function TaxasFeeMatrix({ hotelId, hotelName, onActiveFeesChange = noop }: Props) {
   const [fees, setFees] = useState<FeeRule[]>(() => loadFees(hotelId));
   const [draft, setDraft] = useState<FeeRule[] | null>(null);
   const editing = draft !== null;

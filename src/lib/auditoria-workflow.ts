@@ -188,7 +188,7 @@ export function statusLabel(s: AuditWorkflowStatus): string {
     case 'aguardando_analista':
       return 'Aguardando analista';
     case 'fechada':
-      return 'Fechada';
+      return 'Concluída';
     case 'rascunho':
       return 'Rascunho';
     case 'aguardando':

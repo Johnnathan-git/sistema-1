@@ -20,6 +20,37 @@ function formatDateTimeBR(iso?: string) {
   } catch { return iso; }
 }
 
+function openAttachment(dataUrl?: string, fileName?: string) {
+  if (!dataUrl) return;
+  try {
+    const m = dataUrl.match(/^data:([^;,]+)?(?:;base64)?,(.*)$/);
+    if (!m) {
+      window.open(dataUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    const mime = m[1] || 'application/octet-stream';
+    const b64 = m[2];
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!w) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName || 'anexo';
+      a.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = fileName || 'anexo';
+    a.click();
+  }
+}
+
 export function ConciliationPanel({
   title,
   leftLabel,
@@ -127,7 +158,6 @@ export function PendenciasPanel({
 }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [rejectDrafts, setRejectDrafts] = useState<Record<string, string>>({});
-  /** Anexo pendente (só envia junto com a resolução) */
   const [pendingAtt, setPendingAtt] = useState<Record<string, { name: string; dataUrl: string }>>({});
 
   if (items.length === 0) {
@@ -177,14 +207,13 @@ export function PendenciasPanel({
               </div>
             )}
             {a.attachmentDataUrl && (
-              <a
-                href={a.attachmentDataUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={() => openAttachment(a.attachmentDataUrl, a.attachmentName)}
                 className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline"
               >
                 <FileText className="w-3.5 h-3.5" /> {a.attachmentName || 'Anexo da analista'}
-              </a>
+              </button>
             )}
             {a.analystRejectNote && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-950">
@@ -229,14 +258,13 @@ export function PendenciasPanel({
                   </label>
                   {att && (
                     <>
-                      <a
-                        href={att.dataUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[11px] text-sky-700 font-medium truncate max-w-[160px] hover:underline"
+                      <button
+                        type="button"
+                        onClick={() => openAttachment(att.dataUrl, att.name)}
+                        className="text-[11px] text-sky-700 font-medium truncate max-w-[160px] hover:underline text-left"
                       >
                         {att.name}
-                      </a>
+                      </button>
                       <button
                         type="button"
                         onClick={() => setPendingAtt((prev) => {
@@ -280,14 +308,13 @@ export function PendenciasPanel({
                   {a.hotelResolvedAt && <span className="text-emerald-700"> · {formatDateTimeBR(a.hotelResolvedAt)}</span>}
                 </div>
                 {a.hotelAttachmentDataUrl && (
-                  <a
-                    href={a.hotelAttachmentDataUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => openAttachment(a.hotelAttachmentDataUrl, a.hotelAttachmentName)}
                     className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline"
                   >
                     <FileText className="w-3.5 h-3.5" /> {a.hotelAttachmentName || 'Anexo do hotel'}
-                  </a>
+                  </button>
                 )}
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => onApprove(p.auditId, p.itemId)} className="h-8 px-4 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold hover:bg-emerald-500 shadow-sm shadow-emerald-600/20 transition-all">
@@ -373,27 +400,25 @@ export function AuditDetailModal({ record, onClose }: { record: AuditRecord; onC
                   </div>
                   {a.notes && <p className="text-[12px] text-slate-600 mt-1.5">{a.notes}</p>}
                   {a.attachmentDataUrl && (
-                    <a
-                      href={a.attachmentDataUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => openAttachment(a.attachmentDataUrl, a.attachmentName)}
                       className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1.5 hover:underline"
                     >
                       <FileText className="w-3.5 h-3.5" /> {a.attachmentName || 'Anexo'}
-                    </a>
+                    </button>
                   )}
                   {a.hotelResolution && (
                     <p className="text-[12px] text-emerald-800 mt-1.5">Resolução hotel: {a.hotelResolution}</p>
                   )}
                   {a.hotelAttachmentDataUrl && (
-                    <a
-                      href={a.hotelAttachmentDataUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => openAttachment(a.hotelAttachmentDataUrl, a.hotelAttachmentName)}
                       className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1 hover:underline"
                     >
                       <FileText className="w-3.5 h-3.5" /> {a.hotelAttachmentName || 'Anexo hotel'}
-                    </a>
+                    </button>
                   )}
                 </div>
               );

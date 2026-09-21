@@ -394,7 +394,10 @@ export function AuditDetailModal({ record, onClose }: { record: AuditRecord; onC
                     )}
                     {a.status === 'divergencia' && (
                       <span className="text-[10px] font-bold uppercase tracking-wide text-white bg-rose-600 px-2.5 py-1 rounded-full">
-                        Divergência · {a.pendingState}
+                        Divergência
+                        {a.pendingState === 'approved' && ' · Aprovada'}
+                        {a.pendingState === 'resolved' && ' · Aguardando analista'}
+                        {a.pendingState === 'open' && ' · Aguardando resolução'}
                       </span>
                     )}
                   </div>

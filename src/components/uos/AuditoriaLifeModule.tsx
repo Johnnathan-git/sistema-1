@@ -1,1 +1,1 @@
-PLACEHOLDER_WILL_FAIL_USE_ORIG
+// See next message - placeholder prevent corruption

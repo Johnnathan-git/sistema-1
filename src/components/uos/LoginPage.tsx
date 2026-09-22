@@ -1,14 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ClipboardCheck, Loader2, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { bootstrapAdmin, isBootstrapMode, login } from '@/lib/auth-store';
 
 export function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
-  const bootstrap = isBootstrapMode();
+  const [bootstrap, setBootstrap] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setBootstrap(isBootstrapMode());
+  }, []);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();

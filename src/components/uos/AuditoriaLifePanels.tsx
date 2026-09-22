@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import { formatDateBR, CHECKLIST } from '@/lib/auditoria-core';
 import type { AuditRecord } from '@/lib/auditoria-workflow';
 import { statusLabel } from '@/lib/auditoria-workflow';
-import { getSession, isAuditPendenciasOnly } from '@/lib/auth-store';
 
 function formatDateTimeBR(iso?: string) {
   if (!iso) return '—';
@@ -160,8 +159,6 @@ export function PendenciasPanel({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [rejectDrafts, setRejectDrafts] = useState<Record<string, string>>({});
   const [pendingAtt, setPendingAtt] = useState<Record<string, { name: string; dataUrl: string }>>({});
-
-  const onlyPendencias = isAuditPendenciasOnly(getSession());
 
   if (items.length === 0) {
     return (
@@ -319,7 +316,6 @@ export function PendenciasPanel({
                     <FileText className="w-3.5 h-3.5" /> {a.hotelAttachmentName || 'Anexo do hotel'}
                   </button>
                 )}
-                {!onlyPendencias && (
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => onApprove(p.auditId, p.itemId)} className="h-8 px-4 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold hover:bg-emerald-500 shadow-sm shadow-emerald-600/20 transition-all">
                     Aprovar
@@ -341,10 +337,6 @@ export function PendenciasPanel({
                     Recusar
                   </button>
                 </div>
-                )}
-                {onlyPendencias && a.pendingState === 'resolved' && (
-                  <p className="text-[12px] text-amber-800 font-medium">Aguardando aprovação da analista</p>
-                )}
               </div>
             )}
           </div>
@@ -386,6 +378,7 @@ export function AuditDetailModal({ record, onClose }: { record: AuditRecord; onC
               </ul>
             </div>
           )}
+
           <div className="space-y-2.5">
             {CHECKLIST.map((item) => {
               const a = record.answers[item.id];
@@ -410,7 +403,11 @@ export function AuditDetailModal({ record, onClose }: { record: AuditRecord; onC
                   </div>
                   {a.notes && <p className="text-[12px] text-slate-600 mt-1.5">{a.notes}</p>}
                   {a.attachmentDataUrl && (
-                    <button type="button" onClick={() => openAttachment(a.attachmentDataUrl, a.attachmentName)} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1 hover:underline">
+                    <button
+                      type="button"
+                      onClick={() => openAttachment(a.attachmentDataUrl, a.attachmentName)}
+                      className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1.5 hover:underline"
+                    >
                       <FileText className="w-3.5 h-3.5" /> {a.attachmentName || 'Anexo'}
                     </button>
                   )}
@@ -418,7 +415,11 @@ export function AuditDetailModal({ record, onClose }: { record: AuditRecord; onC
                     <p className="text-[12px] text-emerald-800 mt-1.5">Resolução hotel: {a.hotelResolution}</p>
                   )}
                   {a.hotelAttachmentDataUrl && (
-                    <button type="button" onClick={() => openAttachment(a.hotelAttachmentDataUrl, a.hotelAttachmentName)} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1 hover:underline">
+                    <button
+                      type="button"
+                      onClick={() => openAttachment(a.hotelAttachmentDataUrl, a.hotelAttachmentName)}
+                      className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1 hover:underline"
+                    >
                       <FileText className="w-3.5 h-3.5" /> {a.hotelAttachmentName || 'Anexo hotel'}
                     </button>
                   )}

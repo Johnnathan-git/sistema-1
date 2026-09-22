@@ -94,13 +94,52 @@ export function isFriday(iso: string) {
 function moneyEq(a: number, b: number, tol = 0.05) {
   return Math.abs(a - b) <= tol;
 }
+
+/** Extrai texto de PDF (Getnet / Santander) via pdfjs-dist */
+async function pdfToText(file: File): Promise<string> {
+  try {
+    const pdfjs = await import('pdfjs-dist');
+    const data = new Uint8Array(await file.arrayBuffer());
+    if (pdfjs.GlobalWorkerOptions) {
+      try {
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+          'pdfjs-dist/build/pdf.worker.min.mjs',
+          import.meta.url,
+        ).toString();
+      } catch {
+        // worker opcional
+      }
+    }
+    const doc = await pdfjs.getDocument({ data }).promise;
+    const parts: string[] = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const line = content.items
+        .map((it: { str?: string }) => (typeof it === 'object' && it && 'str' in it ? String(it.str || '') : ''))
+        .join(' ');
+      parts.push(line);
+    }
+    const text = parts.join('\n');
+    if (!text.trim()) {
+      throw new Error('PDF sem texto legível (pode ser imagem). Use «Colar texto».');
+    }
+    return text;
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '';
+    if (msg.includes('Colar texto') || msg.includes('sem texto')) throw e;
+    throw new Error('Não foi possível ler o PDF. Tente «Colar texto» ou exporte como TXT.');
+  }
+}
+
 export async function fileToText(file: File): Promise<string> {
   const name = file.name.toLowerCase();
   if (name.endsWith('.pdf') || file.type === 'application/pdf') {
-    throw new Error('PDF não é lido automaticamente. Exporte como TXT/CSV ou use Colar texto.');
+    return pdfToText(file);
   }
   return file.text();
 }
+
 export function parseHitsText(raw: string): HitsPayment[] {
   const lines = raw.split(/\r?\n/);
   const out: HitsPayment[] = [];
@@ -130,6 +169,7 @@ export function parseHitsText(raw: string): HitsPayment[] {
   }
   return out;
 }
+
 export function parseGetnetText(raw: string): GetnetSale[] {
   const out: GetnetSale[] = [];
   const blocks = raw.split(/(?=Estabelecimento\s+CPF\/CNPJ)/i);
@@ -157,7 +197,6 @@ export function parseGetnetText(raw: string): GetnetSale[] {
   if (blocks.length > 1) for (const b of blocks) pushFromChunk(b);
   else for (const p of raw.split(/(?=\b(?:Negada|Aprovada|Autorizada)\b)/i)) pushFromChunk(p);
 
-  // PIX detalhado: linhas com "Paga" e valor R$
   for (const line of raw.split(/\r?\n/)) {
     if (!/\bPaga\b/i.test(line)) continue;
     if (/\bExpirado\b/i.test(line)) continue;
@@ -167,23 +206,7 @@ export function parseGetnetText(raw: string): GetnetSale[] {
     const gross = parseBRNumber(am[1]);
     if (gross <= 0) continue;
     const saleDate = toISODate(dm[1]);
-    out.push({
-      id: `g-${++idx}`,
-      date: saleDate,
-      brand: 'PIX',
-      modality: 'PIX',
-      form: 'PIX',
-      status: 'Paga',
-      installments: 1,
-      settleDate: saleDate,
-      auth: '',
-      cv: '',
-      terminal: '',
-      card: '',
-      gross,
-      fee: 0,
-      net: gross,
-    });
+    out.push({ id: `g-${++idx}`, date: saleDate, brand: 'PIX', modality: 'PIX', form: 'PIX', status: 'Paga', installments: 1, settleDate: saleDate, auth: '', cv: '', terminal: '', card: '', gross, fee: 0, net: gross });
   }
 
   const seen = new Set<string>();
@@ -259,6 +282,7 @@ export function reconcileHitsGetnet(hits: HitsPayment[], getnet: GetnetSale[]): 
   }
   return matches;
 }
+
 function applyFeeRules(sale: GetnetSale, rules: FeeRule[]) {
   if (sale.fee > 0 && sale.net > 0) return { fee: sale.fee, net: sale.net };
   const b = sale.brand.toLowerCase();
@@ -273,6 +297,7 @@ function applyFeeRules(sale: GetnetSale, rules: FeeRule[]) {
   const fee = (sale.gross * rule.feePercent) / 100 + rule.feeFixed;
   return { fee, net: sale.gross - fee };
 }
+
 export function reconcileGetnetBank(getnet: GetnetSale[], bank: BankLine[], fees: FeeRule[]): BankMatchRow[] {
   type Grupo = 'pix' | 'debito' | 'credito_antec';
 
@@ -285,11 +310,9 @@ export function reconcileGetnetBank(getnet: GetnetSale[], bank: BankLine[], fees
 
   const settleFor = (g: GetnetSale, grupo: Grupo): string => {
     if (grupo === 'pix') return g.date || g.settleDate || '';
-    // 100% antecipado: crédito/parcelado sempre D+1
     if (grupo === 'credito_antec') {
       return g.date ? addDaysISO(g.date, 1) : (g.settleDate || '');
     }
-    // Débito: data prevista do extrato se D+1; senão D+1
     if (g.settleDate && g.date && g.settleDate > g.date) return g.settleDate;
     if (g.date) return addDaysISO(g.date, 1);
     return g.settleDate || '';

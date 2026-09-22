@@ -8,7 +8,7 @@ import { GovernanceModule } from '@/components/uos/GovernanceModule';
 import { AuditoriaLifeModule } from '@/components/uos/AuditoriaLifeModule';
 import { AcessosModule } from '@/components/uos/AcessosModule';
 import { LoginPage } from '@/components/uos/LoginPage';
-import { PmsProvider, usePms } from '@/lib/pms-store';
+import { usePms } from '@/lib/pms-store';
 import { getSession, type AuthSession } from '@/lib/auth-store';
 import { Toaster } from 'sonner';
 
@@ -47,12 +47,12 @@ function Index() {
   }
 
   return (
-    <PmsProvider>
+    <>
       <Toaster richColors position="top-right" />
       <AppShell onLogout={refreshSession}>
         <ModuleSwitch />
       </AppShell>
-    </PmsProvider>
+    </>
   );
 }
 

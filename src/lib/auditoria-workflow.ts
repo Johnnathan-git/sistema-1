@@ -29,6 +29,8 @@ export interface ItemAnswer {
   hotelAttachmentName?: string;
   hotelAttachmentDataUrl?: string;
   analystRejectNote?: string;
+  /** Responsável (hotel) atribuído pela analista na divergência */
+  assignedTo?: string;
 }
 
 export type AuditAnswers = Record<number, ItemAnswer>;
@@ -135,6 +137,7 @@ function normalizeItem(a: any): ItemAnswer {
     hotelAttachmentName: a.hotelAttachmentName,
     hotelAttachmentDataUrl: a.hotelAttachmentDataUrl,
     analystRejectNote: a.analystRejectNote,
+    assignedTo: a.assignedTo || undefined,
   };
 }
 

@@ -49,20 +49,17 @@ export function AuditoriaLifeModule() {
       />
     );
   }
-  const hotel = AUDIT_HOTELS.find((h) => h.id === hotelId)!;
+  const hotel = AUDIT_HOTELS.find((h) => h.id === hotelId);
+  if (!hotel) return null;
   const canSwitch = allowedHotels.length > 1;
   return (
     <AuditoriaHotelWorkspace
       hotelId={hotelId}
       hotelName={hotel.name}
-      onChangeHotel={
-        canSwitch
-          ? () => {
-              localStorage.removeItem(LS_HOTEL);
-              setHotelId(null);
-            }
-          : undefined
-      }
+      onChangeHotel={canSwitch ? () => {
+        localStorage.removeItem(LS_HOTEL);
+        setHotelId(null);
+      } : undefined}
     />
   );
 }

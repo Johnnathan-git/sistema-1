@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { AppShell } from '@/components/uos/AppShell';
 import { ReceptionModule } from '@/components/uos/ReceptionModule';
@@ -13,11 +13,25 @@ import { getSession, type AuthSession } from '@/lib/auth-store';
 import { Toaster } from 'sonner';
 
 export const Route = createFileRoute('/')({
+  head: () => ({
+    meta: [
+      { title: 'UOS — Sistema Financeiro e Hoteleiro' },
+      { name: 'description', content: 'Gestão financeira, operacional e de auditoria hoteleira.' },
+      { property: 'og:title', content: 'UOS — Sistema Financeiro e Hoteleiro' },
+      { property: 'og:description', content: 'Gestão financeira, operacional e de auditoria hoteleira.' },
+      { property: 'og:type', content: 'website' },
+      { name: 'twitter:card', content: 'summary' },
+    ],
+  }),
   component: Index,
 });
 
 function Index() {
-  const [session, setSession] = useState<AuthSession | null>(() => getSession());
+  const [session, setSession] = useState<AuthSession | null>(null);
+
+  useEffect(() => {
+    setSession(getSession());
+  }, []);
 
   const refreshSession = useCallback(() => {
     setSession(getSession());

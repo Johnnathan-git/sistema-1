@@ -2,7 +2,16 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { AlertTriangle, CheckCircle2, FileText, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatDateBR, CHECKLIST } from '@/lib/auditoria-core';
+import {
+  formatBRL,
+  formatDateBR,
+  CHECKLIST,
+  type BankLine,
+  type BankMatchRow,
+  type GetnetSale,
+  type HitsGetnetMatch,
+  type HitsPayment,
+} from '@/lib/auditoria-core';
 import type { AuditRecord } from '@/lib/auditoria-workflow';
 import { statusLabel } from '@/lib/auditoria-workflow';
 
@@ -52,38 +61,48 @@ function openAttachment(dataUrl?: string, fileName?: string) {
 }
 
 export function ConciliationPanel({
-  title,
-  leftLabel,
-  rightLabel,
-  leftCount,
-  rightCount,
-  onUploadLeft,
-  onUploadRight,
-  onPasteLeft,
-  onPasteRight,
-  rows,
+  sub,
+  setSub,
+  hits = [],
+  getnet = [],
+  bank = [],
+  hitsMatches = [],
+  bankMatches = [],
+  busy,
+  onLoadFile,
+  pasteOpen,
+  setPasteOpen,
+  pasteText,
+  setPasteText,
+  onApplyPaste,
 }: {
-  title: string;
-  leftLabel: string;
-  rightLabel: string;
-  leftCount: number;
-  rightCount: number;
-  onUploadLeft: (f: File) => void;
-  onUploadRight: (f: File) => void;
-  onPasteLeft: () => void;
-  onPasteRight: () => void;
-  rows: { id: string; label: string; detail: string; ok: boolean }[];
+  sub: 'hits_getnet' | 'getnet_bank';
+  setSub: (sub: 'hits_getnet' | 'getnet_bank') => void;
+  hits?: HitsPayment[];
+  getnet?: GetnetSale[];
+  bank?: BankLine[];
+  hitsMatches?: HitsGetnetMatch[];
+  bankMatches?: BankMatchRow[];
+  busy: boolean;
+  onLoadFile: (kind: 'hits' | 'getnet' | 'bank', file: File) => void;
+  pasteOpen: 'hits' | 'getnet' | 'bank' | null;
+  setPasteOpen: (kind: 'hits' | 'getnet' | 'bank' | null) => void;
+  pasteText: string;
+  setPasteText: (text: string) => void;
+  onApplyPaste: () => void;
 }) {
+  const sources = sub === 'hits_getnet'
+    ? ([['HITS', 'hits', hits.length], ['Getnet', 'getnet', getnet.length]] as const)
+    : ([['Getnet', 'getnet', getnet.length], ['Banco', 'bank', bank.length]] as const);
+
   return (
     <div className="space-y-4">
-      <p className="text-[15px] font-semibold text-slate-900 tracking-tight">{title}</p>
+      <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-1">
+        <button type="button" onClick={() => setSub('hits_getnet')} className={cn('h-8 px-3 rounded-md text-[12px] font-semibold transition-colors', sub === 'hits_getnet' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>PMS × Getnet</button>
+        <button type="button" onClick={() => setSub('getnet_bank')} className={cn('h-8 px-3 rounded-md text-[12px] font-semibold transition-colors', sub === 'getnet_bank' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>Getnet × Banco</button>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {(
-          [
-            [leftLabel, leftCount, onUploadLeft, onPasteLeft],
-            [rightLabel, rightCount, onUploadRight, onPasteRight],
-          ] as const
-        ).map(([label, count, up, paste]) => (
+        {sources.map(([label, kind, count]) => (
           <div key={label} className="rounded-xl border border-slate-200/80 bg-white p-4 space-y-3 shadow-sm hover:border-slate-300/80 transition-colors">
             <p className="text-[12px] font-semibold text-slate-700">
               {label} · <span className="tabular-nums text-slate-500">{count}</span> linha(s)
@@ -91,33 +110,64 @@ export function ConciliationPanel({
             <div className="flex flex-wrap gap-2">
               <label className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-300 transition-all">
                 <Upload className="w-3.5 h-3.5 text-slate-500" /> Arquivo
-                <input type="file" accept=".txt,.csv,text/plain" className="hidden" onChange={(e) => e.target.files?.[0] && up(e.target.files[0])} />
+                <input type="file" accept=".txt,.csv,text/plain" className="hidden" disabled={busy} onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (file) onLoadFile(kind, file);
+                }} />
               </label>
-              <button type="button" onClick={paste} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium hover:bg-slate-50 hover:border-slate-300 transition-all">
+              <button type="button" onClick={() => setPasteOpen(kind)} disabled={busy} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-50">
                 Colar texto
               </button>
             </div>
           </div>
         ))}
       </div>
+
+      {pasteOpen && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[12px] font-semibold text-slate-700">Colar dados de {pasteOpen === 'hits' ? 'HITS' : pasteOpen === 'getnet' ? 'Getnet' : 'Banco'}</p>
+            <button type="button" onClick={() => setPasteOpen(null)} className="h-7 w-7 rounded-md text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center"><X className="h-4 w-4" /></button>
+          </div>
+          <textarea value={pasteText} onChange={(e) => setPasteText(e.target.value)} className="w-full min-h-32 rounded-lg border border-slate-200 p-3 text-[12px] outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20" placeholder="Cole aqui as linhas do relatório…" />
+          <button type="button" onClick={onApplyPaste} disabled={!pasteText.trim() || busy} className="h-8 px-4 rounded-lg bg-slate-900 text-white text-[12px] font-semibold disabled:opacity-50">Processar dados</button>
+        </div>
+      )}
+
       <div className="rounded-xl border border-slate-200/80 bg-white overflow-hidden shadow-sm">
         <div className="max-h-[420px] overflow-y-auto divide-y divide-slate-100">
-          {rows.length === 0 && (
+          {(sub === 'hits_getnet' ? hitsMatches : bankMatches).length === 0 && (
             <p className="px-4 py-12 text-center text-[13px] text-slate-400">Sem dados ainda</p>
           )}
-          {rows.map((r) => (
-            <div key={r.id} className="px-4 py-3 flex items-start gap-2.5 text-[12px] hover:bg-slate-50/60 transition-colors">
-              {r.ok ? (
+          {sub === 'hits_getnet' && hitsMatches.map((row) => {
+            const ok = row.side === 'both';
+            const value = row.hits?.amount ?? row.getnet?.gross ?? 0;
+            const label = row.hits?.guest || row.getnet?.brand || 'Lançamento';
+            const detail = ok ? 'Conciliado' : row.side === 'hits_only' ? 'Somente no HITS' : row.side === 'getnet_only' ? 'Somente na Getnet' : `Diferença de ${formatBRL(Math.abs(row.delta || 0))}`;
+            return <div key={row.id} className="px-4 py-3 flex items-start gap-2.5 text-[12px] hover:bg-slate-50/60 transition-colors">
+              {ok ? (
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               ) : (
                 <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
               )}
-              <div className="min-w-0">
-                <p className="font-medium text-slate-800">{r.label}</p>
-                <p className="text-slate-500 mt-0.5">{r.detail}</p>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-slate-800">{label}</p>
+                <p className="text-slate-500 mt-0.5">{detail}</p>
               </div>
-            </div>
-          ))}
+              <span className="font-semibold tabular-nums text-slate-700">{formatBRL(value)}</span>
+            </div>;
+          })}
+          {sub === 'getnet_bank' && bankMatches.map((row) => {
+            const ok = row.status === 'ok';
+            return <div key={row.id} className="px-4 py-3 flex items-start gap-2.5 text-[12px] hover:bg-slate-50/60 transition-colors">
+              {ok ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" /> : <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />}
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-slate-800">Crédito de {formatDateBR(row.settleDate)}</p>
+                <p className="text-slate-500 mt-0.5">{row.detail} · esperado {formatBRL(row.expectedNet)} · banco {formatBRL(row.bankCredit)}</p>
+              </div>
+            </div>;
+          })}
         </div>
       </div>
     </div>

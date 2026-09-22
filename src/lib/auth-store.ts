@@ -8,6 +8,7 @@ export type AuthModuleKey =
   | 'reservas'
   | 'governanca'
   | 'auditoria'
+  | 'auditoria_pendencias'
   | 'acessos';
 
 export const AUTH_MODULES: { key: AuthModuleKey; label: string }[] = [
@@ -15,7 +16,8 @@ export const AUTH_MODULES: { key: AuthModuleKey; label: string }[] = [
   { key: 'contas', label: 'Contas' },
   { key: 'reservas', label: 'Reservas' },
   { key: 'governanca', label: 'Governança' },
-  { key: 'auditoria', label: 'Auditoria Life' },
+  { key: 'auditoria', label: 'Auditoria Life (completo)' },
+  { key: 'auditoria_pendencias', label: 'Auditoria Life — só Pendências' },
   { key: 'acessos', label: 'Acessos' },
 ];
 
@@ -77,6 +79,11 @@ function saveUsers(users: AuthUser[]) {
 
 export function listUsers(): AuthUser[] {
   return loadUsers().sort((a, b) => a.email.localeCompare(b.email));
+}
+
+/** Usuários ativos (para atribuir responsável em divergências) */
+export function listActiveUsers(): AuthUser[] {
+  return listUsers().filter((u) => u.active);
 }
 
 export function getSession(): AuthSession | null {
@@ -235,10 +242,49 @@ export function deleteUser(userId: string, currentUserId: string): { ok: true } 
   return { ok: true };
 }
 
-export function canAccessModule(session: AuthSession | null, module: AuthModuleKey): boolean {
+export function canAccessModule(session: AuthSession | null, module: AuthModuleKey | string): boolean {
   if (!session) return false;
   if (session.isAdmin) return true;
-  return session.permissions.includes(module);
+  // Nav "Auditoria Life" libera com permissão completa OU só-pendências
+  if (module === 'auditoria') {
+    return (
+      session.permissions.includes('auditoria') ||
+      session.permissions.includes('auditoria_pendencias')
+    );
+  }
+  return session.permissions.includes(module as AuthModuleKey);
+}
+
+/** Hotel só resolve pendências (sem abrir auditoria / histórico / conciliação) */
+export function isAuditPendenciasOnly(session: AuthSession | null): boolean {
+  if (!session || session.isAdmin) return false;
+  if (session.permissions.includes('auditoria')) return false;
+  return session.permissions.includes('auditoria_pendencias');
+}
+
+/** Primeiro módulo liberado para o usuário (landing após login) */
+export function firstAllowedModule(session: AuthSession | null): string {
+  if (!session) return 'recepcao';
+  if (session.isAdmin) return 'recepcao';
+  const order: AuthModuleKey[] = [
+    'recepcao',
+    'contas',
+    'reservas',
+    'governanca',
+    'auditoria',
+    'auditoria_pendencias',
+    'acessos',
+  ];
+  for (const m of order) {
+    if (m === 'auditoria_pendencias') {
+      if (session.permissions.includes('auditoria_pendencias') || session.permissions.includes('auditoria')) {
+        return 'auditoria';
+      }
+      continue;
+    }
+    if (canAccessModule(session, m)) return m;
+  }
+  return 'recepcao';
 }
 
 export function canAccessHotel(session: AuthSession | null, hotelId: string): boolean {

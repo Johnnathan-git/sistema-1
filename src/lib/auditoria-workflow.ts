@@ -186,8 +186,72 @@ export function deriveStatus(answers: AuditAnswers, closed: boolean): AuditWorkf
   return 'em_andamento';
 }
 
+/** Remove data URLs de anexos (mantém só o nome) — libera quota do localStorage */
+function stripAttachmentsFromRecord(r: AuditRecord, onlyClosed: boolean): AuditRecord {
+  if (onlyClosed && r.status !== 'fechada') return r;
+  const answers: AuditAnswers = {};
+  for (const [k, a] of Object.entries(r.answers || {})) {
+    answers[Number(k)] = {
+      ...a,
+      attachmentDataUrl: undefined,
+      hotelAttachmentDataUrl: undefined,
+    };
+  }
+  return { ...r, answers };
+}
+
+function isQuotaError(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false;
+  const err = e as { name?: string; code?: number; message?: string };
+  return (
+    err.name === 'QuotaExceededError' ||
+    err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    err.code === 22 ||
+    err.code === 1014 ||
+    /quota/i.test(err.message || '')
+  );
+}
+
 export function saveAllRecords(records: AuditRecord[]) {
-  localStorage.setItem(LS_RECORDS, JSON.stringify(records));
+  const trySet = (list: AuditRecord[]) => {
+    localStorage.setItem(LS_RECORDS, JSON.stringify(list));
+    try {
+      localStorage.removeItem('pms-auditoria-records-v1');
+    } catch {}
+  };
+
+  try {
+    trySet(records);
+    return;
+  } catch (e) {
+    if (!isQuotaError(e)) throw e;
+  }
+
+  // 1) Remove anexos de auditorias já fechadas
+  try {
+    const strippedClosed = records.map((r) => stripAttachmentsFromRecord(r, true));
+    trySet(strippedClosed);
+    return;
+  } catch (e) {
+    if (!isQuotaError(e)) throw e;
+  }
+
+  // 2) Remove anexos de todas
+  try {
+    const strippedAll = records.map((r) => stripAttachmentsFromRecord(r, false));
+    trySet(strippedAll);
+    return;
+  } catch (e) {
+    if (!isQuotaError(e)) throw e;
+  }
+
+  // 3) Mantém só as 30 mais recentes (sem anexos)
+  const recent = records
+    .slice()
+    .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+    .slice(0, 30)
+    .map((r) => stripAttachmentsFromRecord(r, false));
+  trySet(recent);
 }
 
 /** Todos os registros do hotel (uso interno) */

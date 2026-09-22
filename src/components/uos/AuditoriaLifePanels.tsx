@@ -14,6 +14,7 @@ import {
 } from '@/lib/auditoria-core';
 import type { AuditRecord } from '@/lib/auditoria-workflow';
 import { statusLabel } from '@/lib/auditoria-workflow';
+import { getSession, isAuditPendenciasOnly } from '@/lib/auth-store';
 
 function formatDateTimeBR(iso?: string) {
   if (!iso) return '—';
@@ -200,6 +201,7 @@ export function PendenciasPanel({
       hotelAttachmentName?: string;
       hotelAttachmentDataUrl?: string;
       analystRejectNote?: string;
+      assignedTo?: string;
     };
   }[];
   onHotelResolve: (auditId: string, itemId: number, resolution: string, attName?: string, attData?: string) => void;
@@ -210,7 +212,21 @@ export function PendenciasPanel({
   const [rejectDrafts, setRejectDrafts] = useState<Record<string, string>>({});
   const [pendingAtt, setPendingAtt] = useState<Record<string, { name: string; dataUrl: string }>>({});
 
-  if (items.length === 0) {
+  const session = getSession();
+  const onlyPendencias = isAuditPendenciasOnly(session);
+
+  // Hotel (só-pendências): vê apenas itens atribuídos a ela
+  const visibleItems = onlyPendencias
+    ? items.filter((p) => {
+        const assigned = (p.answer.assignedTo || '').trim().toLowerCase();
+        if (!assigned) return false;
+        const name = (session?.displayName || '').trim().toLowerCase();
+        const email = (session?.email || '').trim().toLowerCase();
+        return assigned === name || assigned === email || (!!name && assigned.includes(name));
+      })
+    : items;
+
+  if (visibleItems.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-200 bg-gradient-to-b from-white to-slate-50/80 px-6 py-16 text-center shadow-sm">
         <AlertTriangle className="w-11 h-11 text-slate-300 mx-auto mb-3" />
@@ -224,7 +240,7 @@ export function PendenciasPanel({
 
   return (
     <div className="space-y-3">
-      {items.map((p) => {
+      {visibleItems.map((p) => {
         const a = p.answer;
         const k = `${p.auditId}-${p.itemId}`;
         const att = pendingAtt[k];
@@ -366,6 +382,7 @@ export function PendenciasPanel({
                     <FileText className="w-3.5 h-3.5" /> {a.hotelAttachmentName || 'Anexo do hotel'}
                   </button>
                 )}
+                {!onlyPendencias && (
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => onApprove(p.auditId, p.itemId)} className="h-8 px-4 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold hover:bg-emerald-500 shadow-sm shadow-emerald-600/20 transition-all">
                     Aprovar
@@ -387,6 +404,10 @@ export function PendenciasPanel({
                     Recusar
                   </button>
                 </div>
+                )}
+                {onlyPendencias && a.pendingState === 'resolved' && (
+                  <p className="text-[12px] text-amber-800 font-medium">Aguardando aprovação da analista</p>
+                )}
               </div>
             )}
           </div>

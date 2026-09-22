@@ -2,24 +2,46 @@
  * Auditoria Life — checklist → Pendências (hotel) → analista → fechamento
  * + Histórico · PMS×Adquirente · Adquirente×Banco · Taxas
  */
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Building2, ClipboardCheck } from 'lucide-react';
 import { AUDIT_HOTELS, LS_HOTEL, type HotelId } from '@/lib/auditoria-hotels';
 import { AuditoriaHotelWorkspace } from '@/components/uos/AuditoriaLifeWorkspace';
+import { canAccessHotel, getSession } from '@/lib/auth-store';
 
-function loadHotel(): HotelId | null {
+function loadHotel(allowed: HotelId[]): HotelId | null {
   try {
     const v = localStorage.getItem(LS_HOTEL);
-    if (v === 'santa-eliza' || v === 'varshana') return v;
+    if ((v === 'santa-eliza' || v === 'varshana') && allowed.includes(v as HotelId)) return v as HotelId;
   } catch {}
+  if (allowed.length === 1) return allowed[0];
   return null;
 }
 
 export function AuditoriaLifeModule() {
-  const [hotelId, setHotelId] = useState<HotelId | null>(() => loadHotel());
+  const session = getSession();
+  const allowedHotels = useMemo(() => {
+    return AUDIT_HOTELS.filter((h) => canAccessHotel(session, h.id)).map((h) => h.id as HotelId);
+  }, [session]);
+
+  const [hotelId, setHotelId] = useState<HotelId | null>(() => loadHotel(
+    AUDIT_HOTELS.filter((h) => canAccessHotel(getSession(), h.id)).map((h) => h.id as HotelId),
+  ));
+
+  useEffect(() => {
+    if (hotelId && !allowedHotels.includes(hotelId)) {
+      localStorage.removeItem(LS_HOTEL);
+      setHotelId(allowedHotels.length === 1 ? allowedHotels[0] : null);
+    } else if (!hotelId && allowedHotels.length === 1) {
+      const id = allowedHotels[0];
+      localStorage.setItem(LS_HOTEL, id);
+      setHotelId(id);
+    }
+  }, [hotelId, allowedHotels]);
+
   if (!hotelId) {
     return (
       <HotelPicker
+        allowedIds={allowedHotels}
         onSelect={(id) => {
           localStorage.setItem(LS_HOTEL, id);
           setHotelId(id);
@@ -28,19 +50,39 @@ export function AuditoriaLifeModule() {
     );
   }
   const hotel = AUDIT_HOTELS.find((h) => h.id === hotelId)!;
+  const canSwitch = allowedHotels.length > 1;
   return (
     <AuditoriaHotelWorkspace
       hotelId={hotelId}
       hotelName={hotel.name}
-      onChangeHotel={() => {
-        localStorage.removeItem(LS_HOTEL);
-        setHotelId(null);
-      }}
+      onChangeHotel={
+        canSwitch
+          ? () => {
+              localStorage.removeItem(LS_HOTEL);
+              setHotelId(null);
+            }
+          : undefined
+      }
     />
   );
 }
 
-function HotelPicker({ onSelect }: { onSelect: (id: HotelId) => void }) {
+function HotelPicker({
+  onSelect,
+  allowedIds,
+}: {
+  onSelect: (id: HotelId) => void;
+  allowedIds: HotelId[];
+}) {
+  const list = AUDIT_HOTELS.filter((h) => allowedIds.includes(h.id as HotelId));
+  if (list.length === 0) {
+    return (
+      <div className="max-w-md mx-auto pt-16 text-center space-y-2">
+        <p className="text-[15px] font-semibold text-slate-800">Nenhum hotel liberado</p>
+        <p className="text-[13px] text-slate-500">Peça ao administrador para liberar um hotel no módulo Acessos.</p>
+      </div>
+    );
+  }
   return (
     <div className="max-w-3xl mx-auto space-y-7 pt-6">
       <div className="text-center space-y-2">
@@ -51,11 +93,11 @@ function HotelPicker({ onSelect }: { onSelect: (id: HotelId) => void }) {
         <p className="text-[13px] text-slate-500">Selecione o hotel para iniciar</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {AUDIT_HOTELS.map((h) => (
+        {list.map((h) => (
           <button
             key={h.id}
             type="button"
-            onClick={() => onSelect(h.id)}
+            onClick={() => onSelect(h.id as HotelId)}
             className="text-left rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm hover:border-sky-300 hover:shadow-md hover:shadow-sky-500/10 transition-all group"
           >
             <div className="flex items-start gap-3.5">

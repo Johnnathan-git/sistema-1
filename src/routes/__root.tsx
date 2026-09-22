@@ -11,6 +11,7 @@ import { useEffect, type ReactNode } from 'react';
 
 import appCss from '../styles.css?url';
 import { reportLovableError } from '../lib/lovable-error-reporting';
+import { PmsProvider } from '../lib/pms-store';
 
 function NotFoundComponent() {
   return (
@@ -117,7 +118,9 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <PmsProvider>
+        <Outlet />
+      </PmsProvider>
     </QueryClientProvider>
   );
 }

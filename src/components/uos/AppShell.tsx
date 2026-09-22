@@ -89,19 +89,16 @@ export function AppShell({ children, onLogout }: { children: ReactNode; onLogout
   const [openModal, setOpenModal] = useState(false);
   const [fundoInput, setFundoInput] = useState('200,00');
 
-  const roomList = rooms ?? [];
-  const reservationList = reservations ?? [];
-  const operationalDate = hotel?.operationalDate ?? '';
-  const occupied = roomList.filter((r) => r.occupancy === 'ocupado').length;
-  const sellable = roomList.filter((r) => r.occupancy !== 'bloqueado').length;
+  const occupied = rooms.filter((r) => r.occupancy === 'ocupado').length;
+  const sellable = rooms.filter((r) => r.occupancy !== 'bloqueado').length;
   const occPct = sellable > 0 ? Math.round((occupied / sellable) * 100) : 0;
-  const arrivalsToday = reservationList.filter(
+  const arrivalsToday = reservations.filter(
     (r) =>
-      r.checkIn === operationalDate &&
+      r.checkIn === hotel.operationalDate &&
       (r.status === 'confirmada' || r.status === 'pendente'),
   ).length;
 
-  const opDateBR = operationalDate ? operationalDate.split('-').reverse().join('/') : '--/--/----';
+  const opDateBR = hotel.operationalDate.split('-').reverse().join('/');
 
   const doOpenCash = () => {
     const n = parseFloat(fundoInput.replace(/\./g, '').replace(',', '.')) || 0;

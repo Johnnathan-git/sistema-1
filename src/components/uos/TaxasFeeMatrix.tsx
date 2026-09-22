@@ -107,7 +107,7 @@ export function TaxasFeeMatrix({ hotelId, hotelName, onActiveFeesChange = noop }
     if (!editing) onActiveFeesChange(fees);
   }, [fees, editing, onActiveFeesChange]);
 
-  const display = editing ? draft! : fees;
+  const display = editing && draft ? draft : fees;
   const matrix = useMemo(() => feesToMatrix(display), [display]);
   const extras = useMemo(() => display.filter((f) => !isStandard(f)), [display]);
 

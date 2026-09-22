@@ -86,7 +86,7 @@ export function AuditoriaHotelWorkspace({
 }: {
   hotelId: HotelId;
   hotelName: string;
-  onChangeHotel: () => void;
+  onChangeHotel?: () => void;
 }) {
   const session = getSession();
   const onlyPendencias = isAuditPendenciasOnly(session);
@@ -394,13 +394,15 @@ export function AuditoriaHotelWorkspace({
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={onChangeHotel}
-          className="h-9 px-3 rounded-xl border border-slate-200 bg-white text-[12px] font-medium text-slate-600 inline-flex items-center gap-1.5 hover:bg-slate-50 shadow-sm transition-all"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" /> Trocar hotel · {hotelName}
-        </button>
+        {onChangeHotel && (
+          <button
+            type="button"
+            onClick={onChangeHotel}
+            className="h-9 px-3 rounded-xl border border-slate-200 bg-white text-[12px] font-medium text-slate-600 inline-flex items-center gap-1.5 hover:bg-slate-50 shadow-sm transition-all"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Trocar hotel · {hotelName}
+          </button>
+        )}
         {busy && (
           <span className="text-[12px] text-slate-500 inline-flex items-center gap-1.5">
             <Loader2 className="w-3.5 h-3.5 animate-spin" /> Processando…
@@ -658,7 +660,7 @@ export function AuditoriaHotelWorkspace({
       )}
 
       {topTab === 'taxas' && !onlyPendencias && (
-        <TaxasFeeMatrix hotelId={hotelId} fees={fees} setFees={setFees} />
+        <TaxasFeeMatrix hotelId={hotelId} hotelName={hotelName} onActiveFeesChange={setFees} />
       )}
 
       {modalRecord && (

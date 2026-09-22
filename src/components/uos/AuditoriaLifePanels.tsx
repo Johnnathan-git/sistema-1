@@ -111,7 +111,7 @@ export function ConciliationPanel({
             <div className="flex flex-wrap gap-2">
               <label className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-300 transition-all">
                 <Upload className="w-3.5 h-3.5 text-slate-500" /> Arquivo
-                <input type="file" accept=".txt,.csv,text/plain" className="hidden" disabled={busy} onChange={(e) => {
+                <input type="file" accept=".pdf,.txt,.csv,text/plain,application/pdf" className="hidden" disabled={busy} onChange={(e) => {
                   const file = e.target.files?.[0];
                   e.target.value = '';
                   if (file) onLoadFile(kind, file);
@@ -215,7 +215,6 @@ export function PendenciasPanel({
   const session = getSession();
   const onlyPendencias = isAuditPendenciasOnly(session);
 
-  // Hotel (só-pendências): vê apenas itens atribuídos a ela
   const visibleItems = onlyPendencias
     ? items.filter((p) => {
         const assigned = (p.answer.assignedTo || '').trim().toLowerCase();
@@ -273,11 +272,7 @@ export function PendenciasPanel({
               </div>
             )}
             {a.attachmentDataUrl && (
-              <button
-                type="button"
-                onClick={() => openAttachment(a.attachmentDataUrl, a.attachmentName)}
-                className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline"
-              >
+              <button type="button" onClick={() => openAttachment(a.attachmentDataUrl, a.attachmentName)} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline">
                 <FileText className="w-3.5 h-3.5" /> {a.attachmentName || 'Anexo da analista'}
               </button>
             )}
@@ -289,79 +284,36 @@ export function PendenciasPanel({
             {a.pendingState === 'open' && (
               <div className="space-y-2 border-t border-slate-100 pt-3">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Resolução do hotel</p>
-                <textarea
-                  className="w-full min-h-[72px] rounded-xl border border-slate-200 px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all"
-                  placeholder="Descreva como a pendência foi resolvida (obrigatório)…"
-                  value={drafts[k] || ''}
-                  onChange={(e) => setDrafts((d) => ({ ...d, [k]: e.target.value }))}
-                />
+                <textarea className="w-full min-h-[72px] rounded-xl border border-slate-200 px-3 py-2 text-[13px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 transition-all" placeholder="Descreva como a pendência foi resolvida (obrigatório)…" value={drafts[k] || ''} onChange={(e) => setDrafts((d) => ({ ...d, [k]: e.target.value }))} />
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-300 transition-all">
                     <Upload className="w-3.5 h-3.5 text-slate-500" /> {att ? 'Trocar anexo' : 'Anexo (opcional)'}
-                    <input
-                      type="file"
-                      accept=".pdf,image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        e.target.value = '';
-                        if (!f) return;
-                        if (f.size > 2_500_000) {
-                          toast.error('Arquivo muito grande');
-                          return;
-                        }
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                          setPendingAtt((prev) => ({
-                            ...prev,
-                            [k]: { name: f.name, dataUrl: String(reader.result || '') },
-                          }));
-                          toast.message('Anexo pronto — preencha a resolução e clique em Enviar');
-                        };
-                        reader.readAsDataURL(f);
-                      }}
-                    />
+                    <input type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!f) return;
+                      if (f.size > 2_500_000) { toast.error('Arquivo muito grande'); return; }
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        setPendingAtt((prev) => ({ ...prev, [k]: { name: f.name, dataUrl: String(reader.result || '') } }));
+                        toast.message('Anexo pronto — preencha a resolução e clique em Enviar');
+                      };
+                      reader.readAsDataURL(f);
+                    }} />
                   </label>
                   {att && (
                     <>
-                      <button
-                        type="button"
-                        onClick={() => openAttachment(att.dataUrl, att.name)}
-                        className="text-[11px] text-sky-700 font-medium truncate max-w-[160px] hover:underline text-left"
-                      >
-                        {att.name}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPendingAtt((prev) => {
-                          const next = { ...prev };
-                          delete next[k];
-                          return next;
-                        })}
-                        className="h-7 w-7 rounded-md text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                      <button type="button" onClick={() => openAttachment(att.dataUrl, att.name)} className="text-[11px] text-sky-700 font-medium truncate max-w-[160px] hover:underline text-left">{att.name}</button>
+                      <button type="button" onClick={() => setPendingAtt((prev) => { const next = { ...prev }; delete next[k]; return next; })} className="h-7 w-7 rounded-md text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center"><X className="w-3.5 h-3.5" /></button>
                     </>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const text = (drafts[k] || '').trim();
-                      if (!text) {
-                        toast.error('Descreva a resolução (obrigatório)');
-                        return;
-                      }
-                      onHotelResolve(p.auditId, p.itemId, text, att?.name, att?.dataUrl);
-                      setDrafts((d) => ({ ...d, [k]: '' }));
-                      setPendingAtt((prev) => {
-                        const next = { ...prev };
-                        delete next[k];
-                        return next;
-                      });
-                    }}
-                    className="h-8 px-4 rounded-lg bg-gradient-to-r from-slate-900 to-slate-800 text-white text-[12px] font-semibold hover:from-slate-800 hover:to-slate-700 shadow-sm transition-all"
-                  >
+                  <button type="button" onClick={() => {
+                    const text = (drafts[k] || '').trim();
+                    if (!text) { toast.error('Descreva a resolução (obrigatório)'); return; }
+                    onHotelResolve(p.auditId, p.itemId, text, att?.name, att?.dataUrl);
+                    setDrafts((d) => ({ ...d, [k]: '' }));
+                    setPendingAtt((prev) => { const next = { ...prev }; delete next[k]; return next; });
+                  }} className="h-8 px-4 rounded-lg bg-gradient-to-r from-slate-900 to-slate-800 text-white text-[12px] font-semibold hover:from-slate-800 hover:to-slate-700 shadow-sm transition-all">
                     Enviar resolução
                   </button>
                 </div>
@@ -374,35 +326,15 @@ export function PendenciasPanel({
                   {a.hotelResolvedAt && <span className="text-emerald-700"> · {formatDateTimeBR(a.hotelResolvedAt)}</span>}
                 </div>
                 {a.hotelAttachmentDataUrl && (
-                  <button
-                    type="button"
-                    onClick={() => openAttachment(a.hotelAttachmentDataUrl, a.hotelAttachmentName)}
-                    className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline"
-                  >
+                  <button type="button" onClick={() => openAttachment(a.hotelAttachmentDataUrl, a.hotelAttachmentName)} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline">
                     <FileText className="w-3.5 h-3.5" /> {a.hotelAttachmentName || 'Anexo do hotel'}
                   </button>
                 )}
                 {!onlyPendencias && (
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => onApprove(p.auditId, p.itemId)} className="h-8 px-4 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold hover:bg-emerald-500 shadow-sm shadow-emerald-600/20 transition-all">
-                    Aprovar
-                  </button>
-                  <input
-                    value={rejectDrafts[k] || ''}
-                    onChange={(e) => setRejectDrafts((d) => ({ ...d, [k]: e.target.value }))}
-                    placeholder="Justificativa da recusa"
-                    className="h-8 flex-1 min-w-[140px] rounded-lg border border-slate-200 px-2.5 text-[12px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onReject(p.auditId, p.itemId, rejectDrafts[k] || '');
-                      setRejectDrafts((d) => ({ ...d, [k]: '' }));
-                    }}
-                    className="h-8 px-4 rounded-lg border border-rose-300 text-rose-700 text-[12px] font-semibold hover:bg-rose-50 transition-all"
-                  >
-                    Recusar
-                  </button>
+                  <button type="button" onClick={() => onApprove(p.auditId, p.itemId)} className="h-8 px-4 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold hover:bg-emerald-500 shadow-sm shadow-emerald-600/20 transition-all">Aprovar</button>
+                  <input value={rejectDrafts[k] || ''} onChange={(e) => setRejectDrafts((d) => ({ ...d, [k]: e.target.value }))} placeholder="Justificativa da recusa" className="h-8 flex-1 min-w-[140px] rounded-lg border border-slate-200 px-2.5 text-[12px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400" />
+                  <button type="button" onClick={() => { onReject(p.auditId, p.itemId, rejectDrafts[k] || ''); setRejectDrafts((d) => ({ ...d, [k]: '' })); }} className="h-8 px-4 rounded-lg border border-rose-300 text-rose-700 text-[12px] font-semibold hover:bg-rose-50 transition-all">Recusar</button>
                 </div>
                 )}
                 {onlyPendencias && a.pendingState === 'resolved' && (
@@ -419,20 +351,15 @@ export function PendenciasPanel({
 
 export function AuditDetailModal({ record, onClose }: { record: AuditRecord; onClose: () => void }) {
   const logs = [...(record.logs || [])].reverse();
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
       <div className="w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl shadow-slate-900/20 border border-slate-200/80 flex flex-col">
         <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-start justify-between gap-3">
           <div>
             <p className="font-semibold text-[15px] text-slate-900">{record.hotelName}</p>
-            <p className="text-[12px] text-slate-500 mt-0.5">
-              {formatDateBR(record.header.date)} · {record.header.analyst || 'Analista'} · {statusLabel(record.status)}
-            </p>
+            <p className="text-[12px] text-slate-500 mt-0.5">{formatDateBR(record.header.date)} · {record.header.analyst || 'Analista'} · {statusLabel(record.status)}</p>
           </div>
-          <button type="button" onClick={onClose} className="h-8 w-8 rounded-lg hover:bg-slate-200/60 inline-flex items-center justify-center text-slate-500 transition-colors">
-            <X className="w-4 h-4" />
-          </button>
+          <button type="button" onClick={onClose} className="h-8 w-8 rounded-lg hover:bg-slate-200/60 inline-flex items-center justify-center text-slate-500 transition-colors"><X className="w-4 h-4" /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {logs.length > 0 && (
@@ -449,7 +376,6 @@ export function AuditDetailModal({ record, onClose }: { record: AuditRecord; onC
               </ul>
             </div>
           )}
-
           <div className="space-y-2.5">
             {CHECKLIST.map((item) => {
               const a = record.answers[item.id];
@@ -457,40 +383,23 @@ export function AuditDetailModal({ record, onClose }: { record: AuditRecord; onC
               return (
                 <div key={item.id} className="rounded-xl border border-slate-100 bg-slate-50/40 px-3.5 py-2.5">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-[13px] font-medium text-slate-800">
-                      {item.id}. {item.title}
-                    </p>
-                    {a.status === 'conforme' && (
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-white bg-emerald-600 px-2.5 py-1 rounded-full">Conforme</span>
-                    )}
+                    <p className="text-[13px] font-medium text-slate-800">{item.id}. {item.title}</p>
+                    {a.status === 'conforme' && <span className="text-[10px] font-bold uppercase tracking-wide text-white bg-emerald-600 px-2.5 py-1 rounded-full">Conforme</span>}
                     {a.status === 'divergencia' && (
                       <span className="text-[10px] font-bold uppercase tracking-wide text-white bg-rose-600 px-2.5 py-1 rounded-full">
-                        Divergência
-                        {a.pendingState === 'approved' && ' · Aprovada'}
-                        {a.pendingState === 'resolved' && ' · Aguardando analista'}
-                        {a.pendingState === 'open' && ' · Aguardando resolução'}
+                        Divergência{a.pendingState === 'approved' && ' · Aprovada'}{a.pendingState === 'resolved' && ' · Aguardando analista'}{a.pendingState === 'open' && ' · Aguardando resolução'}
                       </span>
                     )}
                   </div>
                   {a.notes && <p className="text-[12px] text-slate-600 mt-1.5">{a.notes}</p>}
                   {a.attachmentDataUrl && (
-                    <button
-                      type="button"
-                      onClick={() => openAttachment(a.attachmentDataUrl, a.attachmentName)}
-                      className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1.5 hover:underline"
-                    >
+                    <button type="button" onClick={() => openAttachment(a.attachmentDataUrl, a.attachmentName)} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1.5 hover:underline">
                       <FileText className="w-3.5 h-3.5" /> {a.attachmentName || 'Anexo'}
                     </button>
                   )}
-                  {a.hotelResolution && (
-                    <p className="text-[12px] text-emerald-800 mt-1.5">Resolução hotel: {a.hotelResolution}</p>
-                  )}
+                  {a.hotelResolution && <p className="text-[12px] text-emerald-800 mt-1.5">Resolução hotel: {a.hotelResolution}</p>}
                   {a.hotelAttachmentDataUrl && (
-                    <button
-                      type="button"
-                      onClick={() => openAttachment(a.hotelAttachmentDataUrl, a.hotelAttachmentName)}
-                      className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1 hover:underline"
-                    >
+                    <button type="button" onClick={() => openAttachment(a.hotelAttachmentDataUrl, a.hotelAttachmentName)} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1 hover:underline">
                       <FileText className="w-3.5 h-3.5" /> {a.hotelAttachmentName || 'Anexo hotel'}
                     </button>
                   )}

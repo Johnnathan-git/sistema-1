@@ -2,8 +2,8 @@ import { onCloudSync } from '@/lib/cloud-sync';
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
-  CreditCard, Link2, Ban, Plus, ShoppingBag, History, RefreshCw, Trash2,
-  CheckCircle2, AlertTriangle, Nfc, Loader2, Minus,
+  CreditCard, Ban, Plus, ShoppingBag, History, RefreshCw, Trash2,
+  CheckCircle2, Nfc, Loader2, Minus, ArrowRight, Search, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePms } from '@/lib/pms-store';
@@ -16,7 +16,9 @@ import {
 } from '@/lib/nfc-cards';
 import { POS_POINTS, type PosPointId, listProducts, getPosName } from '@/lib/pos-catalog';
 
-type Tab = 'venda' | 'cartoes' | 'vincular' | 'movimentos';
+import { Button } from '@/components/ui/button';
+
+type Tab = 'venda' | 'cartoes' | 'movimentos';
 
 function webNfcSupported() {
   return typeof window !== 'undefined' && 'NDEFReader' in window;
@@ -74,7 +76,7 @@ function formatWhen(iso?: string) {
   }
 }
 
-export function CardsModule() {
+export function MediaCenterModule() {
   const { hotel, reservations, accounts, addCharge } = usePms();
   const session = getSession();
   const [tab, setTab] = useState<Tab>('venda');
@@ -84,8 +86,6 @@ export function CardsModule() {
 
   const cards = useMemo(() => listCards(hotel.id), [hotel.id, tick]);
   const logs = useMemo(() => listChargeLogs(80), [tick]);
-  const inHouse = useMemo(() => reservations.filter((r) => r.status === 'checkin'), [reservations]);
-
   const [nfcOk, setNfcOk] = useState(false);
   useEffect(() => { setNfcOk(webNfcSupported()); }, []);
 
@@ -115,11 +115,6 @@ export function CardsModule() {
     }
   };
 
-  const [linkCardId, setLinkCardId] = useState('');
-  const [linkResId, setLinkResId] = useState('');
-  const [scanningLink, setScanningLink] = useState(false);
-  const [linkScanUid, setLinkScanUid] = useState('');
-
   const resolveAccountForReservation = (resvId: string): string | undefined => {
     const resv = reservations.find((r) => r.id === resvId);
     if (resv?.accountId) {
@@ -130,58 +125,34 @@ export function CardsModule() {
     return byRes?.id || resv?.accountId;
   };
 
-  const doLink = () => {
-    const resv = inHouse.find((r) => r.id === linkResId);
-    if (!resv) { toast.error('Selecione um hóspede in-house'); return; }
-    if (!linkCardId) { toast.error('Selecione ou aproxime a pulseira'); return; }
-    const accountId = resolveAccountForReservation(resv.id);
-    if (!accountId) {
-      toast.error('Hóspede sem conta aberta — faça o check-in primeiro');
-      return;
-    }
-    const res = linkCard({
-      cardId: linkCardId,
-      reservationId: resv.id,
-      guestId: resv.guestId,
-      guestName: resv.guestName,
-      roomNumber: resv.roomNumber,
-      accountId,
-    });
-    if (!res.ok) { toast.error(res.message); return; }
-    toast.success(`Vinculado a ${resv.guestName} · UH ${resv.roomNumber || '—'} · conta ${accountId}`);
-    setLinkCardId(''); setLinkResId(''); setLinkScanUid(''); refresh();
-  };
-
-  const scanToLink = async () => {
-    setScanningLink(true); setLinkScanUid('');
-    try {
-      const { uidHex } = await scanNfcOnce();
-      setLinkScanUid(uidHex);
-      const found = cards.find((c) => c.uidHex === uidHex);
-      if (!found) { toast.error(`Pulseira ${uidHex} não cadastrada. Cadastre primeiro.`); return; }
-      if (found.status === 'bloqueado' || found.status === 'perdido') { toast.error('Pulseira bloqueada'); return; }
-      setLinkCardId(found.id);
-      toast.success(`Pulseira ${uidHex} selecionada`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Falha NFC');
-    } finally {
-      setScanningLink(false);
-    }
-  };
-
   const [posId, setPosId] = useState<PosPointId>('bar-central');
   const [pdvUid, setPdvUid] = useState('');
   const [pdvLookup, setPdvLookup] = useState<ReturnType<typeof lookupByUid> | null>(null);
   const [scanningPdv, setScanningPdv] = useState(false);
   const [qtyMap, setQtyMap] = useState<Record<string, number>>({});
-  const [launching, setLaunching] = useState<string | null>(null);
+  const [launching, setLaunching] = useState(false);
+  const [productQuery, setProductQuery] = useState('');
 
-  const products = useMemo(() => listProducts({ posId, onlyActive: true }), [posId, tick]);
+  const products = useMemo(() => {
+    const query = productQuery.trim().toLocaleLowerCase('pt-BR');
+    return listProducts({ posId, onlyActive: true }).filter((product) =>
+      !query || product.name.toLocaleLowerCase('pt-BR').includes(query),
+    );
+  }, [posId, productQuery, tick]);
 
-  const getQty = (productId: string) => Math.max(1, qtyMap[productId] || 1);
+  const getQty = (productId: string) => Math.max(0, qtyMap[productId] || 0);
   const setQty = (productId: string, q: number) => {
-    setQtyMap((prev) => ({ ...prev, [productId]: Math.max(1, q) }));
+    setQtyMap((prev) => ({ ...prev, [productId]: Math.max(0, q) }));
   };
+
+  const cartItems = useMemo(
+    () => products
+      .map((product) => ({ product, quantity: getQty(product.id) }))
+      .filter((item) => item.quantity > 0),
+    [products, qtyMap],
+  );
+  const cartQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const cartTotal = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
   const resolveAccountId = (card: NonNullable<ReturnType<typeof lookupByUid>['card']>): string | null => {
     if (card.accountId) {
@@ -219,7 +190,7 @@ export function CardsModule() {
     else {
       const accId = resolveAccountId(r.card);
       if (!accId) {
-        toast.error('Pulseira vinculada, mas conta do hóspede não encontrada. Re-vincule em Vincular.');
+        toast.error('Pulseira vinculada, mas a conta não foi encontrada. Abra a conta em Recepção → Hospedados.');
       } else {
         toast.success(`${r.card.guestName} · UH ${r.card.roomNumber || '—'} · pronto para lançar`);
       }
@@ -238,7 +209,7 @@ export function CardsModule() {
     }
   };
 
-  const launchProduct = (productId: string, name: string, unitPrice: number) => {
+  const launchOrder = () => {
     if (!pdvLookup?.canCharge || !pdvLookup.card) {
       toast.error('Aproxime a pulseira do hóspede primeiro');
       return;
@@ -246,35 +217,36 @@ export function CardsModule() {
     const card = pdvLookup.card;
     const accountId = resolveAccountId(card);
     if (!accountId) {
-      toast.error('Conta do hóspede não encontrada — vá em Vincular e associe a pulseira de novo');
+      toast.error('Conta não encontrada — confira a pulseira em Recepção → Hospedados → Conta');
       return;
     }
-
-    const q = getQty(productId);
-    const amount = unitPrice * q;
-    const desc = q > 1 ? `${name} x${q}` : name;
+    if (cartItems.length === 0) {
+      toast.error('Selecione ao menos um produto');
+      return;
+    }
     const posLabel = getPosName(posId);
-
-    setLaunching(productId);
-
-    const nfcRes = registerCharge({
-      uidHex: pdvUid || card.uidHex,
-      description: `${desc} · ${posLabel}`,
-      amount,
-      operator: session?.displayName || 'Operador',
-      source: 'pdv_rapido',
-    });
-    if (!nfcRes.ok) {
-      toast.error(nfcRes.message);
-      setLaunching(null);
-      return;
-    }
-
-    const chargeRes = addCharge(accountId, `${desc} (${posLabel})`, amount, 'consumo');
-    if (!chargeRes?.ok) {
-      toast.error(chargeRes?.message || 'Falha ao lançar na conta do hóspede');
-      setLaunching(null);
-      return;
+    setLaunching(true);
+    for (const { product, quantity } of cartItems) {
+      const amount = product.price * quantity;
+      const description = quantity > 1 ? `${product.name} x${quantity}` : product.name;
+      const nfcResult = registerCharge({
+        uidHex: pdvUid || card.uidHex,
+        description: `${description} · ${posLabel}`,
+        amount,
+        operator: session?.displayName || 'Operador',
+        source: 'pdv_rapido',
+      });
+      if (!nfcResult.ok) {
+        toast.error(nfcResult.message);
+        setLaunching(false);
+        return;
+      }
+      const accountResult = addCharge(accountId, `${description} (${posLabel})`, amount, 'consumo');
+      if (!accountResult?.ok) {
+        toast.error(accountResult?.message || 'Falha ao lançar na conta do hóspede');
+        setLaunching(false);
+        return;
+      }
     }
 
     if (card.accountId !== accountId && card.id) {
@@ -290,23 +262,22 @@ export function CardsModule() {
       } catch { /* ignore */ }
     }
 
-    toast.success(`${formatBRL(amount)} lançado · ${card.guestName} · UH ${card.roomNumber || '—'}`);
-    setQty(productId, 1);
-    setLaunching(null);
+    toast.success(`${cartQuantity} ${cartQuantity === 1 ? 'item lançado' : 'itens lançados'} · ${formatBRL(cartTotal)} · ${card.guestName}`);
+    setQtyMap({});
+    setLaunching(false);
     refresh();
   };
 
   const tabs: { id: Tab; label: string; icon: typeof CreditCard }[] = [
     { id: 'venda', label: 'Venda', icon: ShoppingBag },
     { id: 'cartoes', label: 'Cartões', icon: CreditCard },
-    { id: 'vincular', label: 'Vincular', icon: Link2 },
     { id: 'movimentos', label: 'Movimentos', icon: History },
   ];
 
   const canSell = Boolean(pdvLookup?.canCharge && pdvLookup.card);
 
   return (
-    <div className="space-y-4">
+    <div className="media-center space-y-4">
       <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-1 flex-wrap gap-0.5 w-full sm:w-auto">
         {tabs.map((t) => {
           const Icon = t.icon;
@@ -321,7 +292,7 @@ export function CardsModule() {
       </div>
 
       {tab === 'venda' && (
-        <div className="space-y-3 max-w-2xl">
+        <div className="relative max-w-4xl space-y-4 pb-44 sm:pb-36">
           <div className="flex flex-wrap gap-2">
             {POS_POINTS.map((p) => (
               <button key={p.id} type="button" onClick={() => setPosId(p.id)}
@@ -355,7 +326,7 @@ export function CardsModule() {
                   <span className="text-[15px] font-semibold">
                     {nfcOk ? 'Aproxime a pulseira do hóspede' : 'NFC indisponível neste aparelho'}
                   </span>
-                  <span className="text-[12px] text-slate-400">Abre a comanda e libera o cardápio</span>
+                   <span className="text-[12px] text-slate-400">Identifica o hóspede e abre uma nova comanda</span>
                 </>
               )}
             </button>
@@ -384,13 +355,15 @@ export function CardsModule() {
           )}
 
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[12px] font-semibold uppercase tracking-wide text-slate-400">
-                Cardápio · {getPosName(posId)}
-              </p>
-              {canSell && (
-                <p className="text-[11px] text-slate-400">Ajuste a qtd e toque em Lançar</p>
-              )}
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 mb-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Cardápio</p>
+                <p className="truncate text-base font-bold text-foreground">{getPosName(posId)}</p>
+              </div>
+              <div className="relative w-40 sm:w-56">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input value={productQuery} onChange={(event) => setProductQuery(event.target.value)} placeholder="Buscar produto" className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring/30" />
+              </div>
             </div>
 
             {!canSell ? (
@@ -402,72 +375,51 @@ export function CardsModule() {
                 Nenhum produto neste PDV. Cadastre em Operações → Produtos.
               </p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+               <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
                 {products.map((p) => {
                   const q = getQty(p.id);
-                  const busy = launching === p.id;
                   return (
-                    <div
+                     <div
                       key={p.id}
-                      className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm flex flex-col gap-2.5"
+                       className={cn('relative min-h-32 rounded-xl border bg-card p-3 shadow-sm transition-all', q > 0 ? 'border-primary ring-2 ring-primary/10' : 'border-border')}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-[14px] font-semibold text-slate-900 leading-snug">{p.name}</p>
-                          <p className="text-[15px] font-bold tabular-nums text-blue-700 mt-0.5">
+                       <button type="button" className="w-full min-w-0 pb-12 text-left" onClick={() => setQty(p.id, q + 1)} aria-label={`Adicionar ${p.name}`}>
+                           <p className="line-clamp-2 text-[14px] font-semibold leading-snug text-card-foreground">{p.name}</p>
+                           <p className="mt-1 text-[15px] font-bold tabular-nums text-primary">
                             {formatBRL(p.price)}
                           </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50">
-                          <button
-                            type="button"
-                            onClick={() => setQty(p.id, q - 1)}
-                            className="h-9 w-9 inline-flex items-center justify-center text-slate-600"
-                            aria-label="Diminuir"
-                          >
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <span className="w-8 text-center text-[14px] font-semibold tabular-nums">{q}</span>
-                          <button
-                            type="button"
-                            onClick={() => setQty(p.id, q + 1)}
-                            className="h-9 w-9 inline-flex items-center justify-center text-slate-600"
-                            aria-label="Aumentar"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => launchProduct(p.id, p.name, p.price)}
-                          className={cn(
-                            'flex-1 h-10 rounded-lg text-[13px] font-semibold text-white inline-flex items-center justify-center gap-1.5 transition-all',
-                            busy ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-500 active:scale-[0.98]',
-                          )}
-                        >
-                          {busy ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <>
-                              Lançar
-                              {q > 1 && (
-                                <span className="opacity-90 tabular-nums">· {formatBRL(p.price * q)}</span>
-                              )}
-                            </>
-                          )}
-                        </button>
-                      </div>
+                       </button>
+                       <div className="absolute inset-x-3 bottom-3 flex h-9 items-center justify-between rounded-lg border border-border bg-muted p-0.5">
+                         <Button type="button" variant="ghost" size="icon" disabled={q === 0} onClick={() => setQty(p.id, q - 1)} aria-label={`Remover ${p.name}`} className="h-8 w-8"><Minus /></Button>
+                         <span className={cn('w-7 text-center text-sm font-bold tabular-nums', q > 0 ? 'text-foreground' : 'text-muted-foreground')}>{q}</span>
+                         <Button type="button" variant="outline" size="icon" onClick={() => setQty(p.id, q + 1)} aria-label={`Adicionar ${p.name}`} className="h-8 w-8 bg-card text-primary"><Plus /></Button>
+                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
           </div>
+
+          {canSell && (
+            <div className="fixed inset-x-3 bottom-3 z-40 md:absolute md:inset-x-0 md:bottom-0">
+              <div className="mx-auto max-w-4xl rounded-2xl bg-foreground p-4 text-background shadow-2xl">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-background/55">Total da comanda</p>
+                    <div className="flex items-baseline gap-2">
+                      <p className="text-2xl font-bold tabular-nums">{formatBRL(cartTotal)}</p>
+                      <p className="text-xs text-background/60">{cartQuantity} {cartQuantity === 1 ? 'item' : 'itens'}</p>
+                    </div>
+                  </div>
+                  {cartQuantity > 0 && <Button type="button" variant="ghost" size="icon" onClick={() => setQtyMap({})} className="text-background hover:bg-background/10 hover:text-background" aria-label="Limpar comanda"><X /></Button>}
+                </div>
+                <Button type="button" onClick={launchOrder} disabled={launching || cartQuantity === 0} className="mt-3 h-12 w-full bg-primary text-primary-foreground hover:bg-primary/90">
+                  {launching ? <Loader2 className="animate-spin" /> : <>Lançar comanda <ArrowRight /></>}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -502,46 +454,6 @@ export function CardsModule() {
               </ul>
             )}
           </div>
-        </div>
-      )}
-
-      {tab === 'vincular' && (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4 shadow-sm max-w-lg">
-          <p className="text-[15px] font-semibold">Vincular pulseira ao hóspede</p>
-          <p className="text-[12px] text-slate-500 -mt-2">
-            A pulseira precisa de um hóspede com check-in e conta aberta para lançar consumos.
-          </p>
-          <button type="button" onClick={scanToLink} disabled={scanningLink || !nfcOk}
-            className={cn('w-full min-h-[72px] rounded-xl border-2 border-dashed flex items-center justify-center gap-2',
-              scanningLink ? 'border-blue-400 bg-blue-50' : 'border-slate-300 bg-slate-50')}>
-            {scanningLink ? <Loader2 className="w-6 h-6 animate-spin text-blue-600" /> : <Nfc className="w-6 h-6" />}
-            <span className="text-[13px] font-semibold">{scanningLink ? 'Aproxime…' : 'Aproxime a pulseira'}</span>
-          </button>
-          {linkScanUid && <p className="text-[12px] text-slate-600">UID: <span className="font-mono font-semibold">{linkScanUid}</span></p>}
-          <label className="block space-y-1">
-            <span className="text-[11px] font-semibold uppercase text-slate-400">Ou escolha cartão</span>
-            <select value={linkCardId} onChange={(e) => setLinkCardId(e.target.value)} className="w-full h-10 rounded-lg border border-slate-200 px-2 bg-white text-[14px]">
-              <option value="">—</option>
-              {cards.filter((c) => c.status === 'disponivel' || c.status === 'ativo').map((c) => (
-                <option key={c.id} value={c.id}>{c.uidHex}{c.label ? ` · ${c.label}` : ''}{c.guestName ? ` · ${c.guestName}` : ''}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block space-y-1">
-            <span className="text-[11px] font-semibold uppercase text-slate-400">Hóspede in-house</span>
-            <select value={linkResId} onChange={(e) => setLinkResId(e.target.value)} className="w-full h-10 rounded-lg border border-slate-200 px-2 bg-white text-[14px]">
-              <option value="">—</option>
-              {inHouse.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.guestName} · UH {r.roomNumber || '—'}
-                  {r.accountId ? ` · ${r.accountId}` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="button" onClick={doLink} className="w-full h-11 rounded-lg bg-blue-600 text-white text-[13px] font-semibold">
-            Vincular à conta do hóspede
-          </button>
         </div>
       )}
 

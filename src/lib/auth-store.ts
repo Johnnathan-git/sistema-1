@@ -10,6 +10,7 @@ export type AuthModuleKey =
   | 'auditoria'
   | 'auditoria_pendencias'
   | 'cartoes'
+  | 'venda'
   | 'produtos'
   | 'acessos';
 
@@ -21,6 +22,7 @@ export const AUTH_MODULES: { key: AuthModuleKey; label: string }[] = [
   { key: 'auditoria', label: 'Auditoria Life (completo)' },
   { key: 'auditoria_pendencias', label: 'Auditoria Life — só Pendências' },
   { key: 'cartoes', label: 'Central de Mídias' },
+  { key: 'venda', label: 'Venda' },
   { key: 'produtos', label: 'Produtos' },
 ];
 
@@ -278,6 +280,7 @@ export function firstAllowedModule(session: AuthSession | null): string {
     'reservas',
     'governanca',
     'cartoes',
+    'venda',
     'produtos',
     'auditoria',
     'auditoria_pendencias',

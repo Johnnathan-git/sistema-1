@@ -29,6 +29,7 @@ export type HotelPerm = 'santa-eliza' | 'varshana' | 'all';
 export interface AuthUser {
   id: string;
   email: string;
+  /** Hash simples — não usar em produção real */
   passwordHash: string;
   displayName: string;
   isAdmin: boolean;
@@ -51,6 +52,7 @@ export interface AuthSession {
 const LS_USERS = 'uos-auth-users-v1';
 const LS_SESSION = 'uos-auth-session-v1';
 
+/** Hash leve só para não gravar senha em texto puro no localStorage */
 export function hashPassword(password: string): string {
   let h = 5381;
   const s = `uos|${password}|v1`;
@@ -82,6 +84,7 @@ export function listUsers(): AuthUser[] {
   return loadUsers().sort((a, b) => a.email.localeCompare(b.email));
 }
 
+/** Usuários ativos (para atribuir responsável em divergências) */
 export function listActiveUsers(): AuthUser[] {
   return listUsers().filter((u) => u.active);
 }
@@ -140,6 +143,7 @@ export function isBootstrapMode(): boolean {
   return loadUsers().length === 0;
 }
 
+/** Cria o primeiro administrador (só quando não há usuários) */
 export function bootstrapAdmin(email: string, password: string, displayName: string): { ok: true } | { ok: false; message: string } {
   if (!isBootstrapMode()) return { ok: false, message: 'Já existem usuários cadastrados' };
   const mail = email.trim().toLowerCase();
@@ -242,9 +246,12 @@ export function deleteUser(userId: string, currentUserId: string): { ok: true } 
 }
 
 export function canAccessModule(session: AuthSession | null, module: AuthModuleKey | string): boolean {
-  if (!session) return false;
+  // Módulo Acessos desativado até segunda ordem
   if (module === 'acessos') return false;
+  // Sem sessão = acesso aberto (login desativado)
+  if (!session) return true;
   if (session.isAdmin) return true;
+  // Nav "Auditoria Life" libera com permissão completa OU só-pendências
   if (module === 'auditoria') {
     return (
       session.permissions.includes('auditoria') ||
@@ -254,12 +261,14 @@ export function canAccessModule(session: AuthSession | null, module: AuthModuleK
   return session.permissions.includes(module as AuthModuleKey);
 }
 
+/** Hotel só resolve pendências (sem abrir auditoria / histórico / conciliação) */
 export function isAuditPendenciasOnly(session: AuthSession | null): boolean {
   if (!session || session.isAdmin) return false;
   if (session.permissions.includes('auditoria')) return false;
   return session.permissions.includes('auditoria_pendencias');
 }
 
+/** Primeiro módulo liberado para o usuário (landing após login) */
 export function firstAllowedModule(session: AuthSession | null): string {
   if (!session) return 'recepcao';
   if (session.isAdmin) return 'recepcao';
@@ -286,7 +295,7 @@ export function firstAllowedModule(session: AuthSession | null): string {
 }
 
 export function canAccessHotel(session: AuthSession | null, hotelId: string): boolean {
-  if (!session) return false;
+  if (!session) return true;
   if (session.isAdmin || session.hotels.includes('all')) return true;
   return session.hotels.includes(hotelId as HotelPerm);
 }

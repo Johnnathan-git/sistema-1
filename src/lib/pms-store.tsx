@@ -28,6 +28,7 @@ export type ModuleId =
   | 'fiscal'
   | 'auditoria'
   | 'aprovacao'
+  | 'cartoes'
   | 'acessos';
 
 export const GOVERNANCE_STATUSES: GovernanceStatus[] = [

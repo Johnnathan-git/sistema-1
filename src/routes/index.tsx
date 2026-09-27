@@ -6,7 +6,6 @@ import { AccountsModule } from '@/components/uos/AccountsModule';
 import { ReservationsModule } from '@/components/uos/ReservationsModule';
 import { GovernanceModule } from '@/components/uos/GovernanceModule';
 import { AuditoriaLifeModule } from '@/components/uos/AuditoriaLifeModule';
-import { AcessosModule } from '@/components/uos/AcessosModule';
 import { CardsModule } from '@/components/uos/CardsModule';
 import { LoginPage } from '@/components/uos/LoginPage';
 import { usePms } from '@/lib/pms-store';
@@ -71,7 +70,14 @@ function ModuleSwitch() {
     case 'cartoes':
       return <CardsModule />;
     case 'acessos':
-      return <AcessosModule />;
+      return (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center">
+          <p className="text-[15px] font-semibold text-slate-800">Módulo desativado</p>
+          <p className="text-[13px] text-slate-500 mt-1">
+            Acessos está temporariamente desligado. Foco atual: leitura e gestão de cartões NFC.
+          </p>
+        </div>
+      );
     default:
       return <ReceptionModule />;
   }

@@ -9,7 +9,6 @@ import {
   DoorOpen,
   LogOut,
   Search,
-  Shield,
   Sparkles,
   Wallet,
   Bell,
@@ -28,7 +27,7 @@ import {
 
 const NAV: {
   section: string;
-  items: { id: ModuleId | 'acessos'; label: string; icon: typeof DoorOpen }[];
+  items: { id: ModuleId; label: string; icon: typeof DoorOpen }[];
 }[] = [
   {
     section: 'Recepção',
@@ -51,10 +50,6 @@ const NAV: {
   {
     section: 'Backoffice',
     items: [{ id: 'auditoria', label: 'Auditoria Life', icon: ClipboardCheck }],
-  },
-  {
-    section: 'Administração',
-    items: [{ id: 'acessos', label: 'Acessos', icon: Shield }],
   },
 ];
 
@@ -140,10 +135,6 @@ export function AppShell({ children, onLogout }: { children: ReactNode; onLogout
     cartoes: {
       title: 'Gerenciamento de Cartões',
       subtitle: 'Pulseiras NFC · vínculo hóspede · PDV rápido · movimentos',
-    },
-    acessos: {
-      title: 'Acessos',
-      subtitle: 'Usuários · e-mail · senha · permissões de módulo e hotel',
     },
   };
 

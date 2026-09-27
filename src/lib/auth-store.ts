@@ -20,7 +20,7 @@ export const AUTH_MODULES: { key: AuthModuleKey; label: string }[] = [
   { key: 'governanca', label: 'Governança' },
   { key: 'auditoria', label: 'Auditoria Life (completo)' },
   { key: 'auditoria_pendencias', label: 'Auditoria Life — só Pendências' },
-  { key: 'cartoes', label: 'Cartões NFC' },
+  { key: 'cartoes', label: 'Central de Mídias' },
   { key: 'produtos', label: 'Produtos' },
 ];
 

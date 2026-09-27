@@ -6,7 +6,7 @@ import { TransferModal } from '@/components/uos/TransferModal';
 import { ReceptionDayFooter } from '@/components/uos/ReceptionDayFooter';
 import { formatDateBR, type Room } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
-import { ArrowLeftRight, DoorOpen, LayoutGrid, List, LogIn, Printer, RefreshCw, Undo2 } from 'lucide-react';
+import { ArrowLeftRight, DoorOpen, LayoutGrid, List, LogIn, Printer, RefreshCw, Undo2, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 
 type MainTab = 'checkins' | 'hospedados' | 'chart';
@@ -247,11 +247,12 @@ export function ReceptionModule() {
             <div className="px-4 py-2 border-b bg-slate-50/80 text-[12px] font-semibold">Hospedados · {filteredInHouse.length}</div>
             <div className="overflow-x-auto max-h-[calc(100vh-420px)]">
               <table className="text-[12px] min-w-max w-full">
-                <thead className="sticky top-0 bg-white z-10"><tr className="text-left text-[10px] uppercase text-slate-400 border-b"><th className="px-3 py-2">UH</th><th className="px-3 py-2">Tipo</th><th className="px-3 py-2">Hóspede</th><th className="px-3 py-2">Reserva</th><th className="px-3 py-2">Check-in</th><th className="px-3 py-2">Check-out</th></tr></thead>
+                 <thead className="sticky top-0 bg-white z-10"><tr className="text-left text-[10px] uppercase text-slate-400 border-b"><th className="px-3 py-2">UH</th><th className="px-3 py-2">Tipo</th><th className="px-3 py-2">Hóspede</th><th className="px-3 py-2">Reserva</th><th className="px-3 py-2">Check-in</th><th className="px-3 py-2">Check-out</th><th className="px-3 py-2 text-right">Conta</th></tr></thead>
                 <tbody className="divide-y divide-slate-50">
                   {filteredInHouse.map((r) => (
                     <tr key={r.id} onClick={() => setSelectedResId(r.id)} onDoubleClick={() => setModalResId(r.id)} className={cn('cursor-pointer', selectedResId === r.id ? 'bg-blue-200 ring-1 ring-inset ring-blue-400' : 'hover:bg-slate-50')}>
-                      <td className="px-3 py-2 font-semibold">{r.roomNumber}</td><td className="px-3 py-2">{r.roomType}</td><td className="px-3 py-2">{r.guestName}</td><td className="px-3 py-2">{r.code}</td><td className="px-3 py-2">{formatDateBR(r.checkIn)}</td><td className="px-3 py-2">{formatDateBR(r.checkOut)}</td>
+                       <td className="px-3 py-2 font-semibold">{r.roomNumber}</td><td className="px-3 py-2">{r.roomType}</td><td className="px-3 py-2">{r.guestName}</td><td className="px-3 py-2">{r.code}</td><td className="px-3 py-2">{formatDateBR(r.checkIn)}</td><td className="px-3 py-2">{formatDateBR(r.checkOut)}</td>
+                       <td className="px-3 py-2 text-right"><button type="button" onClick={(event) => { event.stopPropagation(); setModalAccount({ accountId: r.accountId, reservationId: r.id }); }} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-[11px] font-semibold text-white"><Wallet className="h-3.5 w-3.5" /> Conta</button></td>
                     </tr>
                   ))}
                 </tbody>

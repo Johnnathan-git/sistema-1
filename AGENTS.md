@@ -8,3 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Treat `cartoes` as the stable internal module key while presenting it as “Central de Mídias”; this preserves saved access permissions.

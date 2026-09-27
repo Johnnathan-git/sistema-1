@@ -46,7 +46,7 @@ const NAV: {
     section: 'Operações',
     items: [
       { id: 'governanca', label: 'Governança', icon: Sparkles },
-      { id: 'cartoes', label: 'Cartões NFC', icon: CreditCard },
+      { id: 'cartoes', label: 'Central de Mídias', icon: CreditCard },
       { id: 'produtos', label: 'Produtos', icon: Package },
     ],
   },
@@ -152,8 +152,8 @@ export function AppShell({ children, onLogout }: { children: ReactNode; onLogout
       subtitle: 'Etapas · Abrir Auditoria · Histórico · Pendências · Conciliação · taxas',
     },
     cartoes: {
-      title: 'Cartões NFC',
-      subtitle: 'Pulseiras · vínculo · venda por aproximação',
+      title: 'Central de Mídias',
+      subtitle: 'Comandas · pulseiras · venda por aproximação',
     },
     produtos: {
       title: 'Produtos',

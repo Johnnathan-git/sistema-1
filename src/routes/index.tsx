@@ -5,7 +5,7 @@ import { AccountsModule } from '@/components/uos/AccountsModule';
 import { ReservationsModule } from '@/components/uos/ReservationsModule';
 import { GovernanceModule } from '@/components/uos/GovernanceModule';
 import { AuditoriaLifeModule } from '@/components/uos/AuditoriaLifeModule';
-import { CardsModule } from '@/components/uos/CardsModule';
+import { MediaCenterModule } from '@/components/uos/MediaCenterModule';
 import { ProductsModule } from '@/components/uos/ProductsModule';
 import { usePms } from '@/lib/pms-store';
 import { Toaster } from 'sonner';
@@ -47,7 +47,7 @@ function ModuleSwitch() {
     case 'auditoria':
       return <AuditoriaLifeModule />;
     case 'cartoes':
-      return <CardsModule />;
+      return <MediaCenterModule />;
     case 'produtos':
       return <ProductsModule />;
     case 'acessos':

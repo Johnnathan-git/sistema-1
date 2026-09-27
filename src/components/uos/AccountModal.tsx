@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePms } from '@/lib/pms-store';
 import {
   accountBalance,
@@ -7,8 +7,11 @@ import {
   type Account,
 } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
-import { Plus, X } from 'lucide-react';
+import { CreditCard, Link2, Nfc, Plus, Unlink, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { listCards, linkCard, unlinkCard } from '@/lib/nfc-cards';
+import { onCloudSync } from '@/lib/cloud-sync';
+import { Button } from '@/components/ui/button';
 
 const CAT_LABEL: Record<Account['charges'][0]['category'], string> = {
   hospedagem: 'Diária / hospedagem',
@@ -27,7 +30,10 @@ export function AccountModal({
   reservationId?: string;
   onClose: () => void;
 }) {
-  const { accounts, reservations, addPayment, addCharge } = usePms();
+  const { hotel, accounts, reservations, addPayment, addCharge } = usePms();
+  const [cardTick, setCardTick] = useState(0);
+  const [selectedCardId, setSelectedCardId] = useState('');
+  useEffect(() => onCloudSync(() => setCardTick((value) => value + 1)), []);
 
   const account = useMemo(() => {
     if (accountId) return accounts.find((a) => a.id === accountId);
@@ -41,6 +47,11 @@ export function AccountModal({
     : reservationId
       ? reservations.find((r) => r.id === reservationId)
       : undefined;
+  const cards = useMemo(() => listCards(hotel.id), [hotel.id, cardTick]);
+  const linkedCard = cards.find((card) =>
+    (account && card.accountId === account.id) || (res && card.reservationId === res.id),
+  );
+  const availableCards = cards.filter((card) => card.status === 'disponivel' || card.id === linkedCard?.id);
 
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('PIX');
@@ -138,6 +149,39 @@ export function AccountModal({
     toast.success('Lançamento adicionado');
   };
 
+  const attachCard = () => {
+    if (!account || !res || !selectedCardId) {
+      toast.error('Selecione uma pulseira disponível');
+      return;
+    }
+    const result = linkCard({
+      cardId: selectedCardId,
+      reservationId: res.id,
+      guestId: res.guestId,
+      guestName: res.guestName,
+      roomNumber: res.roomNumber,
+      accountId: account.id,
+    });
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+    setSelectedCardId('');
+    setCardTick((value) => value + 1);
+    toast.success('Pulseira vinculada à conta');
+  };
+
+  const detachCard = () => {
+    if (!linkedCard) return;
+    const result = unlinkCard(linkedCard.id);
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+    setCardTick((value) => value + 1);
+    toast.success('Pulseira desvinculada');
+  };
+
   return (
     <Overlay onClose={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
@@ -185,6 +229,34 @@ export function AccountModal({
             </p>
           </div>
         </div>
+
+        {res?.status === 'checkin' && (
+          <div className="border-b border-border bg-background px-5 py-3">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Nfc className="h-5 w-5" /></div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase text-muted-foreground">Pulseira de consumo</p>
+                  {linkedCard ? (
+                    <p className="truncate text-sm font-semibold text-foreground">{linkedCard.label || linkedCard.uidHex} · ativa</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Nenhuma pulseira vinculada</p>
+                  )}
+                </div>
+              </div>
+              {linkedCard && <Button type="button" variant="outline" size="sm" onClick={detachCard}><Unlink /> Desvincular</Button>}
+            </div>
+            {!linkedCard && (
+              <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                <select value={selectedCardId} onChange={(event) => setSelectedCardId(event.target.value)} className="h-10 min-w-0 rounded-lg border border-input bg-background px-3 text-sm">
+                  <option value="">Selecione uma pulseira disponível</option>
+                  {availableCards.map((card) => <option key={card.id} value={card.id}>{card.label || card.uidHex}</option>)}
+                </select>
+                <Button type="button" onClick={attachCard} disabled={!selectedCardId}><Link2 /> Vincular</Button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Extrato */}
         <div className="flex-1 overflow-y-auto">

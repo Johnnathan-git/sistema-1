@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   CreditCard, Link2, Ban, Plus, ShoppingBag, History, RefreshCw, Trash2,
-  CheckCircle2, AlertTriangle, Nfc, Loader2,
+  CheckCircle2, AlertTriangle, Nfc, Loader2, Minus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePms } from '@/lib/pms-store';
@@ -118,13 +118,22 @@ export function CardsModule() {
   const [scanningLink, setScanningLink] = useState(false);
   const [linkScanUid, setLinkScanUid] = useState('');
 
+  const resolveAccountForReservation = (resvId: string): string | undefined => {
+    const resv = reservations.find((r) => r.id === resvId);
+    if (resv?.accountId) {
+      const byId = accounts.find((a) => a.id === resv.accountId && a.status !== 'quitada');
+      if (byId) return byId.id;
+    }
+    const byRes = accounts.find((a) => a.reservationId === resvId && a.status !== 'quitada');
+    return byRes?.id || resv?.accountId;
+  };
+
   const doLink = () => {
     const resv = inHouse.find((r) => r.id === linkResId);
     if (!resv) { toast.error('Selecione um hóspede in-house'); return; }
-    const acc =
-      accounts.find((a) => a.reservationId === resv.id && a.status !== 'quitada') ||
-      (resv.accountId ? accounts.find((a) => a.id === resv.accountId && a.status !== 'quitada') : undefined);
-    if (!acc && !resv.accountId) {
+    if (!linkCardId) { toast.error('Selecione ou aproxime a pulseira'); return; }
+    const accountId = resolveAccountForReservation(resv.id);
+    if (!accountId) {
       toast.error('Hóspede sem conta aberta — faça o check-in primeiro');
       return;
     }
@@ -134,10 +143,10 @@ export function CardsModule() {
       guestId: resv.guestId,
       guestName: resv.guestName,
       roomNumber: resv.roomNumber,
-      accountId: acc?.id || resv.accountId,
+      accountId,
     });
     if (!res.ok) { toast.error(res.message); return; }
-    toast.success(`Vinculado a ${resv.guestName} · UH ${resv.roomNumber || '—'}`);
+    toast.success(`Vinculado a ${resv.guestName} · UH ${resv.roomNumber || '—'} · conta ${accountId}`);
     setLinkCardId(''); setLinkResId(''); setLinkScanUid(''); refresh();
   };
 
@@ -162,13 +171,41 @@ export function CardsModule() {
   const [pdvUid, setPdvUid] = useState('');
   const [pdvLookup, setPdvLookup] = useState<ReturnType<typeof lookupByUid> | null>(null);
   const [scanningPdv, setScanningPdv] = useState(false);
-  const [qty, setQty] = useState(1);
-  const [cart, setCart] = useState<{ productId: string; name: string; unitPrice: number; qty: number }[]>([]);
-
-  const cartTotal = cart.reduce((s, i) => s + i.unitPrice * i.qty, 0);
-  const cartCount = cart.reduce((s, i) => s + i.qty, 0);
+  const [qtyMap, setQtyMap] = useState<Record<string, number>>({});
+  const [launching, setLaunching] = useState<string | null>(null);
 
   const products = useMemo(() => listProducts({ posId, onlyActive: true }), [posId, tick]);
+
+  const getQty = (productId: string) => Math.max(1, qtyMap[productId] || 1);
+  const setQty = (productId: string, q: number) => {
+    setQtyMap((prev) => ({ ...prev, [productId]: Math.max(1, q) }));
+  };
+
+  const resolveAccountId = (card: NonNullable<ReturnType<typeof lookupByUid>['card']>): string | null => {
+    if (card.accountId) {
+      const byId = accounts.find((a) => a.id === card.accountId && a.status !== 'quitada');
+      if (byId) return byId.id;
+    }
+    if (card.reservationId) {
+      const id = resolveAccountForReservation(card.reservationId);
+      if (id) return id;
+    }
+    if (card.guestName) {
+      const byGuest = accounts.find(
+        (a) => a.status !== 'quitada' && a.guestName === card.guestName,
+      );
+      if (byGuest) return byGuest.id;
+    }
+    if (card.roomNumber) {
+      const byRoom = accounts.find((a) => {
+        if (a.status === 'quitada') return false;
+        const resv = reservations.find((r) => r.id === a.reservationId);
+        return resv?.roomNumber === card.roomNumber || a.roomId === card.roomNumber;
+      });
+      if (byRoom) return byRoom.id;
+    }
+    return null;
+  };
 
   const applyUid = (raw: string) => {
     const hex = normalizeUidHex(raw);
@@ -177,7 +214,14 @@ export function CardsModule() {
     setPdvLookup(r);
     if (!r.card) toast.error(r.message);
     else if (!r.canCharge) toast.message(r.message);
-    else toast.success(`${r.card.guestName} · UH ${r.card.roomNumber || '—'}`);
+    else {
+      const accId = resolveAccountId(r.card);
+      if (!accId) {
+        toast.error('Pulseira vinculada, mas conta do hóspede não encontrada. Re-vincule em Vincular.');
+      } else {
+        toast.success(`${r.card.guestName} · UH ${r.card.roomNumber || '—'} · pronto para lançar`);
+      }
+    }
   };
 
   const scanPdv = async () => {
@@ -192,105 +236,62 @@ export function CardsModule() {
     }
   };
 
-  const addToCart = (productId: string, name: string, unitPrice: number) => {
-    const q = Math.max(1, qty);
-    setCart((prev) => {
-      const i = prev.findIndex((x) => x.productId === productId);
-      if (i >= 0) {
-        const next = [...prev];
-        next[i] = { ...next[i], qty: next[i].qty + q };
-        return next;
-      }
-      return [...prev, { productId, name, unitPrice, qty: q }];
-    });
-    setQty(1);
-    toast.message(`${name} ×${q} adicionado`);
-  };
-
-  const setCartQty = (productId: string, q: number) => {
-    setCart((prev) => {
-      if (q <= 0) return prev.filter((x) => x.productId !== productId);
-      return prev.map((x) => (x.productId === productId ? { ...x, qty: q } : x));
-    });
-  };
-
-  const sellProduct = (productId: string, name: string, unitPrice: number, qOverride?: number) => {
+  const launchProduct = (productId: string, name: string, unitPrice: number) => {
     if (!pdvLookup?.canCharge || !pdvLookup.card) {
       toast.error('Aproxime a pulseira do hóspede primeiro');
-      return false;
+      return;
     }
-    const q = Math.max(1, qOverride ?? qty);
+    const card = pdvLookup.card;
+    const accountId = resolveAccountId(card);
+    if (!accountId) {
+      toast.error('Conta do hóspede não encontrada — vá em Vincular e associe a pulseira de novo');
+      return;
+    }
+
+    const q = getQty(productId);
     const amount = unitPrice * q;
     const desc = q > 1 ? `${name} x${q}` : name;
     const posLabel = getPosName(posId);
 
+    setLaunching(productId);
+
     const nfcRes = registerCharge({
-      uidHex: pdvUid,
+      uidHex: pdvUid || card.uidHex,
       description: `${desc} · ${posLabel}`,
       amount,
       operator: session?.displayName || 'Operador',
       source: 'pdv_rapido',
     });
-    if (!nfcRes.ok) { toast.error(nfcRes.message); return false; }
-
-    const card = pdvLookup.card;
-    let accountId: string | undefined = card.accountId;
-    if (accountId) {
-      const ok = accounts.find((a) => a.id === accountId && a.status !== 'quitada');
-      if (!ok) accountId = undefined;
-    }
-    if (!accountId && card.reservationId) {
-      const acc = accounts.find((a) => a.reservationId === card.reservationId && a.status !== 'quitada');
-      accountId = acc?.id;
-      if (!accountId) {
-        const resv = reservations.find((r) => r.id === card.reservationId);
-        if (resv?.accountId) {
-          const a2 = accounts.find((a) => a.id === resv.accountId && a.status !== 'quitada');
-          accountId = a2?.id;
-        }
-      }
-    }
-    if (!accountId && card.guestName) {
-      const byGuest = accounts.find((a) => a.status !== 'quitada' && a.guestName === card.guestName);
-      accountId = byGuest?.id;
-    }
-    if (!accountId) {
-      toast.error('Conta do hóspede não encontrada — vincule a pulseira a um hóspede in-house');
-      return false;
+    if (!nfcRes.ok) {
+      toast.error(nfcRes.message);
+      setLaunching(null);
+      return;
     }
 
     const chargeRes = addCharge(accountId, `${desc} (${posLabel})`, amount, 'consumo');
-    if (chargeRes && typeof chargeRes === 'object' && 'ok' in chargeRes && !chargeRes.ok) {
-      toast.error(chargeRes.message || 'Falha ao lançar na conta');
-      return false;
+    if (!chargeRes?.ok) {
+      toast.error(chargeRes?.message || 'Falha ao lançar na conta do hóspede');
+      setLaunching(null);
+      return;
     }
-    return true;
-  };
 
-  const launchCart = () => {
-    if (!pdvLookup?.canCharge || !pdvLookup.card) {
-      toast.error('Aproxime a pulseira do hóspede primeiro');
-      return;
+    if (card.accountId !== accountId && card.id) {
+      try {
+        linkCard({
+          cardId: card.id,
+          reservationId: card.reservationId,
+          guestId: card.guestId,
+          guestName: card.guestName || '',
+          roomNumber: card.roomNumber,
+          accountId,
+        });
+      } catch { /* ignore */ }
     }
-    if (cart.length === 0) {
-      toast.error('Adicione ao menos um produto');
-      return;
-    }
-    let ok = 0;
-    for (const item of cart) {
-      if (sellProduct(item.productId, item.name, item.unitPrice, item.qty)) ok += 1;
-      else break;
-    }
-    if (ok === cart.length) {
-      const card = pdvLookup.card;
-      toast.success(`${formatBRL(cartTotal)} · ${ok} item(ns) · ${card.guestName} · UH ${card.roomNumber || '—'}`);
-      setCart([]);
-      setQty(1);
-      refresh();
-    } else if (ok > 0) {
-      toast.message(`${ok} lançado(s) — verifique o restante`);
-      refresh();
-    }
+
+    toast.success(`${formatBRL(amount)} lançado · ${card.guestName} · UH ${card.roomNumber || '—'}`);
+    setQty(productId, 1);
+    setLaunching(null);
+    refresh();
   };
 
   const tabs: { id: Tab; label: string; icon: typeof CreditCard }[] = [
@@ -299,6 +300,8 @@ export function CardsModule() {
     { id: 'vincular', label: 'Vincular', icon: Link2 },
     { id: 'movimentos', label: 'Movimentos', icon: History },
   ];
+
+  const canSell = Boolean(pdvLookup?.canCharge && pdvLookup.card);
 
   return (
     <div className="space-y-4">
@@ -316,108 +319,150 @@ export function CardsModule() {
       </div>
 
       {tab === 'venda' && (
-        <div className="space-y-4 max-w-xl">
-          <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4 shadow-sm">
-            <div>
-              <p className="text-[15px] font-semibold text-slate-900">Venda</p>
-              <p className="text-[12px] text-slate-500 mt-0.5">1) PDV · 2) Pulseira · 3) Adicione produtos · 4) Lançar na conta</p>
-            </div>
+        <div className="space-y-3 max-w-2xl">
+          <div className="flex flex-wrap gap-2">
+            {POS_POINTS.map((p) => (
+              <button key={p.id} type="button" onClick={() => setPosId(p.id)}
+                className={cn('h-10 px-4 rounded-full border text-[13px] font-semibold transition-all',
+                  posId === p.id
+                    ? 'border-blue-500 bg-blue-600 text-white shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300')}>
+                {p.name}
+              </button>
+            ))}
+          </div>
 
-            <div>
-              <span className="text-[11px] font-semibold uppercase text-slate-400">Ponto de venda</span>
-              <div className="mt-1.5 flex flex-wrap gap-2">
-                {POS_POINTS.map((p) => (
-                  <button key={p.id} type="button" onClick={() => setPosId(p.id)}
-                    className={cn('h-10 px-3 rounded-lg border text-[13px] font-semibold',
-                      posId === p.id ? 'border-blue-400 bg-blue-50 text-blue-900' : 'border-slate-200 bg-white text-slate-600')}>
-                    {p.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
+          {!canSell ? (
             <button type="button" onClick={scanPdv} disabled={scanningPdv || !nfcOk}
-              className={cn('w-full min-h-[100px] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all',
-                scanningPdv ? 'border-blue-400 bg-blue-50 text-blue-800' : nfcOk ? 'border-slate-300 bg-slate-50 hover:border-blue-400 text-slate-800' : 'border-slate-200 bg-slate-50 text-slate-400')}>
+              className={cn(
+                'w-full min-h-[120px] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all',
+                scanningPdv
+                  ? 'border-blue-400 bg-blue-50 text-blue-800'
+                  : nfcOk
+                    ? 'border-slate-300 bg-white hover:border-blue-400 hover:bg-blue-50/40 text-slate-800'
+                    : 'border-slate-200 bg-slate-50 text-slate-400',
+              )}>
               {scanningPdv ? (
-                <><Loader2 className="w-9 h-9 animate-spin text-blue-600" /><span className="text-[14px] font-semibold">Aproxime a pulseira…</span></>
+                <>
+                  <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+                  <span className="text-[15px] font-semibold">Aproxime a pulseira…</span>
+                </>
               ) : (
-                <><Nfc className="w-9 h-9 text-slate-600" /><span className="text-[14px] font-semibold">{nfcOk ? 'Aproxime a pulseira do hóspede' : 'NFC indisponível'}</span></>
+                <>
+                  <Nfc className="w-10 h-10 text-slate-500" />
+                  <span className="text-[15px] font-semibold">
+                    {nfcOk ? 'Aproxime a pulseira do hóspede' : 'NFC indisponível neste aparelho'}
+                  </span>
+                  <span className="text-[12px] text-slate-400">Abre a comanda e libera o cardápio</span>
+                </>
               )}
             </button>
-
-            {pdvLookup && (
-              <div className={cn('rounded-lg border px-3 py-2.5 text-[13px]',
-                pdvLookup.canCharge ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-950')}>
-                {pdvLookup.canCharge ? (
-                  <p className="inline-flex items-center gap-1.5 font-medium"><CheckCircle2 className="w-4 h-4 shrink-0" />{pdvLookup.card?.guestName} · UH {pdvLookup.card?.roomNumber || '—'}</p>
-                ) : (
-                  <p className="inline-flex items-center gap-1.5 font-medium"><AlertTriangle className="w-4 h-4 shrink-0" />{pdvLookup.message}</p>
-                )}
+          ) : (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-center gap-3">
+              <div className="h-11 w-11 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-6 h-6" />
               </div>
-            )}
-
-            <div className="flex items-center gap-2">
-              <span className="text-[12px] text-slate-500">Qtd ao adicionar</span>
-              <button type="button" onClick={() => setQty((q) => Math.max(1, q - 1))} className="h-9 w-9 rounded-lg border border-slate-200 font-bold">−</button>
-              <span className="tabular-nums font-semibold w-8 text-center">{qty}</span>
-              <button type="button" onClick={() => setQty((q) => q + 1)} className="h-9 w-9 rounded-lg border border-slate-200 font-bold">+</button>
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-semibold text-emerald-950 truncate">
+                  {pdvLookup?.card?.guestName}
+                </p>
+                <p className="text-[12px] text-emerald-800/80">
+                  UH {pdvLookup?.card?.roomNumber || '—'}
+                  {pdvLookup?.card?.accountId ? ` · conta ${pdvLookup.card.accountId}` : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setPdvLookup(null); setPdvUid(''); }}
+                className="h-9 px-3 rounded-lg border border-emerald-300 bg-white text-[12px] font-semibold text-emerald-900"
+              >
+                Trocar
+              </button>
             </div>
+          )}
 
-            <div>
-              <p className="text-[11px] font-semibold uppercase text-slate-400 mb-2">Produtos · {getPosName(posId)}</p>
-              {products.length === 0 ? (
-                <p className="text-[13px] text-slate-400 py-6 text-center">Nenhum produto neste PDV. Cadastre em Produtos.</p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {products.map((p) => (
-                    <button key={p.id} type="button"
-                      onClick={() => addToCart(p.id, p.name, p.price)}
-                      className="text-left rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3 hover:border-blue-300 hover:bg-blue-50/50 active:scale-[0.98] transition-all">
-                      <p className="text-[13px] font-semibold text-slate-900">{p.name}</p>
-                      <p className="text-[14px] font-bold tabular-nums text-blue-700 mt-0.5">{formatBRL(p.price)}</p>
-                      <p className="text-[11px] text-slate-500 mt-1">Toque para adicionar</p>
-                    </button>
-                  ))}
-                </div>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-slate-400">
+                Cardápio · {getPosName(posId)}
+              </p>
+              {canSell && (
+                <p className="text-[11px] text-slate-400">Ajuste a qtd e toque em Lançar</p>
               )}
             </div>
 
-            {cart.length > 0 && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-[12px] font-semibold text-slate-700">Carrinho · {cartCount} item(ns)</p>
-                  <button type="button" onClick={() => setCart([])} className="text-[11px] text-slate-500 hover:text-rose-600">Limpar</button>
-                </div>
-                <ul className="space-y-1.5">
-                  {cart.map((item) => (
-                    <li key={item.productId} className="flex items-center gap-2 text-[13px] bg-white rounded-lg border border-slate-100 px-2.5 py-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-slate-900 truncate">{item.name}</p>
-                        <p className="text-[11px] text-slate-500 tabular-nums">{formatBRL(item.unitPrice)} un.</p>
+            {!canSell ? (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-10 text-center text-[13px] text-slate-400">
+                Aproxime a pulseira para liberar os produtos
+              </div>
+            ) : products.length === 0 ? (
+              <p className="text-[13px] text-slate-400 py-8 text-center">
+                Nenhum produto neste PDV. Cadastre em Operações → Produtos.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {products.map((p) => {
+                  const q = getQty(p.id);
+                  const busy = launching === p.id;
+                  return (
+                    <div
+                      key={p.id}
+                      className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm flex flex-col gap-2.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-[14px] font-semibold text-slate-900 leading-snug">{p.name}</p>
+                          <p className="text-[15px] font-bold tabular-nums text-blue-700 mt-0.5">
+                            {formatBRL(p.price)}
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <button type="button" onClick={() => setCartQty(item.productId, item.qty - 1)} className="h-8 w-8 rounded-md border border-slate-200 font-bold">−</button>
-                        <span className="w-7 text-center font-semibold tabular-nums">{item.qty}</span>
-                        <button type="button" onClick={() => setCartQty(item.productId, item.qty + 1)} className="h-8 w-8 rounded-md border border-slate-200 font-bold">+</button>
+
+                      <div className="flex items-center gap-2">
+                        <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50">
+                          <button
+                            type="button"
+                            onClick={() => setQty(p.id, q - 1)}
+                            className="h-9 w-9 inline-flex items-center justify-center text-slate-600"
+                            aria-label="Diminuir"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="w-8 text-center text-[14px] font-semibold tabular-nums">{q}</span>
+                          <button
+                            type="button"
+                            onClick={() => setQty(p.id, q + 1)}
+                            className="h-9 w-9 inline-flex items-center justify-center text-slate-600"
+                            aria-label="Aumentar"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => launchProduct(p.id, p.name, p.price)}
+                          className={cn(
+                            'flex-1 h-10 rounded-lg text-[13px] font-semibold text-white inline-flex items-center justify-center gap-1.5 transition-all',
+                            busy ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-500 active:scale-[0.98]',
+                          )}
+                        >
+                          {busy ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              Lançar
+                              {q > 1 && (
+                                <span className="opacity-90 tabular-nums">· {formatBRL(p.price * q)}</span>
+                              )}
+                            </>
+                          )}
+                        </button>
                       </div>
-                      <p className="w-16 text-right font-semibold tabular-nums">{formatBRL(item.unitPrice * item.qty)}</p>
-                    </li>
-                  ))}
-                </ul>
-                <div className="flex items-center justify-between pt-1 border-t border-slate-200">
-                  <span className="text-[13px] font-semibold text-slate-700">Total</span>
-                  <span className="text-[16px] font-bold tabular-nums text-blue-700">{formatBRL(cartTotal)}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={launchCart}
-                  disabled={!pdvLookup?.canCharge || cart.length === 0}
-                  className="w-full h-12 rounded-xl bg-blue-600 text-white text-[14px] font-semibold hover:bg-blue-500 disabled:opacity-40 disabled:pointer-events-none inline-flex items-center justify-center gap-2"
-                >
-                  <ShoppingBag className="w-4 h-4" />
-                  Lançar na conta · {formatBRL(cartTotal)}
-                </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -461,6 +506,9 @@ export function CardsModule() {
       {tab === 'vincular' && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4 shadow-sm max-w-lg">
           <p className="text-[15px] font-semibold">Vincular pulseira ao hóspede</p>
+          <p className="text-[12px] text-slate-500 -mt-2">
+            A pulseira precisa de um hóspede com check-in e conta aberta para lançar consumos.
+          </p>
           <button type="button" onClick={scanToLink} disabled={scanningLink || !nfcOk}
             className={cn('w-full min-h-[72px] rounded-xl border-2 border-dashed flex items-center justify-center gap-2',
               scanningLink ? 'border-blue-400 bg-blue-50' : 'border-slate-300 bg-slate-50')}>
@@ -482,11 +530,16 @@ export function CardsModule() {
             <select value={linkResId} onChange={(e) => setLinkResId(e.target.value)} className="w-full h-10 rounded-lg border border-slate-200 px-2 bg-white text-[14px]">
               <option value="">—</option>
               {inHouse.map((r) => (
-                <option key={r.id} value={r.id}>{r.guestName} · UH {r.roomNumber || '—'}</option>
+                <option key={r.id} value={r.id}>
+                  {r.guestName} · UH {r.roomNumber || '—'}
+                  {r.accountId ? ` · ${r.accountId}` : ''}
+                </option>
               ))}
             </select>
           </label>
-          <button type="button" onClick={doLink} className="w-full h-11 rounded-lg bg-blue-600 text-white text-[13px] font-semibold">Vincular</button>
+          <button type="button" onClick={doLink} className="w-full h-11 rounded-lg bg-blue-600 text-white text-[13px] font-semibold">
+            Vincular à conta do hóspede
+          </button>
         </div>
       )}
 
@@ -504,7 +557,10 @@ export function CardsModule() {
                 <li key={log.id} className="px-4 py-2.5 text-[12px] flex gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-slate-900">{log.description}</p>
-                    <p className="text-[11px] text-slate-500">{log.guestName || '—'} · UH {log.roomNumber || '—'} · {formatWhen(log.at)}</p>
+                    <p className="text-[11px] text-slate-500">
+                      {log.guestName || '—'} · UH {log.roomNumber || '—'}
+                      {log.accountId ? ` · ${log.accountId}` : ''} · {formatWhen(log.at)}
+                    </p>
                   </div>
                   <p className="font-semibold tabular-nums text-slate-800 shrink-0">{formatBRL(log.amount)}</p>
                 </li>
@@ -525,7 +581,9 @@ function CardRow({ card, onChange }: { card: NfcCard; onChange: () => void }) {
         <p className="font-medium text-slate-900 font-mono">{card.uidHex} {card.label ? `· ${card.label}` : ''}</p>
         <p className="text-[11px] text-slate-500">
           {statusBadge(card.status)}{' '}
-          {card.guestName ? `${card.guestName} · UH ${card.roomNumber}` : 'sem vínculo'}
+          {card.guestName
+            ? `${card.guestName} · UH ${card.roomNumber}${card.accountId ? ` · ${card.accountId}` : ''}`
+            : 'sem vínculo'}
         </p>
       </div>
       <div className="flex gap-1">

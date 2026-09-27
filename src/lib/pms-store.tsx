@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -87,6 +88,39 @@ interface PmsState {
 
 const PmsContext = createContext<PmsState | null>(null);
 
+const ACCOUNTS_STORAGE_KEY = 'uos-pms-accounts-v1';
+
+function loadAccounts(): Account[] {
+  try {
+    if (typeof localStorage === 'undefined') return INITIAL_ACCOUNTS;
+    const raw = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
+    if (!raw) return INITIAL_ACCOUNTS;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed) || parsed.length === 0) return INITIAL_ACCOUNTS;
+    const valid = parsed.every(
+      (a) =>
+        a &&
+        typeof a === 'object' &&
+        typeof (a as Account).id === 'string' &&
+        Array.isArray((a as Account).charges) &&
+        Array.isArray((a as Account).payments)
+    );
+    if (!valid) return INITIAL_ACCOUNTS;
+    return parsed as Account[];
+  } catch {
+    return INITIAL_ACCOUNTS;
+  }
+}
+
+function saveAccounts(accounts: Account[]) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+  } catch {
+    // quota / private mode — ignore
+  }
+}
+
 function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -103,7 +137,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
   const [rooms, setRooms] = useState(INITIAL_ROOMS);
   const [guests] = useState(INITIAL_GUESTS);
   const [reservations, setReservations] = useState(INITIAL_RESERVATIONS);
-  const [accounts, setAccounts] = useState(INITIAL_ACCOUNTS);
+  const [accounts, setAccounts] = useState<Account[]>(() => loadAccounts());
   const [roomLogs, setRoomLogs] = useState<RoomStatusLog[]>([]);
   const [module, setModule] = useState<ModuleId>('recepcao');
   const [cashOpen, setCashOpen] = useState(true);
@@ -111,6 +145,11 @@ export function PmsProvider({ children }: { children: ReactNode }) {
   const [cashOpenedAt, setCashOpenedAt] = useState<string | null>(() =>
     nowStamp(HOTEL.operationalDate)
   );
+
+  // Persiste contas no mesmo aparelho (sobrevive a F5 / fechar aba)
+  useEffect(() => {
+    saveAccounts(accounts);
+  }, [accounts]);
 
   const pushLog = useCallback(
     (entry: Omit<RoomStatusLog, 'id' | 'at' | 'user'> & { at?: string; user?: string }) => {

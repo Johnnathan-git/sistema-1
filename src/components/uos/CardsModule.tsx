@@ -66,7 +66,7 @@ async function scanNfcOnce(timeoutMs = 25000): Promise<{ uidHex: string; raw: st
     }, timeoutMs);
 
     reader.onreadingerror = () => {
-      /* keep listening — some tags fire error before serial */
+      /* keep listening */
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -175,6 +175,8 @@ export function CardsModule() {
 
   const [linkCardId, setLinkCardId] = useState('');
   const [linkResId, setLinkResId] = useState('');
+  const [scanningLink, setScanningLink] = useState(false);
+  const [linkScanUid, setLinkScanUid] = useState('');
 
   const availableCards = cards.filter((c) => c.status === 'disponivel' || c.status === 'ativo');
 
@@ -200,7 +202,36 @@ export function CardsModule() {
     toast.success(`Vinculado a ${resv.guestName} · UH ${resv.roomNumber || '—'}`);
     setLinkCardId('');
     setLinkResId('');
+    setLinkScanUid('');
     refresh();
+  };
+
+  const scanToLink = async () => {
+    setScanningLink(true);
+    setLinkScanUid('');
+    try {
+      const { uidHex } = await scanNfcOnce();
+      setLinkScanUid(uidHex);
+      const found = cards.find((c) => c.uidHex === uidHex);
+      if (!found) {
+        toast.error(`Pulseira ${uidHex} não cadastrada. Cadastre em Cartões primeiro.`);
+        return;
+      }
+      if (found.status === 'bloqueado' || found.status === 'perdido') {
+        toast.error('Pulseira bloqueada — desbloqueie antes de vincular');
+        return;
+      }
+      setLinkCardId(found.id);
+      if (found.status === 'ativo' && found.guestName) {
+        toast.message(`Já vinculada a ${found.guestName} · será reatribuída`);
+      } else {
+        toast.success(`Pulseira ${uidHex} selecionada`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Falha na leitura NFC');
+    } finally {
+      setScanningLink(false);
+    }
   };
 
   const [pdvUid, setPdvUid] = useState('');
@@ -490,21 +521,66 @@ export function CardsModule() {
         <div className="space-y-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
             <p className="text-[13px] font-semibold text-slate-800">Vincular pulseira a hóspede in-house</p>
+            <p className="text-[12px] text-slate-500">Aproxime a pulseira para selecioná-la, depois escolha o hóspede.</p>
+
+            {nfcOk && (
+              <button
+                type="button"
+                onClick={scanToLink}
+                disabled={scanningLink}
+                className={cn(
+                  'w-full h-16 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1 text-[13px] font-semibold transition-all',
+                  scanningLink
+                    ? 'border-blue-400 bg-blue-50 text-blue-800'
+                    : 'border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50/60 text-slate-800',
+                )}
+              >
+                {scanningLink ? (
+                  <>
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span>Aproxime a pulseira…</span>
+                  </>
+                ) : (
+                  <>
+                    <Nfc className="w-6 h-6" />
+                    <span>Aproxime a pulseira para vincular</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {linkScanUid && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-900 font-medium inline-flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                UID lido: <span className="font-mono">{linkScanUid}</span>
+                {linkCardId && ' · selecionada'}
+              </div>
+            )}
+
             <div className="grid sm:grid-cols-2 gap-3">
               <label className="block space-y-1">
                 <span className="text-[11px] font-semibold uppercase text-slate-400">Cartão</span>
-                <select value={linkCardId} onChange={(e) => setLinkCardId(e.target.value)} className="w-full h-9 rounded-lg border border-slate-200 px-2 text-[13px] outline-none focus:ring-2 focus:ring-blue-500/20">
+                <select
+                  value={linkCardId}
+                  onChange={(e) => setLinkCardId(e.target.value)}
+                  className="w-full h-9 rounded-lg border border-slate-200 px-2 text-[13px] outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
                   <option value="">Selecione…</option>
                   {availableCards.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.uidHex} {c.label ? `· ${c.label}` : ''} {c.status === 'ativo' ? `(ativo: ${c.guestName})` : ''}
+                      {c.uidHex} {c.label ? `· ${c.label}` : ''}{' '}
+                      {c.status === 'ativo' ? `(ativo: ${c.guestName})` : ''}
                     </option>
                   ))}
                 </select>
               </label>
               <label className="block space-y-1">
                 <span className="text-[11px] font-semibold uppercase text-slate-400">Hóspede (in-house)</span>
-                <select value={linkResId} onChange={(e) => setLinkResId(e.target.value)} className="w-full h-9 rounded-lg border border-slate-200 px-2 text-[13px] outline-none focus:ring-2 focus:ring-blue-500/20">
+                <select
+                  value={linkResId}
+                  onChange={(e) => setLinkResId(e.target.value)}
+                  className="w-full h-9 rounded-lg border border-slate-200 px-2 text-[13px] outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
                   <option value="">Selecione…</option>
                   {inHouse.map((r) => (
                     <option key={r.id} value={r.id}>
@@ -520,30 +596,51 @@ export function CardsModule() {
               </p>
             )}
             <div className="flex justify-end">
-              <button type="button" onClick={doLink} disabled={!linkCardId || !linkResId} className="h-9 px-4 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold hover:bg-emerald-500 disabled:opacity-50 inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={doLink}
+                disabled={!linkCardId || !linkResId}
+                className="h-9 px-4 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold hover:bg-emerald-500 disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
                 <Link2 className="w-3.5 h-3.5" /> Vincular
               </button>
             </div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-            <p className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">Vínculos ativos</p>
+            <p className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">
+              Vínculos ativos
+            </p>
             {cards.filter((c) => c.status === 'ativo').length === 0 ? (
               <p className="px-4 py-8 text-center text-[13px] text-slate-400">Nenhum vínculo ativo</p>
             ) : (
               <div className="divide-y divide-slate-100">
-                {cards.filter((c) => c.status === 'ativo').map((c) => (
-                  <div key={c.id} className="px-4 py-3 flex items-center gap-3 text-[12px]">
-                    <CreditCard className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-slate-800 font-mono">{c.uidHex}</p>
-                      <p className="text-slate-500">{c.guestName} · UH {c.roomNumber || '—'} · desde {formatWhen(c.linkedAt)}</p>
+                {cards
+                  .filter((c) => c.status === 'ativo')
+                  .map((c) => (
+                    <div key={c.id} className="px-4 py-3 flex items-center gap-3 text-[12px]">
+                      <CreditCard className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-slate-800 font-mono">{c.uidHex}</p>
+                        <p className="text-slate-500">
+                          {c.guestName} · UH {c.roomNumber || '—'} · desde {formatWhen(c.linkedAt)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const r = unlinkCard(c.id);
+                          if (r.ok) {
+                            toast.message('Pulseira desvinculada');
+                            refresh();
+                          } else toast.error(r.message);
+                        }}
+                        className="h-8 px-2.5 rounded-lg border border-slate-200 text-[11px] font-medium hover:bg-slate-50 inline-flex items-center gap-1"
+                      >
+                        <Link2Off className="w-3.5 h-3.5" /> Desvincular
+                      </button>
                     </div>
-                    <button type="button" onClick={() => { const r = unlinkCard(c.id); if (r.ok) { toast.message('Pulseira desvinculada'); refresh(); } else toast.error(r.message); }} className="h-8 px-2.5 rounded-lg border border-slate-200 text-[11px] font-medium hover:bg-slate-50 inline-flex items-center gap-1">
-                      <Link2Off className="w-3.5 h-3.5" /> Desvincular
-                    </button>
-                  </div>
-                ))}
+                  ))}
               </div>
             )}
           </div>
@@ -561,7 +658,9 @@ export function CardsModule() {
                   <ShoppingBag className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-slate-800">{l.description}</p>
-                    <p className="text-slate-500 mt-0.5">{l.guestName || '—'} · UH {l.roomNumber || '—'} · {l.uidHex} · {l.operator}</p>
+                    <p className="text-slate-500 mt-0.5">
+                      {l.guestName || '—'} · UH {l.roomNumber || '—'} · {l.uidHex} · {l.operator}
+                    </p>
                     <p className="text-slate-400 text-[11px]">{formatWhen(l.at)}</p>
                   </div>
                   <span className="font-semibold tabular-nums text-slate-800">{formatBRL(l.amount)}</span>
@@ -598,16 +697,64 @@ function CardRow({ card, onChange }: { card: NfcCard; onChange: () => void }) {
       </div>
       <div className="flex flex-wrap gap-1.5">
         {card.status === 'ativo' && (
-          <button type="button" onClick={() => { const r = unlinkCard(card.id); if (r.ok) { toast.message('Desvinculado'); onChange(); } else toast.error(r.message); }} className="h-7 px-2 rounded-md border border-slate-200 text-[11px] font-medium hover:bg-white">Desvincular</button>
+          <button
+            type="button"
+            onClick={() => {
+              const r = unlinkCard(card.id);
+              if (r.ok) {
+                toast.message('Desvinculado');
+                onChange();
+              } else toast.error(r.message);
+            }}
+            className="h-7 px-2 rounded-md border border-slate-200 text-[11px] font-medium hover:bg-white"
+          >
+            Desvincular
+          </button>
         )}
         {(card.status === 'disponivel' || card.status === 'ativo') && (
-          <button type="button" onClick={() => { const r = blockCard(card.id, 'Bloqueio manual'); if (r.ok) { toast.message('Bloqueado'); onChange(); } else toast.error(r.message); }} className="h-7 px-2 rounded-md border border-rose-200 text-rose-700 text-[11px] font-medium hover:bg-rose-50 inline-flex items-center gap-1"><Ban className="w-3 h-3" /> Bloquear</button>
+          <button
+            type="button"
+            onClick={() => {
+              const r = blockCard(card.id, 'Bloqueio manual');
+              if (r.ok) {
+                toast.message('Bloqueado');
+                onChange();
+              } else toast.error(r.message);
+            }}
+            className="h-7 px-2 rounded-md border border-rose-200 text-rose-700 text-[11px] font-medium hover:bg-rose-50 inline-flex items-center gap-1"
+          >
+            <Ban className="w-3 h-3" /> Bloquear
+          </button>
         )}
         {(card.status === 'bloqueado' || card.status === 'perdido') && (
-          <button type="button" onClick={() => { const r = updateCard(card.id, { status: 'disponivel', blockedReason: undefined }); if (r.ok) { toast.success('Desbloqueado'); onChange(); } else toast.error(r.message); }} className="h-7 px-2 rounded-md border border-emerald-200 text-emerald-800 text-[11px] font-medium hover:bg-emerald-50">Desbloquear</button>
+          <button
+            type="button"
+            onClick={() => {
+              const r = updateCard(card.id, { status: 'disponivel', blockedReason: undefined });
+              if (r.ok) {
+                toast.success('Desbloqueado');
+                onChange();
+              } else toast.error(r.message);
+            }}
+            className="h-7 px-2 rounded-md border border-emerald-200 text-emerald-800 text-[11px] font-medium hover:bg-emerald-50"
+          >
+            Desbloquear
+          </button>
         )}
         {card.status !== 'ativo' && (
-          <button type="button" onClick={() => { const r = deleteCard(card.id); if (r.ok) { toast.message('Excluído'); onChange(); } else toast.error(r.message); }} className="h-7 w-7 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center"><Trash2 className="w-3.5 h-3.5" /></button>
+          <button
+            type="button"
+            onClick={() => {
+              const r = deleteCard(card.id);
+              if (r.ok) {
+                toast.message('Excluído');
+                onChange();
+              } else toast.error(r.message);
+            }}
+            className="h-7 w-7 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         )}
       </div>
     </div>

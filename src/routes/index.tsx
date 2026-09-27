@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { AppShell } from '@/components/uos/AppShell';
 import { ReceptionModule } from '@/components/uos/ReceptionModule';
@@ -8,9 +7,7 @@ import { GovernanceModule } from '@/components/uos/GovernanceModule';
 import { AuditoriaLifeModule } from '@/components/uos/AuditoriaLifeModule';
 import { CardsModule } from '@/components/uos/CardsModule';
 import { ProductsModule } from '@/components/uos/ProductsModule';
-import { LoginPage } from '@/components/uos/LoginPage';
 import { usePms } from '@/lib/pms-store';
-import { getSession, type AuthSession } from '@/lib/auth-store';
 import { Toaster } from 'sonner';
 
 export const Route = createFileRoute('/')({
@@ -28,29 +25,10 @@ export const Route = createFileRoute('/')({
 });
 
 function Index() {
-  const [session, setSession] = useState<AuthSession | null>(null);
-
-  useEffect(() => {
-    setSession(getSession());
-  }, []);
-
-  const refreshSession = useCallback(() => {
-    setSession(getSession());
-  }, []);
-
-  if (!session) {
-    return (
-      <>
-        <Toaster richColors position="top-right" />
-        <LoginPage onLoggedIn={refreshSession} />
-      </>
-    );
-  }
-
   return (
     <>
       <Toaster richColors position="top-right" />
-      <AppShell onLogout={refreshSession}>
+      <AppShell>
         <ModuleSwitch />
       </AppShell>
     </>

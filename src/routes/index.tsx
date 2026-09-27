@@ -47,7 +47,9 @@ function ModuleSwitch() {
     case 'auditoria':
       return <AuditoriaLifeModule />;
     case 'cartoes':
-      return <MediaCenterModule />;
+      return <MediaCenterModule mode="center" />;
+    case 'venda':
+      return <MediaCenterModule mode="venda" />;
     case 'produtos':
       return <ProductsModule />;
     case 'acessos':

@@ -270,6 +270,7 @@ export function AppShell({ children, onLogout }: { children: ReactNode; onLogout
               {session?.isAdmin ? 'Administrador' : session?.email || ''}
             </p>
           </div>
+          {session && (
           <button
             type="button"
             title="Sair"
@@ -282,6 +283,7 @@ export function AppShell({ children, onLogout }: { children: ReactNode; onLogout
           >
             <LogOut className="w-4 h-4" />
           </button>
+          )}
         </div>
       </div>
     </div>

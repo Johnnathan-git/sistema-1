@@ -9,6 +9,7 @@ export type AuthModuleKey =
   | 'governanca'
   | 'auditoria'
   | 'auditoria_pendencias'
+  | 'cartoes'
   | 'acessos';
 
 export const AUTH_MODULES: { key: AuthModuleKey; label: string }[] = [
@@ -18,7 +19,7 @@ export const AUTH_MODULES: { key: AuthModuleKey; label: string }[] = [
   { key: 'governanca', label: 'Governança' },
   { key: 'auditoria', label: 'Auditoria Life (completo)' },
   { key: 'auditoria_pendencias', label: 'Auditoria Life — só Pendências' },
-  { key: 'acessos', label: 'Acessos' },
+  { key: 'cartoes', label: 'Cartões NFC' },
 ];
 
 export type HotelPerm = 'santa-eliza' | 'varshana' | 'all';
@@ -244,6 +245,8 @@ export function deleteUser(userId: string, currentUserId: string): { ok: true } 
 
 export function canAccessModule(session: AuthSession | null, module: AuthModuleKey | string): boolean {
   if (!session) return false;
+  // Acessos desativado até segunda ordem (mesmo para admin)
+  if (module === 'acessos') return false;
   if (session.isAdmin) return true;
   // Nav "Auditoria Life" libera com permissão completa OU só-pendências
   if (module === 'auditoria') {
@@ -271,9 +274,9 @@ export function firstAllowedModule(session: AuthSession | null): string {
     'contas',
     'reservas',
     'governanca',
+    'cartoes',
     'auditoria',
     'auditoria_pendencias',
-    'acessos',
   ];
   for (const m of order) {
     if (m === 'auditoria_pendencias') {

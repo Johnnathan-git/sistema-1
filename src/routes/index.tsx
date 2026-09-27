@@ -7,6 +7,7 @@ import { ReservationsModule } from '@/components/uos/ReservationsModule';
 import { GovernanceModule } from '@/components/uos/GovernanceModule';
 import { AuditoriaLifeModule } from '@/components/uos/AuditoriaLifeModule';
 import { AcessosModule } from '@/components/uos/AcessosModule';
+import { CardsModule } from '@/components/uos/CardsModule';
 import { LoginPage } from '@/components/uos/LoginPage';
 import { usePms } from '@/lib/pms-store';
 import { getSession, type AuthSession } from '@/lib/auth-store';
@@ -67,6 +68,8 @@ function ModuleSwitch() {
       return <GovernanceModule />;
     case 'auditoria':
       return <AuditoriaLifeModule />;
+    case 'cartoes':
+      return <CardsModule />;
     case 'acessos':
       return <AcessosModule />;
     default:

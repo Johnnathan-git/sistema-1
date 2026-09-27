@@ -113,7 +113,7 @@ async function pdfToText(file: File): Promise<string> {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
       const line = content.items
-        .map((it: { str?: string }) => (typeof it === 'object' && it && 'str' in it ? String(it.str || '') : ''))
+        .map((it: any) => (typeof it === 'object' && it && 'str' in it ? String(it.str || '') : ''))
         .join(' ');
       parts.push(line);
     }

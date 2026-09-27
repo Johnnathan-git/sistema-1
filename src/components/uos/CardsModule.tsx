@@ -1,3 +1,4 @@
+import { onCloudSync } from '@/lib/cloud-sync';
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
@@ -78,6 +79,7 @@ export function CardsModule() {
   const session = getSession();
   const [tab, setTab] = useState<Tab>('venda');
   const [tick, setTick] = useState(0);
+  useEffect(() => onCloudSync(() => setTick((t) => t + 1)), []);
   const refresh = () => setTick((t) => t + 1);
 
   const cards = useMemo(() => listCards(hotel.id), [hotel.id, tick]);

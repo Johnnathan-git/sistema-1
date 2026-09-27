@@ -21,6 +21,27 @@ import type {
   RoomStatusLog,
 } from './pms-types';
 import { isRoomReadyForCheckIn, roomNotReadyReason } from './pms-types';
+import { onCloudSync, startCloudSync } from './cloud-sync';
+
+const K_ROOMS = 'uos-pms-rooms-v1';
+const K_RES = 'uos-pms-reservations-v1';
+const K_LOGS = 'uos-pms-roomlogs-v1';
+const K_CASH = 'uos-pms-cash-v1';
+
+function loadKey<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+function saveKey(key: string, v: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(v));
+  } catch {}
+}
 
 export type ModuleId =
   | 'recepcao'
@@ -137,7 +158,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
   const [rooms, setRooms] = useState(INITIAL_ROOMS);
   const [guests] = useState(INITIAL_GUESTS);
   const [reservations, setReservations] = useState(INITIAL_RESERVATIONS);
-  const [accounts, setAccounts] = useState<Account[]>(() => loadAccounts());
+  const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
   const [roomLogs, setRoomLogs] = useState<RoomStatusLog[]>([]);
   const [module, setModule] = useState<ModuleId>('recepcao');
   const [cashOpen, setCashOpen] = useState(true);
@@ -146,10 +167,43 @@ export function PmsProvider({ children }: { children: ReactNode }) {
     nowStamp(HOTEL.operationalDate)
   );
 
-  // Persiste contas no mesmo aparelho (sobrevive a F5 / fechar aba)
+  const [ready, setReady] = useState(false);
+
+  const reloadFromStorage = useCallback((key?: string) => {
+    if (!key || key === ACCOUNTS_STORAGE_KEY) setAccounts(loadAccounts());
+    if (!key || key === K_ROOMS) setRooms(loadKey(K_ROOMS, INITIAL_ROOMS));
+    if (!key || key === K_RES) setReservations(loadKey(K_RES, INITIAL_RESERVATIONS));
+    if (!key || key === K_LOGS) setRoomLogs(loadKey<RoomStatusLog[]>(K_LOGS, []));
+    if (!key || key === K_CASH) {
+      const c = loadKey<{ open: boolean; fundo: number; openedAt: string | null } | null>(K_CASH, null);
+      if (c) {
+        setCashOpen(c.open);
+        setCashFundo(c.fundo);
+        setCashOpenedAt(c.openedAt);
+      }
+    }
+  }, []);
+
+  // Sincroniza com o Lovable Cloud (todos os aparelhos)
   useEffect(() => {
-    saveAccounts(accounts);
-  }, [accounts]);
+    let off: (() => void) | undefined;
+    startCloudSync()
+      .catch(() => {})
+      .finally(() => {
+        reloadFromStorage();
+        setReady(true);
+        off = onCloudSync((k) => reloadFromStorage(k));
+      });
+    return () => off?.();
+  }, [reloadFromStorage]);
+
+  useEffect(() => { if (ready) saveAccounts(accounts); }, [accounts, ready]);
+  useEffect(() => { if (ready) saveKey(K_ROOMS, rooms); }, [rooms, ready]);
+  useEffect(() => { if (ready) saveKey(K_RES, reservations); }, [reservations, ready]);
+  useEffect(() => { if (ready) saveKey(K_LOGS, roomLogs); }, [roomLogs, ready]);
+  useEffect(() => {
+    if (ready) saveKey(K_CASH, { open: cashOpen, fundo: cashFundo, openedAt: cashOpenedAt });
+  }, [cashOpen, cashFundo, cashOpenedAt, ready]);
 
   const pushLog = useCallback(
     (entry: Omit<RoomStatusLog, 'id' | 'at' | 'user'> & { at?: string; user?: string }) => {
@@ -628,6 +682,13 @@ export function PmsProvider({ children }: { children: ReactNode }) {
     ]
   );
 
+  if (!ready) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+        Carregando dados…
+      </div>
+    );
+  }
   return <PmsContext.Provider value={value}>{children}</PmsContext.Provider>;
 }
 

@@ -77,7 +77,7 @@ function formatWhen(iso?: string) {
 }
 
 export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'venda' }) {
-  const { hotel, accounts, addCharge, addCharges } = usePms();
+  const { hotel, accounts, addCharges } = usePms();
   const session = getSession();
   const [tab, setTab] = useState<Tab>(mode === 'venda' ? 'venda' : 'cartoes');
   // Force tab when mode changes
@@ -380,7 +380,6 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
 
             </div>
           ) : (
-            <div>
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-center gap-3">
               <div className="h-11 w-11 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
                 <CheckCircle2 className="w-6 h-6" />
@@ -403,7 +402,6 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
                   Trocar
                 </button>
               </div>
-            </div>
             </div>
           )}
 

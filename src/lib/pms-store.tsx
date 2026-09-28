@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -164,6 +165,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
   const [guests] = useState(INITIAL_GUESTS);
   const [reservations, setReservations] = useState(INITIAL_RESERVATIONS);
   const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
+  const accountsRef = useRef<Account[]>(INITIAL_ACCOUNTS);
   const [roomLogs, setRoomLogs] = useState<RoomStatusLog[]>([]);
   const [module, setModule] = useState<ModuleId>('recepcao');
   const [cashOpen, setCashOpen] = useState(true);
@@ -200,6 +202,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
     return () => off?.();
   }, [reloadFromStorage]);
 
+  useEffect(() => { accountsRef.current = accounts; }, [accounts]);
   useEffect(() => { if (ready) saveAccounts(accounts); }, [accounts, ready]);
   useEffect(() => { if (ready) saveKey(K_ROOMS, rooms); }, [rooms, ready]);
   useEffect(() => { if (ready) saveKey(K_RES, reservations); }, [reservations, ready]);
@@ -258,38 +261,31 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       if (!accountId) return { ok: false, message: 'Conta não informada' };
       if (!description.trim()) return { ok: false, message: 'Informe a descrição' };
       if (!(amount > 0)) return { ok: false, message: 'Valor inválido' };
-      let result: { ok: boolean; message: string } = { ok: false, message: 'Conta não encontrada' };
-      setAccounts((prev) => {
-        const exists = prev.find((a) => a.id === accountId);
-        if (!exists) {
-          result = { ok: false, message: 'Conta não encontrada' };
-          return prev;
-        }
-        if (exists.status === 'quitada') {
-          result = { ok: false, message: 'Conta já quitada' };
-          return prev;
-        }
-        const charge: Charge = {
-          id: uid('chg'),
-          description: description.trim(),
-          amount,
-          date: hotel.operationalDate,
-          category: category || 'consumo',
-        };
-        result = { ok: true, message: 'Lançamento adicionado à conta' };
-        const next = prev.map((a) =>
-          a.id === accountId
-            ? {
-                ...a,
-                status: a.status === 'quitada' ? a.status : ('aberta' as const),
-                charges: [...a.charges, charge],
-              }
-            : a
-        );
-        saveAccounts(next);
-        return next;
-      });
-      return result;
+      const prev = accountsRef.current;
+      const exists = prev.find((a) => a.id === accountId);
+      if (!exists) return { ok: false, message: 'Conta não encontrada' };
+      if (exists.status === 'quitada') return { ok: false, message: 'Conta já quitada' };
+
+      const charge: Charge = {
+        id: uid('chg'),
+        description: description.trim(),
+        amount,
+        date: hotel.operationalDate,
+        category: category || 'consumo',
+      };
+      const next = prev.map((a) =>
+        a.id === accountId
+          ? {
+              ...a,
+              status: 'aberta' as const,
+              charges: [...a.charges, charge],
+            }
+          : a
+      );
+      accountsRef.current = next;
+      setAccounts(next);
+      saveAccounts(next);
+      return { ok: true, message: 'Lançamento adicionado à conta' };
     },
     [hotel.operationalDate]
   );
@@ -305,44 +301,37 @@ export function PmsProvider({ children }: { children: ReactNode }) {
         if (!it.description.trim()) return { ok: false, message: 'Informe a descrição' };
         if (!(it.amount > 0)) return { ok: false, message: 'Valor inválido' };
       }
-      let result: { ok: boolean; message: string } = { ok: false, message: 'Conta não encontrada' };
-      setAccounts((prev) => {
-        const exists = prev.find((a) => a.id === accountId);
-        if (!exists) {
-          result = { ok: false, message: 'Conta não encontrada' };
-          return prev;
-        }
-        if (exists.status === 'quitada') {
-          result = { ok: false, message: 'Conta já quitada' };
-          return prev;
-        }
-        const newCharges: Charge[] = items.map((it) => ({
-          id: uid('chg'),
-          description: it.description.trim(),
-          amount: it.amount,
-          date: hotel.operationalDate,
-          category: it.category || 'consumo',
-        }));
-        result = {
-          ok: true,
-          message:
-            newCharges.length === 1
-              ? 'Lançamento adicionado à conta'
-              : `${newCharges.length} lançamentos adicionados à conta`,
-        };
-        const next = prev.map((a) =>
-          a.id === accountId
-            ? {
-                ...a,
-                status: a.status === 'quitada' ? a.status : ('aberta' as const),
-                charges: [...a.charges, ...newCharges],
-              }
-            : a
-        );
-        saveAccounts(next);
-        return next;
-      });
-      return result;
+      const prev = accountsRef.current;
+      const exists = prev.find((a) => a.id === accountId);
+      if (!exists) return { ok: false, message: 'Conta não encontrada' };
+      if (exists.status === 'quitada') return { ok: false, message: 'Conta já quitada' };
+
+      const newCharges: Charge[] = items.map((it) => ({
+        id: uid('chg'),
+        description: it.description.trim(),
+        amount: it.amount,
+        date: hotel.operationalDate,
+        category: it.category || 'consumo',
+      }));
+      const next = prev.map((a) =>
+        a.id === accountId
+          ? {
+              ...a,
+              status: 'aberta' as const,
+              charges: [...a.charges, ...newCharges],
+            }
+          : a
+      );
+      accountsRef.current = next;
+      setAccounts(next);
+      saveAccounts(next);
+      return {
+        ok: true,
+        message:
+          newCharges.length === 1
+            ? 'Lançamento adicionado à conta'
+            : `${newCharges.length} lançamentos adicionados à conta`,
+      };
     },
     [hotel.operationalDate]
   );

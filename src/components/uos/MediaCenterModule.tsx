@@ -127,6 +127,10 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
     [accounts, tick],
   );
   const linkAccount = openAccounts.find((a) => a.id === linkAccountId) || null;
+  const linkReservation = linkAccount?.reservationId
+    ? reservations.find((r) => r.id === linkAccount.reservationId)
+    : undefined;
+  const linkRoomNumber = linkReservation?.roomNumber || '';
   const linkedCardsForAccount = useMemo(
     () => (linkAccount ? cards.filter((c) => c.accountId === linkAccount.id && c.status === 'ativo') : []),
     [cards, linkAccount],

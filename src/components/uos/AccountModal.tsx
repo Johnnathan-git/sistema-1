@@ -35,7 +35,6 @@ export function AccountModal({
   const { hotel, accounts, reservations, addPayment, addCharge } = usePms();
   const [cardTick, setCardTick] = useState(0);
   const [scanningCard, setScanningCard] = useState(false);
-  const [selectedCardId, setSelectedCardId] = useState('');
   useEffect(() => onCloudSync(() => setCardTick((value) => value + 1)), []);
 
   const account = useMemo(() => {
@@ -51,10 +50,9 @@ export function AccountModal({
       ? reservations.find((r) => r.id === reservationId)
       : undefined;
   const cards = useMemo(() => listCards(hotel.id), [hotel.id, cardTick]);
-  const linkedCard = cards.find((card) =>
-    (account && card.accountId === account.id) || (res && card.reservationId === res.id),
+  const linkedCards = cards.filter(
+    (card) => card.accountId === account?.id && card.status === 'ativo',
   );
-  const availableCards = cards.filter((card) => card.status === 'disponivel' || card.id === linkedCard?.id);
 
   const lines = useMemo(() => {
     const items: {
@@ -160,27 +158,24 @@ export function AccountModal({
     if (!account || !res) return;
     setScanningCard(true);
     try {
-      let cardId = selectedCardId;
+      const { uidHex } = await scanNfcOnce();
+      const existing = lookupByUid(uidHex);
+      let cardId = existing.card?.id;
+      if (existing.card?.accountId && existing.card.accountId !== account.id) {
+        toast.error(`Esta mídia já está vinculada a ${existing.card.guestName || 'outra conta'}. Desvincule primeiro.`);
+        return;
+      }
+      if (existing.card?.accountId === account.id) {
+        toast('Esta mídia já está vinculada a esta conta');
+        return;
+      }
       if (!cardId) {
-        const { uidHex } = await scanNfcOnce();
-        const existing = lookupByUid(uidHex);
-        cardId = existing.card?.id;
-        if (existing.card?.accountId && existing.card.accountId !== account.id) {
-          toast.error(`Esta mídia já está vinculada a ${existing.card.guestName || 'outra conta'}. Desvincule primeiro.`);
+        const reg = registerCard({ uidHex, hotelId: hotel.id });
+        if (!reg.ok) {
+          toast.error(reg.message);
           return;
         }
-        if (existing.card?.accountId === account.id) {
-          toast('Esta mídia já está vinculada a esta conta');
-          return;
-        }
-        if (!cardId) {
-          const reg = registerCard({ uidHex, hotelId: hotel.id });
-          if (!reg.ok) {
-            toast.error(reg.message);
-            return;
-          }
-          cardId = reg.card.id;
-        }
+        cardId = reg.card.id;
       }
       const result = linkCard({
         cardId,
@@ -201,17 +196,6 @@ export function AccountModal({
     } finally {
       setScanningCard(false);
     }
-  };
-
-  const detachCard = () => {
-    if (!linkedCard) return;
-    const result = unlinkCard(linkedCard.id);
-    if (!result.ok) {
-      toast.error(result.message);
-      return;
-    }
-    setCardTick((value) => value + 1);
-    toast.success('Pulseira desvinculada');
   };
 
   return (
@@ -276,17 +260,13 @@ export function AccountModal({
                   )}
                 </div>
               </div>
-              {linkedCard && <Button type="button" variant="outline" size="sm" onClick={detachCard}><Unlink /> Desvincular</Button>}
+              <Button type="button" onClick={attachCard} disabled={scanningCard}>
+                <Nfc /> {scanningCard ? 'Aproxime a mídia…' : 'Aproximar mídia para vincular'}
+              </Button>
             </div>
-            {!linkedCard && (
-              <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                <select value={selectedCardId} onChange={(event) => setSelectedCardId(event.target.value)} className="h-10 min-w-0 rounded-lg border border-input bg-background px-3 text-sm">
-                  <option value="">Selecione uma pulseira disponível</option>
-                  {availableCards.map((card) => <option key={card.id} value={card.id}>{card.label || card.uidHex}</option>)}
-                </select>
-                <Button type="button" onClick={attachCard} disabled={!selectedCardId}><Link2 /> Vincular</Button>
-              </div>
-            )}
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              A vinculação é feita somente por aproximação NFC. Se a mídia for nova, ela será cadastrada automaticamente.
+            </p>
           </div>
         )}
 

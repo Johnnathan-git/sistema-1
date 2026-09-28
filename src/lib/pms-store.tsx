@@ -159,6 +159,15 @@ function nowStamp(opDate: string) {
   return `${opDate} ${hh}:${mm}`;
 }
 
+function chargeTimestamp(opDate: string) {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  const ms = String(now.getMilliseconds()).padStart(3, '0');
+  return `${opDate}T${hh}:${mm}:${ss}.${ms}`;
+}
+
 export function PmsProvider({ children }: { children: ReactNode }) {
   const [hotel] = useState(HOTEL);
   const [rooms, setRooms] = useState(INITIAL_ROOMS);
@@ -273,7 +282,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
         id: uid('chg'),
         description: description.trim(),
         amount,
-        date: hotel.operationalDate,
+        date: chargeTimestamp(hotel.operationalDate),
         category: category || 'consumo',
       };
       const next = prev.map((a) =>
@@ -315,7 +324,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
         id: uid('chg'),
         description: it.description.trim(),
         amount: it.amount,
-        date: hotel.operationalDate,
+        date: chargeTimestamp(hotel.operationalDate),
         category: it.category || 'consumo',
       }));
       const next = prev.map((a) =>

@@ -115,6 +115,19 @@ export function startCloudSync(): Promise<void> {
         }
       })
       .subscribe();
+
+    // Ao voltar para o app (celular desbloqueado, aba reaberta) busca tudo de novo,
+    // pois a conexão em tempo real pode ter caído enquanto estava em segundo plano.
+    const resync = async () => {
+      const { data: rows } = await supabase.from('app_state').select('key,value,updated_at');
+      for (const row of rows || []) applyRemote(row.key, row.value, row.updated_at);
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') void resync();
+    });
+    window.addEventListener('focus', () => void resync());
+    window.addEventListener('online', () => void resync());
+    setInterval(() => { if (document.visibilityState === 'visible') void resync(); }, 15000);
   })();
   return readyPromise;
 }

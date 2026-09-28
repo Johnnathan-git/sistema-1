@@ -53,6 +53,38 @@ export function AccountModal({
   );
   const availableCards = cards.filter((card) => card.status === 'disponivel' || card.id === linkedCard?.id);
 
+  const lines = useMemo(() => {
+    const items: {
+      id: string;
+      date: string;
+      label: string;
+      type: 'charge' | 'payment';
+      amount: number;
+      extra?: string;
+    }[] = [];
+    if (!account) return items;
+    for (const c of account.charges) {
+      items.push({
+        id: c.id,
+        date: c.date,
+        label: c.description,
+        type: 'charge',
+        amount: c.amount,
+        extra: CAT_LABEL[c.category],
+      });
+    }
+    for (const p of account.payments) {
+      items.push({
+        id: p.id,
+        date: p.date,
+        label: `Pagamento · ${p.method}`,
+        type: 'payment',
+        amount: p.amount,
+      });
+    }
+    return items.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  }, [account]);
+
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('PIX');
   const [chargeDesc, setChargeDesc] = useState('');
@@ -95,36 +127,6 @@ export function AccountModal({
   const totalCharges = account.charges.reduce((s, c) => s + c.amount, 0);
   const totalPayments = account.payments.reduce((s, p) => s + p.amount, 0);
 
-  const lines = useMemo(() => {
-    const items: {
-      id: string;
-      date: string;
-      label: string;
-      type: 'charge' | 'payment';
-      amount: number;
-      extra?: string;
-    }[] = [];
-    for (const c of account.charges) {
-      items.push({
-        id: c.id,
-        date: c.date,
-        label: c.description,
-        type: 'charge',
-        amount: c.amount,
-        extra: CAT_LABEL[c.category],
-      });
-    }
-    for (const p of account.payments) {
-      items.push({
-        id: p.id,
-        date: p.date,
-        label: `Pagamento · ${p.method}`,
-        type: 'payment',
-        amount: p.amount,
-      });
-    }
-    return items.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-  }, [account]);
 
   const submitPay = () => {
     const n = Number(payAmount.replace(',', '.'));

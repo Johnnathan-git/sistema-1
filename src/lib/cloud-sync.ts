@@ -76,7 +76,7 @@ export function startCloudSync(): Promise<void> {
     origRemoveItem = ls.removeItem.bind(ls);
 
     // Carrega estado do servidor
-    const { data, error } = await supabase.from('app_state').select('key,value');
+    const { data, error } = await supabase.from('app_state').select('key,value,updated_at');
     const remoteKeys = new Set<string>();
     if (!error && data) {
       for (const row of data) {
@@ -110,7 +110,7 @@ export function startCloudSync(): Promise<void> {
           const k = (payload.old as { key?: string }).key;
           if (k) applyRemote(k, null);
         } else {
-          const row = payload.new as { key: string; value: string };
+          const row = payload.new as { key: string; value: string; updated_at?: string };
           applyRemote(row.key, row.value, row.updated_at);
         }
       })

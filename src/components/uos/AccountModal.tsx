@@ -363,26 +363,10 @@ export function AccountModal({
                   )}
                   title={person.name}
                 >
-                  {person.name}
+                  <span className="block truncate">{person.name}</span>
+                  <span className="block text-[9px] font-normal text-slate-400">{person.accountId}</span>
                 </button>
               ))}
-              <button
-                type="button"
-                onClick={() => {
-                  if (!availableCompanions.length) {
-                    toast.info(
-                      res.companions?.length
-                        ? 'Todos os acompanhantes cadastrados já possuem conta.'
-                        : 'Cadastre primeiro o acompanhante na reserva.',
-                    );
-                    return;
-                  }
-                  setCompanionPickerOpen(true);
-                }}
-                className="shrink-0 px-3 py-2.5 rounded-t-lg text-[12px] font-semibold text-indigo-600 hover:bg-indigo-50"
-              >
-                + Acompanhante
-              </button>
             </div>
           </div>
         )}

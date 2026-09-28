@@ -15,7 +15,6 @@ import { cn } from '@/lib/utils';
 import { IdCard, LogIn, LogOut, Pencil, Plus, Save, Search, Ticket, Trash2, Wallet, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { listCards, linkCard, unlinkCard } from '@/lib/nfc-cards';
-import { onCloudSync } from '@/lib/cloud-sync';
 
 const ROOM_TYPES: RoomType[] = ['Standard', 'Superior', 'Apartamento', 'Chalé Master', 'Bangalô', 'Suite'];
 const inputCls =

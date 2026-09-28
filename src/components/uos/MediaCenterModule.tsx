@@ -123,6 +123,7 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
   const [pdvUid, setPdvUid] = useState('');
   const [pdvLookup, setPdvLookup] = useState<ReturnType<typeof lookupByUid> | null>(null);
   const [mediaReadLookup, setMediaReadLookup] = useState<ReturnType<typeof lookupByUid> | null>(null);
+  const [mediaReaderOpen, setMediaReaderOpen] = useState(false);
   const [scanningPdv, setScanningPdv] = useState(false);
   const [scanningMedia, setScanningMedia] = useState(false);
   const [qtyMap, setQtyMap] = useState<Record<string, number>>({});
@@ -292,6 +293,52 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
 
       {tab === 'venda' && (
         <div className="relative max-w-4xl space-y-4 pb-44 sm:pb-36">
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => { setMediaReaderOpen((v) => !v); setMediaReadLookup(null); }}
+              className={cn(
+                'h-10 px-4 rounded-lg border text-[12px] font-semibold inline-flex items-center gap-2',
+                mediaReaderOpen ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+              )}
+            >
+              <Nfc className="w-4 h-4" /> Ler mídia
+            </button>
+          </div>
+
+          {mediaReaderOpen && (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[13px] font-semibold text-slate-800">Conferência da mídia</p>
+                  <p className="text-[11px] text-slate-500">Apenas consulta. A leitura não inicia nem altera uma venda.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={scanMedia}
+                  disabled={scanningMedia || !nfcOk}
+                  className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[12px] font-semibold disabled:opacity-50 inline-flex items-center gap-1.5"
+                >
+                  {scanningMedia ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Nfc className="w-3.5 h-3.5" />}
+                  {scanningMedia ? 'Lendo…' : 'Aproximar mídia'}
+                </button>
+              </div>
+              {mediaReadLookup?.card && (
+                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Resultado da leitura</p>
+                  <p className="mt-1 text-[14px] font-semibold text-slate-900">{mediaReadLookup.card.guestName || 'Sem hóspede vinculado'}</p>
+                  <p className="text-[11px] text-slate-500">
+                    UH {mediaReadLookup.card.roomNumber || '—'} · {mediaReadLookup.card.accountId ? `Conta ${mediaReadLookup.card.accountId}` : 'Sem conta vinculada'} · UID {mediaReadLookup.card.uidHex}
+                  </p>
+                  <p className="text-[11px] mt-1 font-medium">{mediaReadLookup.message}</p>
+                </div>
+              )}
+              {!mediaReadLookup?.card && mediaReadLookup && (
+                <p className="mt-3 text-[11px] text-rose-600">{mediaReadLookup.message}</p>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
             {POS_POINTS.map((p) => (
               <button key={p.id} type="button" onClick={() => setPosId(p.id)}
@@ -330,21 +377,7 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
                   </>
                 )}
               </button>
-              <button type="button" onClick={scanMedia} disabled={scanningMedia || !nfcOk}
-                className="w-full h-10 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-2 disabled:opacity-50">
-                {scanningMedia ? <Loader2 className="w-4 h-4 animate-spin" /> : <Nfc className="w-4 h-4" />}
-                Ler mídia
-              </button>
-              {mediaReadLookup?.card && (
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Mídia identificada</p>
-                  <p className="mt-1 text-[14px] font-semibold text-slate-900">{mediaReadLookup.card.guestName || 'Sem hóspede vinculado'}</p>
-                  <p className="text-[12px] text-slate-500">
-                    UH {mediaReadLookup.card.roomNumber || '—'} · {mediaReadLookup.card.accountId ? `Conta ${mediaReadLookup.card.accountId}` : 'Sem conta vinculada'}
-                  </p>
-                  <p className="mt-1 text-[11px] text-slate-400">UID: {mediaReadLookup.card.uidHex}</p>
-                </div>
-              )}
+
             </div>
           ) : (
             <div>
@@ -364,14 +397,6 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={scanMedia}
-                  disabled={scanningMedia || !nfcOk}
-                  className="h-9 px-3 rounded-lg border border-emerald-300 bg-white text-[12px] font-semibold text-emerald-900 disabled:opacity-50"
-                >
-                  {scanningMedia ? 'Lendo…' : 'Ler mídia'}
-                </button>
-                <button
-                  type="button"
                   onClick={() => { setPdvLookup(null); setPdvUid(''); }}
                   className="h-9 px-3 rounded-lg border border-emerald-300 bg-white text-[12px] font-semibold text-emerald-900"
                 >
@@ -379,13 +404,6 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
                 </button>
               </div>
             </div>
-            {mediaReadLookup?.card && (
-              <div className="mt-2 rounded-xl border border-slate-200 bg-white px-4 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Mídia lida</p>
-                <p className="mt-1 text-[13px] font-semibold text-slate-900">{mediaReadLookup.card.guestName || 'Sem hóspede vinculado'}</p>
-                <p className="text-[11px] text-slate-500">UH {mediaReadLookup.card.roomNumber || '—'} · {mediaReadLookup.card.accountId ? `Conta ${mediaReadLookup.card.accountId}` : 'Sem conta vinculada'} · UID {mediaReadLookup.card.uidHex}</p>
-              </div>
-            )}
             </div>
           )}
 

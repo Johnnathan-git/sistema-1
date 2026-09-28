@@ -8,11 +8,17 @@ export interface PosPoint {
   active: boolean;
 }
 
+export interface PosProductCategory {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
 export interface PosProduct {
   id: string;
   name: string;
   price: number;
-  category: 'bebida' | 'comida' | 'servico' | 'outro';
+  category: string;
   /** PDVs onde o produto aparece */
   posIds: PosPointId[];
   active: boolean;
@@ -21,6 +27,7 @@ export interface PosProduct {
 }
 
 const LS_PRODUCTS = 'uos-pos-products-v1';
+const LS_CATEGORIES = 'uos-pos-product-categories-v1';
 
 export const POS_POINTS: PosPoint[] = [
   { id: 'bar-central', name: 'Bar central', active: true },
@@ -63,6 +70,54 @@ function loadProducts(): PosProduct[] {
 
 function saveProducts(list: PosProduct[]) {
   localStorage.setItem(LS_PRODUCTS, JSON.stringify(list));
+}
+
+function uidCategory() {
+  return `cat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+const DEFAULT_CATEGORIES: PosProductCategory[] = [
+  { id: 'bebida', name: 'Bebidas', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'comida', name: 'Comidas', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'servico', name: 'Serviços', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'outro', name: 'Outros', createdAt: '2026-01-01T00:00:00.000Z' },
+];
+
+function loadCategories(): PosProductCategory[] {
+  try {
+    const raw = localStorage.getItem(LS_CATEGORIES);
+    if (raw) {
+      const parsed = JSON.parse(raw) as PosProductCategory[];
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    }
+  } catch {}
+  const seeded = [...DEFAULT_CATEGORIES];
+  saveCategories(seeded);
+  return seeded;
+}
+
+function saveCategories(list: PosProductCategory[]) {
+  localStorage.setItem(LS_CATEGORIES, JSON.stringify(list));
+}
+
+export function listProductCategories(): PosProductCategory[] {
+  return loadCategories().sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+export function addProductCategory(name: string): { ok: true; category: PosProductCategory } | { ok: false; message: string } {
+  const normalized = name.trim();
+  if (!normalized) return { ok: false, message: 'Informe o nome da categoria' };
+  const list = loadCategories();
+  if (list.some((c) => c.name.localeCompare(normalized, 'pt-BR') === 0)) {
+    return { ok: false, message: 'Esta categoria já existe' };
+  }
+  const category: PosProductCategory = {
+    id: uidCategory(),
+    name: normalized,
+    createdAt: new Date().toISOString(),
+  };
+  saveCategories([...list, category]);
+  return { ok: true, category };
 }
 
 export function listProducts(opts?: { posId?: PosPointId; onlyActive?: boolean }): PosProduct[] {

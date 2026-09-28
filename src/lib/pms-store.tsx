@@ -262,7 +262,9 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       if (!accountId) return { ok: false, message: 'Conta não informada' };
       if (!description.trim()) return { ok: false, message: 'Informe a descrição' };
       if (!(amount > 0)) return { ok: false, message: 'Valor inválido' };
-      const prev = accountsRef.current;
+      const persisted = loadAccounts();
+      const prev = persisted.length ? persisted : accountsRef.current;
+      accountsRef.current = prev;
       const exists = prev.find((a) => a.id === accountId);
       if (!exists) return { ok: false, message: 'Conta não encontrada' };
       if (exists.status === 'quitada') return { ok: false, message: 'Conta já quitada' };
@@ -302,7 +304,9 @@ export function PmsProvider({ children }: { children: ReactNode }) {
         if (!it.description.trim()) return { ok: false, message: 'Informe a descrição' };
         if (!(it.amount > 0)) return { ok: false, message: 'Valor inválido' };
       }
-      const prev = accountsRef.current;
+      const persisted = loadAccounts();
+      const prev = persisted.length ? persisted : accountsRef.current;
+      accountsRef.current = prev;
       const exists = prev.find((a) => a.id === accountId);
       if (!exists) return { ok: false, message: 'Conta não encontrada' };
       if (exists.status === 'quitada') return { ok: false, message: 'Conta já quitada' };

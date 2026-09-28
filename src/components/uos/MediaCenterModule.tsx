@@ -119,6 +119,61 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
     }
   };
 
+  const [linkAccountId, setLinkAccountId] = useState('');
+  const [scanningLink, setScanningLink] = useState(false);
+
+  const openAccounts = useMemo(
+    () => accounts.filter((a) => a.status === 'aberta'),
+    [accounts, tick],
+  );
+  const linkAccount = openAccounts.find((a) => a.id === linkAccountId) || null;
+  const linkedCardsForAccount = useMemo(
+    () => (linkAccount ? cards.filter((c) => c.accountId === linkAccount.id && c.status === 'ativo') : []),
+    [cards, linkAccount],
+  );
+
+  const scanToLink = async () => {
+    if (!linkAccount) {
+      toast.error('Selecione a conta do hóspede primeiro');
+      return;
+    }
+    setScanningLink(true);
+    try {
+      const { uidHex } = await scanNfcOnce();
+      const existing = lookupByUid(uidHex);
+      let cardId = existing.card?.id;
+      if (existing.card && existing.card.accountId && existing.card.accountId !== linkAccount.id) {
+        toast.error(`Esta mídia já está vinculada a ${existing.card.guestName || 'outra conta'}. Desvincule primeiro.`);
+        return;
+      }
+      if (existing.card && existing.card.accountId === linkAccount.id) {
+        toast('Esta mídia já está vinculada a esta conta');
+        return;
+      }
+      if (!cardId) {
+        const reg = registerCard({ uidHex, hotelId: hotel.id });
+        if (!reg.ok) { toast.error(reg.message); return; }
+        cardId = reg.card.id;
+        toast.success(`Mídia ${uidHex} cadastrada automaticamente`);
+      }
+      const res = linkCard({
+        cardId,
+        reservationId: linkAccount.reservationId,
+        guestId: linkAccount.guestId,
+        guestName: linkAccount.guestName,
+        roomNumber: linkAccount.roomNumber,
+        accountId: linkAccount.id,
+      });
+      if (!res.ok) { toast.error(res.message); return; }
+      toast.success(`Mídia vinculada a ${linkAccount.guestName}`);
+      refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Falha NFC');
+    } finally {
+      setScanningLink(false);
+    }
+  };
+
   const [posId, setPosId] = useState<PosPointId>('bar-central');
   const [pdvUid, setPdvUid] = useState('');
   const [pdvLookup, setPdvLookup] = useState<ReturnType<typeof lookupByUid> | null>(null);
@@ -305,6 +360,7 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
       ? [{ id: 'venda', label: 'Venda', icon: ShoppingBag }]
       : [
           { id: 'cartoes', label: 'Mídias', icon: CreditCard },
+          { id: 'vincular', label: 'Vincular', icon: Link2 },
           { id: 'movimentos', label: 'Movimentos', icon: History },
         ];
 

@@ -9,7 +9,8 @@ import {
 import { cn } from '@/lib/utils';
 import { CreditCard, Link2, Nfc, Plus, Unlink, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { listCards, linkCard, unlinkCard } from '@/lib/nfc-cards';
+import { listCards, linkCard, unlinkCard, lookupByUid, registerCard } from '@/lib/nfc-cards';
+import { scanNfcOnce } from '@/components/uos/MediaCenterModule';
 import { onCloudSync } from '@/lib/cloud-sync';
 import { Button } from '@/components/ui/button';
 
@@ -151,26 +152,48 @@ export function AccountModal({
     toast.success('Lançamento adicionado');
   };
 
-  const attachCard = () => {
-    if (!account || !res || !selectedCardId) {
-      toast.error('Selecione uma pulseira disponível');
-      return;
+  const attachCard = async () => {
+    if (!account || !res) return;
+    setScanningCard(true);
+    try {
+      const { uidHex } = await scanNfcOnce();
+      const existing = lookupByUid(uidHex);
+      let cardId = existing.card?.id;
+      if (existing.card?.accountId && existing.card.accountId !== account.id) {
+        toast.error(`Esta mídia já está vinculada a ${existing.card.guestName || 'outra conta'}. Desvincule primeiro.`);
+        return;
+      }
+      if (existing.card?.accountId === account.id) {
+        toast('Esta mídia já está vinculada a esta conta');
+        return;
+      }
+      if (!cardId) {
+        const reg = registerCard({ uidHex, hotelId: hotel.id });
+        if (!reg.ok) {
+          toast.error(reg.message);
+          return;
+        }
+        cardId = reg.card.id;
+      }
+      const result = linkCard({
+        cardId,
+        reservationId: res.id,
+        guestId: res.guestId,
+        guestName: res.guestName,
+        roomNumber: res.roomNumber,
+        accountId: account.id,
+      });
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      setCardTick((value) => value + 1);
+      toast.success('Pulseira vinculada à conta');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Falha NFC');
+    } finally {
+      setScanningCard(false);
     }
-    const result = linkCard({
-      cardId: selectedCardId,
-      reservationId: res.id,
-      guestId: res.guestId,
-      guestName: res.guestName,
-      roomNumber: res.roomNumber,
-      accountId: account.id,
-    });
-    if (!result.ok) {
-      toast.error(result.message);
-      return;
-    }
-    setSelectedCardId('');
-    setCardTick((value) => value + 1);
-    toast.success('Pulseira vinculada à conta');
   };
 
   const detachCard = () => {

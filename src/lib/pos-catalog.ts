@@ -56,6 +56,7 @@ function seedProducts(): PosProduct[] {
 }
 
 function loadProducts(): PosProduct[] {
+  if (typeof localStorage === 'undefined') return seedProducts();
   try {
     const raw = localStorage.getItem(LS_PRODUCTS);
     if (raw) {
@@ -69,6 +70,7 @@ function loadProducts(): PosProduct[] {
 }
 
 function saveProducts(list: PosProduct[]) {
+  if (typeof localStorage === 'undefined') return;
   localStorage.setItem(LS_PRODUCTS, JSON.stringify(list));
 }
 
@@ -84,6 +86,7 @@ const DEFAULT_CATEGORIES: PosProductCategory[] = [
 ];
 
 function loadCategories(): PosProductCategory[] {
+  if (typeof localStorage === 'undefined') return [...DEFAULT_CATEGORIES];
   try {
     const raw = localStorage.getItem(LS_CATEGORIES);
     if (raw) {
@@ -97,6 +100,7 @@ function loadCategories(): PosProductCategory[] {
 }
 
 function saveCategories(list: PosProductCategory[]) {
+  if (typeof localStorage === 'undefined') return;
   localStorage.setItem(LS_CATEGORIES, JSON.stringify(list));
 }
 

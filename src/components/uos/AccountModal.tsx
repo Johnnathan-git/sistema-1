@@ -35,6 +35,7 @@ export function AccountModal({
   const { hotel, accounts, reservations, addPayment, addCharge } = usePms();
   const [cardTick, setCardTick] = useState(0);
   const [scanningCard, setScanningCard] = useState(false);
+  const [selectedCardId, setSelectedCardId] = useState('');
   useEffect(() => onCloudSync(() => setCardTick((value) => value + 1)), []);
 
   const account = useMemo(() => {
@@ -159,24 +160,27 @@ export function AccountModal({
     if (!account || !res) return;
     setScanningCard(true);
     try {
-      const { uidHex } = await scanNfcOnce();
-      const existing = lookupByUid(uidHex);
-      let cardId = existing.card?.id;
-      if (existing.card?.accountId && existing.card.accountId !== account.id) {
-        toast.error(`Esta mídia já está vinculada a ${existing.card.guestName || 'outra conta'}. Desvincule primeiro.`);
-        return;
-      }
-      if (existing.card?.accountId === account.id) {
-        toast('Esta mídia já está vinculada a esta conta');
-        return;
-      }
+      let cardId = selectedCardId;
       if (!cardId) {
-        const reg = registerCard({ uidHex, hotelId: hotel.id });
-        if (!reg.ok) {
-          toast.error(reg.message);
+        const { uidHex } = await scanNfcOnce();
+        const existing = lookupByUid(uidHex);
+        cardId = existing.card?.id;
+        if (existing.card?.accountId && existing.card.accountId !== account.id) {
+          toast.error(`Esta mídia já está vinculada a ${existing.card.guestName || 'outra conta'}. Desvincule primeiro.`);
           return;
         }
-        cardId = reg.card.id;
+        if (existing.card?.accountId === account.id) {
+          toast('Esta mídia já está vinculada a esta conta');
+          return;
+        }
+        if (!cardId) {
+          const reg = registerCard({ uidHex, hotelId: hotel.id });
+          if (!reg.ok) {
+            toast.error(reg.message);
+            return;
+          }
+          cardId = reg.card.id;
+        }
       }
       const result = linkCard({
         cardId,

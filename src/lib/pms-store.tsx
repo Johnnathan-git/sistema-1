@@ -524,7 +524,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       if (res.status !== 'checkin') return { ok: false, message: 'Hóspede não está in-house' };
 
       const reservationAccounts = accounts.filter(
-        (a) => a.reservationId === reservationId && a.status !== 'avulsa'
+        (a) => a.reservationId === reservationId && a.type === 'hospede'
       );
       const openAccounts = reservationAccounts.filter((a) => Math.abs(accountBalance(a)) > 0.01);
       if (openAccounts.length) {

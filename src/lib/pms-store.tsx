@@ -673,7 +673,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
             ...a,
             payments: [
               ...a.payments,
-              { id: uid('pay'), amount, method, date: hotel.operationalDate },
+              { id: uid('pay'), amount, method, date: chargeTimestamp(hotel.operationalDate) },
             ],
           };
         })

@@ -32,6 +32,15 @@ export type AccountStatus = 'aberta' | 'quitada' | 'parcial' | 'pendente';
 
 export type AccountType = 'hospede' | 'avulsa';
 
+export interface ReservationCompanion {
+  id: string;
+  name: string;
+  cpf: string;
+  birthDate: string;
+  ageGroup: 'Adulto' | 'Criança' | 'Bebê';
+  accountId?: string;
+}
+
 export type RoomType =
   | 'Standard'
   | 'Superior'
@@ -120,6 +129,7 @@ export interface Reservation {
   notes?: string;
   fnrhFilled: boolean;
   accountId?: string;
+  companions?: ReservationCompanion[];
 }
 
 export interface Hotel {

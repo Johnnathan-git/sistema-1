@@ -178,7 +178,7 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
         reservationId: linkAccount.reservationId,
         guestId: linkAccount.guestId,
         guestName: linkAccount.guestName,
-        roomNumber: linkAccount.roomNumber,
+        roomNumber: linkReservation?.roomNumber,
         accountId: linkAccount.id,
       });
       if (!res.ok) { toast.error(res.message); return; }

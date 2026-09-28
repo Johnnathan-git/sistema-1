@@ -11,7 +11,7 @@ import { getSession } from '@/lib/auth-store';
 import { formatBRL } from '@/lib/pms-types';
 import {
   type NfcCard, type NfcCardStatus, NFC_STATUS_LABEL,
-  listCards, registerCard, unlinkCard, blockCard, deleteCard,
+  listCards, registerCard, unlinkCard, linkCard, blockCard, deleteCard,
   lookupByUid, registerCharge, listChargeLogs, normalizeUidHex, updateCard,
 } from '@/lib/nfc-cards';
 import { POS_POINTS, type PosPointId, listProducts, getPosName } from '@/lib/pos-catalog';
@@ -152,11 +152,38 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
   const cartTotal = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
   const resolveAccountId = (card: NonNullable<ReturnType<typeof lookupByUid>['card']>): string | null => {
-    if (!card.accountId) return null;
-    const account = accounts.find((a) => a.id === card.accountId && a.status !== 'quitada');
+    // A conta indicada pela mídia é a primeira referência. Se ela estiver
+    // desatualizada, reconciliamos pelo vínculo forte reserva + hóspede.
+    const direct = card.accountId
+      ? accounts.find((a) => a.id === card.accountId && a.status !== 'quitada')
+      : undefined;
+
+    const canonical = accounts.find((a) =>
+      a.status !== 'quitada' &&
+      (!card.reservationId || a.reservationId === card.reservationId) &&
+      (!card.guestId || a.guestId === card.guestId)
+    );
+
+    const account = direct &&
+      (!card.reservationId || direct.reservationId === card.reservationId) &&
+      (!card.guestId || !direct.guestId || direct.guestId === card.guestId)
+      ? direct
+      : canonical;
+
     if (!account) return null;
-    if (card.reservationId && account.reservationId !== card.reservationId) return null;
-    if (card.guestId && account.guestId && account.guestId !== card.guestId) return null;
+
+    // Corrige automaticamente uma referência de conta antiga na mídia.
+    if (card.accountId !== account.id) {
+      linkCard({
+        cardId: card.id,
+        reservationId: card.reservationId,
+        guestId: card.guestId,
+        guestName: card.guestName || account.guestName,
+        roomNumber: card.roomNumber,
+        accountId: account.id,
+      });
+    }
+
     return account.id;
   };
 

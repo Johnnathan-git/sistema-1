@@ -20,7 +20,8 @@ import type {
   Room,
   RoomStatusLog,
 } from './pms-types';
-import { isRoomReadyForCheckIn, roomNotReadyReason } from './pms-types';
+import { accountBalance, isRoomReadyForCheckIn, roomNotReadyReason } from './pms-types';
+import { listCards } from './nfc-cards';
 import { onCloudSync, startCloudSync } from './cloud-sync';
 
 const K_ROOMS = 'uos-pms-rooms-v1';
@@ -105,6 +106,7 @@ interface PmsState {
     charges: { description: string; amount: number; category: Charge['category'] }[]
   ) => { ok: boolean; message: string };
   createAvulsaAccount: (guestName: string) => void;
+  createCompanionAccount: (reservationId: string, companionId: string) => { ok: boolean; message: string; accountId?: string };
   cashOpen: boolean;
   cashFundo: number;
   cashOpenedAt: string | null;
@@ -520,6 +522,29 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       const res = reservations.find((r) => r.id === reservationId);
       if (!res) return { ok: false, message: 'Reserva não encontrada' };
       if (res.status !== 'checkin') return { ok: false, message: 'Hóspede não está in-house' };
+
+      const reservationAccounts = accounts.filter(
+        (a) => a.reservationId === reservationId && a.status !== 'avulsa'
+      );
+      const openAccounts = reservationAccounts.filter((a) => Math.abs(accountBalance(a)) > 0.01);
+      if (openAccounts.length) {
+        const total = openAccounts.reduce((sum, a) => sum + accountBalance(a), 0);
+        return {
+          ok: false,
+          message: `Não é possível fazer check-out. Existem contas com saldo pendente (${total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}).`,
+        };
+      }
+
+      const linkedCards = listCards().filter(
+        (card) => card.reservationId === reservationId && card.status === 'ativo'
+      );
+      if (linkedCards.length) {
+        return {
+          ok: false,
+          message: `Não é possível fazer check-out. Desvincule ${linkedCards.length === 1 ? 'a mídia de consumo' : 'as mídias de consumo'} antes de finalizar.`,
+        };
+      }
+
       setReservations((prev) =>
         prev.map((r) =>
           r.id === reservationId ? { ...r, status: 'checkout' as ReservationStatus } : r
@@ -540,7 +565,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       }
       return { ok: true, message: `Check-out ${res.guestName}` };
     },
-    [reservations]
+    [reservations, accounts]
   );
 
   const cancelCheckIn = useCallback(
@@ -669,6 +694,51 @@ export function PmsProvider({ children }: { children: ReactNode }) {
     [hotel.operationalDate]
   );
 
+  const createCompanionAccount = useCallback(
+    (reservationId: string, companionId: string) => {
+      const res = reservations.find((r) => r.id === reservationId);
+      const companion = res?.companions?.find((c) => c.id === companionId);
+      if (!res || !companion) return { ok: false, message: 'Acompanhante não encontrado' };
+      if (res.status !== 'checkin') return { ok: false, message: 'A conta do acompanhante só pode ser criada após o check-in' };
+      if (companion.accountId) return { ok: true, message: 'Conta do acompanhante já existe', accountId: companion.accountId };
+      const existing = accounts.find(
+        (a) => a.reservationId === reservationId && a.guestId === companion.id
+      );
+      const accountId = existing?.id || uid('acc');
+      if (!existing) {
+        setAccounts((prev) => [
+          ...prev,
+          {
+            id: accountId,
+            type: 'hospede',
+            guestId: companion.id,
+            guestName: companion.name,
+            reservationId,
+            roomId: res.roomId,
+            status: 'aberta',
+            charges: [],
+            payments: [],
+            openedAt: hotel.operationalDate,
+          },
+        ]);
+      }
+      setReservations((prev) =>
+        prev.map((r) =>
+          r.id === reservationId
+            ? {
+                ...r,
+                companions: (r.companions || []).map((c) =>
+                  c.id === companionId ? { ...c, accountId } : c
+                ),
+              }
+            : r
+        )
+      );
+      return { ok: true, message: 'Conta do acompanhante criada', accountId };
+    },
+    [reservations, accounts, hotel.operationalDate]
+  );
+
   const value = useMemo(
     () => ({
       hotel,
@@ -701,6 +771,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       addCharge,
       addCharges,
       createAvulsaAccount,
+      createCompanionAccount,
     }),
     [
       hotel,
@@ -732,6 +803,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       addCharge,
       addCharges,
       createAvulsaAccount,
+      createCompanionAccount,
     ]
   );
 

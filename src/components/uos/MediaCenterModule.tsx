@@ -123,8 +123,21 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
   const [scanningLink, setScanningLink] = useState(false);
 
   const openAccounts = useMemo(
-    () => accounts.filter((a) => a.status === 'aberta'),
-    [accounts, tick],
+    () => accounts
+      .filter((a) => {
+        if (a.type !== 'hospede' || !a.reservationId) return false;
+        const reservation = reservations.find((r) => r.id === a.reservationId);
+        return reservation?.status === 'checkin';
+      })
+      .sort((a, b) => {
+        const ra = reservations.find((r) => r.id === a.reservationId);
+        const rb = reservations.find((r) => r.id === b.reservationId);
+        return `${ra?.roomNumber || ''}-${a.guestName}`.localeCompare(
+          `${rb?.roomNumber || ''}-${b.guestName}`,
+          'pt-BR',
+        );
+      }),
+    [accounts, reservations, tick],
   );
   const linkAccount = openAccounts.find((a) => a.id === linkAccountId) || null;
   const linkReservation = linkAccount?.reservationId
@@ -622,7 +635,13 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
                 <option value="">Selecione a conta</option>
                 {openAccounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.guestName}{a.roomNumber ? ` · UH ${a.roomNumber}` : ''} · {a.id}
+                    {a.guestName}
+                    {(() => {
+                      const reservation = reservations.find((r) => r.id === a.reservationId);
+                      return reservation
+                        ? ` · UH ${reservation.roomNumber || '—'} · ${reservation.code}`
+                        : '';
+                    })()}
                   </option>
                 ))}
               </select>

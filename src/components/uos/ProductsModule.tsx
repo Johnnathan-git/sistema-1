@@ -6,29 +6,28 @@ import {
   type PosPointId,
   type PosProduct,
   listAllProducts,
+  listProductCategories,
+  addProductCategory,
   upsertProduct,
   deleteProduct,
 } from '@/lib/pos-catalog';
 import { Package, Plus, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
-const CATEGORIES: { id: PosProduct['category']; label: string }[] = [
-  { id: 'bebida', label: 'Bebida' },
-  { id: 'comida', label: 'Comida' },
-  { id: 'servico', label: 'Serviço' },
-  { id: 'outro', label: 'Outro' },
-];
+
 
 export function ProductsModule() {
   const [tick, setTick] = useState(0);
   const refresh = () => setTick((t) => t + 1);
   const products = useMemo(() => listAllProducts(), [tick]);
+  const categories = useMemo(() => listProductCategories(), [tick]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editId, setEditId] = useState<string | undefined>();
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
-  const [category, setCategory] = useState<PosProduct['category']>('bebida');
+  const [category, setCategory] = useState<string>('bebida');
+  const [newCategory, setNewCategory] = useState('');
   const [posIds, setPosIds] = useState<PosPointId[]>(['bar-central']);
   const [active, setActive] = useState(true);
 
@@ -36,7 +35,7 @@ export function ProductsModule() {
     setEditId(undefined);
     setName('');
     setPrice('');
-    setCategory('bebida');
+    setCategory(categories[0]?.id || 'bebida');
     setPosIds(['bar-central']);
     setActive(true);
     setFormOpen(true);
@@ -84,6 +83,18 @@ export function ProductsModule() {
     } else toast.error(r.message);
   };
 
+  const addCategory = () => {
+    const result = addProductCategory(newCategory);
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+    toast.success(`Categoria "${result.category.name}" adicionada`);
+    setCategory(result.category.id);
+    setNewCategory('');
+    refresh();
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -103,6 +114,32 @@ export function ProductsModule() {
         </div>
       </div>
 
+      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-[12px] font-semibold text-slate-800">Categorias de produtos</p>
+            <p className="text-[11px] text-slate-500">Crie categorias como Bebidas, Proteínas, Sobremesas etc.</p>
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') addCategory(); }}
+              placeholder="Nova categoria"
+              className="h-9 w-44 rounded-lg border border-slate-200 px-3 text-[12px] outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+            <button type="button" onClick={addCategory} className="h-9 px-3 rounded-lg bg-slate-900 text-white text-[12px] font-semibold inline-flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5" /> Adicionar
+            </button>
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {categories.map((c) => (
+            <span key={c.id} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-600">{c.name}</span>
+          ))}
+        </div>
+      </div>
+
       {formOpen && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
           <p className="text-[13px] font-semibold text-slate-800">{editId ? 'Editar produto' : 'Novo produto'}</p>
@@ -117,9 +154,9 @@ export function ProductsModule() {
             </label>
             <label className="block space-y-1">
               <span className="text-[11px] font-semibold uppercase text-slate-400">Categoria</span>
-              <select value={category} onChange={(e) => setCategory(e.target.value as PosProduct['category'])} className="w-full h-10 rounded-lg border border-slate-200 px-2 bg-white text-[14px]">
-                {CATEGORIES.map((c) => (
-                  <option key={c.id} value={c.id}>{c.label}</option>
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full h-10 rounded-lg border border-slate-200 px-2 bg-white text-[14px]">
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </label>
@@ -166,7 +203,7 @@ export function ProductsModule() {
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-slate-900">{p.name}</p>
                   <p className="text-[11px] text-slate-500">
-                    {CATEGORIES.find((c) => c.id === p.category)?.label} ·{' '}
+                     {categories.find((c) => c.id === p.category)?.name || p.category} ·{' '}
                     {p.posIds.map((id) => POS_POINTS.find((x) => x.id === id)?.name).join(', ')}
                     {!p.active && <span className="text-amber-700"> · inativo</span>}
                   </p>

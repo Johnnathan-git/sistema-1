@@ -166,6 +166,10 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
       .slice(0, 15);
   }, [guests, guestQuery]);
 
+  const companionCards = useMemo(() => listCards(hotel.id), [hotel.id, cardTick]);
+  const companionLinkedCard = (accountId?: string) =>
+    accountId ? companionCards.find((card) => card.accountId === accountId && card.status === 'ativo') : undefined;
+
   if (!res || !draft) {
     return (
       <Overlay onClose={onClose}>
@@ -263,10 +267,6 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
       onClose();
     } else toast.error(r.message);
   };
-
-  const companionCards = useMemo(() => listCards(hotel.id), [hotel.id, cardTick]);
-  const companionLinkedCard = (accountId?: string) =>
-    accountId ? companionCards.find((card) => card.accountId === accountId && card.status === 'ativo') : undefined;
 
   const handleCreateCompanionAccount = (companionId: string) => {
     const result = createCompanionAccount(draft.id, companionId);

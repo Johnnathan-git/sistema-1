@@ -119,16 +119,6 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
     }
   };
 
-  const resolveAccountForReservation = (resvId: string): string | undefined => {
-    const resv = reservations.find((r) => r.id === resvId);
-    if (resv?.accountId) {
-      const byId = accounts.find((a) => a.id === resv.accountId && a.status !== 'quitada');
-      if (byId) return byId.id;
-    }
-    const byRes = accounts.find((a) => a.reservationId === resvId && a.status !== 'quitada');
-    return byRes?.id || resv?.accountId;
-  };
-
   const [posId, setPosId] = useState<PosPointId>('bar-central');
   const [pdvUid, setPdvUid] = useState('');
   const [pdvLookup, setPdvLookup] = useState<ReturnType<typeof lookupByUid> | null>(null);

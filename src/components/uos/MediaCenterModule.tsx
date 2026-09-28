@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   CreditCard, Ban, Plus, ShoppingBag, History, RefreshCw, Trash2,
-  CheckCircle2, Nfc, Loader2, Minus, ArrowRight, Search, X,
+  CheckCircle2, Nfc, Loader2, Minus, ArrowRight, Search, X, Link2, Unlink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePms } from '@/lib/pms-store';
@@ -18,13 +18,13 @@ import { POS_POINTS, type PosPointId, listProducts, getPosName } from '@/lib/pos
 
 import { Button } from '@/components/ui/button';
 
-type Tab = 'venda' | 'cartoes' | 'movimentos';
+type Tab = 'venda' | 'cartoes' | 'vincular' | 'movimentos';
 
 function webNfcSupported() {
   return typeof window !== 'undefined' && 'NDEFReader' in window;
 }
 
-async function scanNfcOnce(timeoutMs = 25000): Promise<{ uidHex: string }> {
+export async function scanNfcOnce(timeoutMs = 25000): Promise<{ uidHex: string }> {
   if (!webNfcSupported()) throw new Error('NFC do navegador não disponível. Use Chrome no Android (HTTPS).');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const NDEFReaderCtor = (window as any).NDEFReader;

@@ -387,14 +387,31 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
                   {pdvLookup?.card?.accountId ? ` · conta ${pdvLookup.card.accountId}` : ''}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => { setPdvLookup(null); setPdvUid(''); }}
-                className="h-9 px-3 rounded-lg border border-emerald-300 bg-white text-[12px] font-semibold text-emerald-900"
-              >
-                Trocar
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={scanMedia}
+                  disabled={scanningMedia || !nfcOk}
+                  className="h-9 px-3 rounded-lg border border-emerald-300 bg-white text-[12px] font-semibold text-emerald-900 disabled:opacity-50"
+                >
+                  {scanningMedia ? 'Lendo…' : 'Ler mídia'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setPdvLookup(null); setPdvUid(''); }}
+                  className="h-9 px-3 rounded-lg border border-emerald-300 bg-white text-[12px] font-semibold text-emerald-900"
+                >
+                  Trocar
+                </button>
+              </div>
             </div>
+            {mediaReadLookup?.card && (
+              <div className="mt-2 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Mídia lida</p>
+                <p className="mt-1 text-[13px] font-semibold text-slate-900">{mediaReadLookup.card.guestName || 'Sem hóspede vinculado'}</p>
+                <p className="text-[11px] text-slate-500">UH {mediaReadLookup.card.roomNumber || '—'} · {mediaReadLookup.card.accountId ? `Conta ${mediaReadLookup.card.accountId}` : 'Sem conta vinculada'} · UID {mediaReadLookup.card.uidHex}</p>
+              </div>
+            )}
           )}
 
           <div>

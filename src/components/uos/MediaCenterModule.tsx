@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   CreditCard, Ban, Plus, ShoppingBag, History, RefreshCw, Trash2,
-  CheckCircle2, Nfc, Loader2, Minus, ArrowRight, Search, X,
+  CheckCircle2, Nfc, Loader2, Minus, ArrowRight, Search, X, Link2, Unlink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePms } from '@/lib/pms-store';
@@ -18,13 +18,13 @@ import { POS_POINTS, type PosPointId, listProducts, getPosName } from '@/lib/pos
 
 import { Button } from '@/components/ui/button';
 
-type Tab = 'venda' | 'cartoes' | 'movimentos';
+type Tab = 'venda' | 'cartoes' | 'vincular' | 'movimentos';
 
 function webNfcSupported() {
   return typeof window !== 'undefined' && 'NDEFReader' in window;
 }
 
-async function scanNfcOnce(timeoutMs = 25000): Promise<{ uidHex: string }> {
+export async function scanNfcOnce(timeoutMs = 25000): Promise<{ uidHex: string }> {
   if (!webNfcSupported()) throw new Error('NFC do navegador não disponível. Use Chrome no Android (HTTPS).');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const NDEFReaderCtor = (window as any).NDEFReader;
@@ -116,6 +116,61 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
       toast.error(e instanceof Error ? e.message : 'Falha NFC');
     } finally {
       setScanningReg(false);
+    }
+  };
+
+  const [linkAccountId, setLinkAccountId] = useState('');
+  const [scanningLink, setScanningLink] = useState(false);
+
+  const openAccounts = useMemo(
+    () => accounts.filter((a) => a.status === 'aberta'),
+    [accounts, tick],
+  );
+  const linkAccount = openAccounts.find((a) => a.id === linkAccountId) || null;
+  const linkedCardsForAccount = useMemo(
+    () => (linkAccount ? cards.filter((c) => c.accountId === linkAccount.id && c.status === 'ativo') : []),
+    [cards, linkAccount],
+  );
+
+  const scanToLink = async () => {
+    if (!linkAccount) {
+      toast.error('Selecione a conta do hóspede primeiro');
+      return;
+    }
+    setScanningLink(true);
+    try {
+      const { uidHex } = await scanNfcOnce();
+      const existing = lookupByUid(uidHex);
+      let cardId = existing.card?.id;
+      if (existing.card && existing.card.accountId && existing.card.accountId !== linkAccount.id) {
+        toast.error(`Esta mídia já está vinculada a ${existing.card.guestName || 'outra conta'}. Desvincule primeiro.`);
+        return;
+      }
+      if (existing.card && existing.card.accountId === linkAccount.id) {
+        toast('Esta mídia já está vinculada a esta conta');
+        return;
+      }
+      if (!cardId) {
+        const reg = registerCard({ uidHex, hotelId: hotel.id });
+        if (!reg.ok) { toast.error(reg.message); return; }
+        cardId = reg.card.id;
+        toast.success(`Mídia ${uidHex} cadastrada automaticamente`);
+      }
+      const res = linkCard({
+        cardId,
+        reservationId: linkAccount.reservationId,
+        guestId: linkAccount.guestId,
+        guestName: linkAccount.guestName,
+        roomNumber: linkAccount.roomNumber,
+        accountId: linkAccount.id,
+      });
+      if (!res.ok) { toast.error(res.message); return; }
+      toast.success(`Mídia vinculada a ${linkAccount.guestName}`);
+      refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Falha NFC');
+    } finally {
+      setScanningLink(false);
     }
   };
 
@@ -305,6 +360,7 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
       ? [{ id: 'venda', label: 'Venda', icon: ShoppingBag }]
       : [
           { id: 'cartoes', label: 'Mídias', icon: CreditCard },
+          { id: 'vincular', label: 'Vincular', icon: Link2 },
           { id: 'movimentos', label: 'Movimentos', icon: History },
         ];
 
@@ -545,6 +601,84 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
               cards.map((c) => <CardRow key={c.id} card={c} onChange={refresh} />)
             )}
           </ul>
+        </div>
+      )}
+
+      {tab === 'vincular' && (
+        <div className="space-y-3 max-w-2xl">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+            <p className="text-[13px] font-semibold text-slate-800">Vincular mídia à conta do hóspede</p>
+            <label className="block space-y-1">
+              <span className="text-[11px] font-semibold uppercase text-slate-400">Conta do hóspede</span>
+              <select
+                value={linkAccountId}
+                onChange={(e) => setLinkAccountId(e.target.value)}
+                className="w-full h-11 rounded-lg border border-slate-200 bg-white px-3 text-[13px] outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="">Selecione a conta</option>
+                {openAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.guestName}{a.roomNumber ? ` · UH ${a.roomNumber}` : ''} · {a.id}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              onClick={scanToLink}
+              disabled={scanningLink || !nfcOk || !linkAccount}
+              className={cn(
+                'w-full min-h-[96px] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all disabled:opacity-50',
+                scanningLink
+                  ? 'border-blue-400 bg-blue-50 text-blue-800'
+                  : 'border-slate-300 bg-white hover:border-blue-400 hover:bg-blue-50/40 text-slate-800',
+              )}
+            >
+              {scanningLink ? (
+                <>
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                  <span className="text-[14px] font-semibold">Aproxime a mídia…</span>
+                </>
+              ) : (
+                <>
+                  <Nfc className="w-8 h-8 text-slate-500" />
+                  <span className="text-[14px] font-semibold">
+                    {nfcOk ? 'Aproximar mídia para vincular' : 'NFC indisponível neste aparelho'}
+                  </span>
+                  <span className="text-[11px] text-slate-400">Se a mídia for nova, ela é cadastrada automaticamente</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {linkAccount && (
+            <div className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
+              <p className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Mídias vinculadas a {linkAccount.guestName}
+              </p>
+              {linkedCardsForAccount.length === 0 ? (
+                <p className="px-4 py-6 text-center text-[13px] text-slate-400">Nenhuma mídia vinculada</p>
+              ) : (
+                linkedCardsForAccount.map((c) => (
+                  <div key={c.id} className="px-4 py-3 flex items-center gap-3 text-[13px]">
+                    <CreditCard className="w-4 h-4 text-slate-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-slate-900 font-mono">{c.uidHex}{c.label ? ` · ${c.label}` : ''}</p>
+                      <p className="text-[11px] text-slate-500">{statusBadge(c.status)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { unlinkCard(c.id); refresh(); toast.success('Mídia desvinculada'); }}
+                      className="h-8 px-3 rounded-lg border border-slate-200 text-[12px] font-semibold inline-flex items-center gap-1.5 hover:bg-slate-50"
+                    >
+                      <Unlink className="w-3.5 h-3.5" /> Desvincular
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       )}
 

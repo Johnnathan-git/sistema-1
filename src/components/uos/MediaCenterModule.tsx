@@ -132,7 +132,9 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
   const [posId, setPosId] = useState<PosPointId>('bar-central');
   const [pdvUid, setPdvUid] = useState('');
   const [pdvLookup, setPdvLookup] = useState<ReturnType<typeof lookupByUid> | null>(null);
+  const [mediaReadLookup, setMediaReadLookup] = useState<ReturnType<typeof lookupByUid> | null>(null);
   const [scanningPdv, setScanningPdv] = useState(false);
+  const [scanningMedia, setScanningMedia] = useState(false);
   const [qtyMap, setQtyMap] = useState<Record<string, number>>({});
   const [launching, setLaunching] = useState(false);
   const [productQuery, setProductQuery] = useState('');
@@ -213,6 +215,21 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
     }
   };
 
+  const scanMedia = async () => {
+    setScanningMedia(true);
+    setMediaReadLookup(null);
+    try {
+      const { uidHex } = await scanNfcOnce();
+      const result = lookupByUid(uidHex);
+      setMediaReadLookup(result);
+      if (!result.card) toast.error(result.message);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Falha NFC');
+    } finally {
+      setScanningMedia(false);
+    }
+  };
+
   const launchOrder = () => {
     if (!pdvLookup?.canCharge || !pdvLookup.card) {
       toast.error('Aproxime a pulseira do hóspede primeiro');
@@ -231,25 +248,8 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
     const posLabel = getPosName(posId);
     setLaunching(true);
 
-    // NFC log per item (best-effort)
-    for (const { product, quantity } of cartItems) {
-      const amount = product.price * quantity;
-      const description = quantity > 1 ? `${product.name} x${quantity}` : product.name;
-      const nfcResult = registerCharge({
-        uidHex: pdvUid || card.uidHex,
-        description: `${description} · ${posLabel}`,
-        amount,
-        operator: session?.displayName || 'Operador',
-        source: 'pdv_rapido',
-      });
-      if (!nfcResult.ok) {
-        toast.error(nfcResult.message);
-        setLaunching(false);
-        return;
-      }
-    }
-
-    // Batch launch on account (avoids race / "Conta não encontrada" on multi-item)
+    // Primeiro confirma o lançamento na conta. O histórico da mídia só é criado
+    // depois que a conta aceita todos os itens, evitando venda "solta" na mídia.
     const batch = cartItems.map(({ product, quantity }) => {
       const description = quantity > 1 ? `${product.name} x${quantity}` : product.name;
       return {
@@ -265,17 +265,23 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
       return;
     }
 
-    if (card.accountId !== accountId && card.id) {
-      try {
-        linkCard({
-          cardId: card.id,
-          reservationId: card.reservationId,
-          guestId: card.guestId,
-          guestName: card.guestName || '',
-          roomNumber: card.roomNumber,
-          accountId,
-        });
-      } catch { /* ignore */ }
+    // Só registra os movimentos depois da confirmação da conta.
+    for (const { product, quantity } of cartItems) {
+      const amount = product.price * quantity;
+      const description = quantity > 1 ? `${product.name} x${quantity}` : product.name;
+      const nfcResult = registerCharge({
+        uidHex: pdvUid || card.uidHex,
+        description: `${description} · ${posLabel}`,
+        amount,
+        operator: session?.displayName || 'Operador',
+        source: 'pdv_rapido',
+      });
+      if (!nfcResult.ok) {
+        toast.error(`Conta atualizada, mas o histórico da mídia não pôde ser registrado: ${nfcResult.message}`);
+        setLaunching(false);
+        refresh();
+        return;
+      }
     }
 
     toast.success(`${cartQuantity} ${cartQuantity === 1 ? 'item lançado' : 'itens lançados'} · ${formatBRL(cartTotal)} · ${card.guestName}`);
@@ -326,30 +332,47 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
           </div>
 
           {!canSell ? (
-            <button type="button" onClick={scanPdv} disabled={scanningPdv || !nfcOk}
-              className={cn(
-                'w-full min-h-[120px] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all',
-                scanningPdv
-                  ? 'border-blue-400 bg-blue-50 text-blue-800'
-                  : nfcOk
-                    ? 'border-slate-300 bg-white hover:border-blue-400 hover:bg-blue-50/40 text-slate-800'
-                    : 'border-slate-200 bg-slate-50 text-slate-400',
-              )}>
-              {scanningPdv ? (
-                <>
-                  <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
-                  <span className="text-[15px] font-semibold">Aproxime a pulseira…</span>
-                </>
-              ) : (
-                <>
-                  <Nfc className="w-10 h-10 text-slate-500" />
-                  <span className="text-[15px] font-semibold">
-                    {nfcOk ? 'Aproxime a pulseira do hóspede' : 'NFC indisponível neste aparelho'}
-                  </span>
-                   <span className="text-[12px] text-slate-400">Identifica o hóspede e abre uma nova comanda</span>
-                </>
+            <div className="space-y-2">
+              <button type="button" onClick={scanPdv} disabled={scanningPdv || !nfcOk}
+                className={cn(
+                  'w-full min-h-[120px] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all',
+                  scanningPdv
+                    ? 'border-blue-400 bg-blue-50 text-blue-800'
+                    : nfcOk
+                      ? 'border-slate-300 bg-white hover:border-blue-400 hover:bg-blue-50/40 text-slate-800'
+                      : 'border-slate-200 bg-slate-50 text-slate-400',
+                )}>
+                {scanningPdv ? (
+                  <>
+                    <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+                    <span className="text-[15px] font-semibold">Aproxime a pulseira…</span>
+                  </>
+                ) : (
+                  <>
+                    <Nfc className="w-10 h-10 text-slate-500" />
+                    <span className="text-[15px] font-semibold">
+                      {nfcOk ? 'Aproxime a pulseira do hóspede' : 'NFC indisponível neste aparelho'}
+                    </span>
+                    <span className="text-[12px] text-slate-400">Identifica o hóspede e abre uma nova comanda</span>
+                  </>
+                )}
+              </button>
+              <button type="button" onClick={scanMedia} disabled={scanningMedia || !nfcOk}
+                className="w-full h-10 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-2 disabled:opacity-50">
+                {scanningMedia ? <Loader2 className="w-4 h-4 animate-spin" /> : <Nfc className="w-4 h-4" />}
+                Ler mídia
+              </button>
+              {mediaReadLookup?.card && (
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Mídia identificada</p>
+                  <p className="mt-1 text-[14px] font-semibold text-slate-900">{mediaReadLookup.card.guestName || 'Sem hóspede vinculado'}</p>
+                  <p className="text-[12px] text-slate-500">
+                    UH {mediaReadLookup.card.roomNumber || '—'} · {mediaReadLookup.card.accountId ? `Conta ${mediaReadLookup.card.accountId}` : 'Sem conta vinculada'}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-400">UID: {mediaReadLookup.card.uidHex}</p>
+                </div>
               )}
-            </button>
+            </div>
           ) : (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-center gap-3">
               <div className="h-11 w-11 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">

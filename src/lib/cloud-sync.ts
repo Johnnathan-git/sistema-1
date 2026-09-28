@@ -37,7 +37,17 @@ function push(key: string, value: string | null) {
 }
 
 function applyRemote(key: string, value: string | null) {
-  if (!shouldSync(key) || timers.has(key)) return;
+  if (!shouldSync(key)) return;
+
+  // Uma atualização remota é a fonte mais recente disponível.
+  // Cancelamos qualquer push local pendente para não reenviar estado antigo
+  // e sobrescrever uma alteração feita em outro aparelho.
+  const pending = timers.get(key);
+  if (pending) {
+    clearTimeout(pending);
+    timers.delete(key);
+  }
+
   const current = localStorage.getItem(key);
   if (current === value) return;
   if (value === null) origRemoveItem?.(key);

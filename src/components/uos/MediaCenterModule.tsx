@@ -77,7 +77,7 @@ function formatWhen(iso?: string) {
 }
 
 export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'venda' }) {
-  const { hotel, reservations, accounts, addCharge, addCharges } = usePms();
+  const { hotel, accounts, addCharge, addCharges } = usePms();
   const session = getSession();
   const [tab, setTab] = useState<Tab>(mode === 'venda' ? 'venda' : 'cartoes');
   // Force tab when mode changes

@@ -11,7 +11,7 @@ import { getSession } from '@/lib/auth-store';
 import { formatBRL } from '@/lib/pms-types';
 import {
   type NfcCard, type NfcCardStatus, NFC_STATUS_LABEL,
-  listCards, registerCard, linkCard, unlinkCard, blockCard, deleteCard,
+  listCards, registerCard, unlinkCard, blockCard, deleteCard,
   lookupByUid, registerCharge, listChargeLogs, normalizeUidHex, updateCard,
 } from '@/lib/nfc-cards';
 import { POS_POINTS, type PosPointId, listProducts, getPosName } from '@/lib/pos-catalog';

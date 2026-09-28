@@ -172,21 +172,16 @@ export function linkCard(input: {
   if (c.status === 'bloqueado' || c.status === 'perdido') {
     return { ok: false, message: 'Cartão bloqueado — desbloqueie antes de vincular' };
   }
-  if (input.reservationId) {
-    for (let j = 0; j < cards.length; j++) {
-      if (cards[j].reservationId === input.reservationId && cards[j].id !== input.cardId) {
-        cards[j] = {
-          ...cards[j],
-          status: 'disponivel',
-          reservationId: undefined,
-          guestId: undefined,
-          guestName: undefined,
-          roomNumber: undefined,
-          accountId: undefined,
-          linkedAt: undefined,
-          updatedAt: new Date().toISOString(),
-        };
-      }
+  if (c.status === 'ativo') {
+    const sameOwner =
+      c.accountId === input.accountId &&
+      c.reservationId === input.reservationId &&
+      c.guestId === input.guestId;
+    if (!sameOwner) {
+      return {
+        ok: false,
+        message: 'Esta mídia já está vinculada a outro hóspede. Desvincule-a antes de vincular novamente.',
+      };
     }
   }
   cards[i] = {

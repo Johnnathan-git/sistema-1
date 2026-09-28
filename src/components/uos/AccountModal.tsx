@@ -84,7 +84,9 @@ export function AccountModal({
         amount: p.amount,
       });
     }
-    return items.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+    // Mantém a ordem cronológica: os lançamentos mais recentes ficam no final.
+    // Quando dois itens têm o mesmo instante, preserva a ordem em que foram adicionados.
+    return items.sort((a, b) => a.date.localeCompare(b.date));
   }, [account]);
 
   const [payAmount, setPayAmount] = useState('');

@@ -35,6 +35,7 @@ export function AccountModal({
   const { hotel, accounts, reservations, addPayment, addCharge, createCompanionAccount } = usePms();
   const [cardTick, setCardTick] = useState(0);
   const [scanningCard, setScanningCard] = useState(false);
+  const [addingCompanionCard, setAddingCompanionCard] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState(accountId || '');
   const [companionPickerOpen, setCompanionPickerOpen] = useState(false);
   useEffect(() => onCloudSync(() => setCardTick((value) => value + 1)), []);
@@ -237,6 +238,7 @@ export function AccountModal({
       toast.error(e instanceof Error ? e.message : 'Falha NFC');
     } finally {
       setScanningCard(false);
+      setAddingCompanionCard(false);
     }
   };
 
@@ -253,6 +255,7 @@ export function AccountModal({
     }
 
     setSelectedAccountId(created.accountId);
+    setAddingCompanionCard(true);
     setScanningCard(true);
     try {
       const { uidHex } = await scanNfcOnce();
@@ -321,7 +324,7 @@ export function AccountModal({
                 type="button"
                 variant="outline"
                 size="icon"
-                title="Adicionar conta de acompanhante"
+                title="Adicionar nova conta"
                 onClick={() => {
                   if (!availableCompanions.length) {
                     toast.info(
@@ -435,7 +438,7 @@ export function AccountModal({
                 </div>
               </div>
               <Button type="button" onClick={attachCard} disabled={scanningCard}>
-                <Nfc /> {scanningCard ? 'Aproxime a mídia…' : 'Aproximar mídia para vincular'}
+                <Nfc /> {scanningCard ? (addingCompanionCard ? 'Aproxime a nova mídia…' : 'Aproxime a mídia…') : 'Aproximar mídia para vincular'}
               </Button>
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">

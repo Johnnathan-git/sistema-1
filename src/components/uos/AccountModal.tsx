@@ -4,6 +4,7 @@ import {
   accountBalance,
   formatBRL,
   formatDateBR,
+  formatDateTimeBR,
   type Account,
 } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
@@ -305,7 +306,7 @@ export function AccountModal({
                 lines.map((l) => (
                   <tr key={l.id} className="hover:bg-slate-50/80">
                     <td className="px-5 py-2.5 whitespace-nowrap text-slate-500">
-                      {formatDateBR(l.date)}
+                      {formatDateTimeBR(l.date)}
                     </td>
                     <td className="px-3 py-2.5">
                       <p className="font-medium text-slate-800">{l.label}</p>

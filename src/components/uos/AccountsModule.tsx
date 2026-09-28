@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { usePms } from '@/lib/pms-store';
-import { accountBalance, formatBRL, formatDateBR, type Account } from '@/lib/pms-types';
+import { accountBalance, formatBRL, formatDateBR, formatDateTimeBR, type Account } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
 import { Plus, Receipt, Search, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
@@ -304,7 +304,7 @@ function Ledger({ account }: { account: Account }) {
               <li key={c.id} className="flex justify-between text-sm gap-2">
                 <span className="text-slate-600">
                   {c.description}
-                  <span className="block text-[11px] text-slate-400">{formatDateBR(c.date)}</span>
+                  <span className="block text-[11px] text-slate-400">{formatDateTimeBR(c.date)}</span>
                 </span>
                 <span className="font-medium tabular-nums">{formatBRL(c.amount)}</span>
               </li>
@@ -323,7 +323,7 @@ function Ledger({ account }: { account: Account }) {
               <li key={p.id} className="flex justify-between text-sm gap-2">
                 <span className="text-slate-600">
                   {p.method}
-                  <span className="block text-[11px] text-slate-400">{formatDateBR(p.date)}</span>
+                  <span className="block text-[11px] text-slate-400">{formatDateTimeBR(p.date)}</span>
                 </span>
                 <span className="font-medium text-emerald-600 tabular-nums">
                   {formatBRL(p.amount)}

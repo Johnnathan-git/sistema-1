@@ -277,7 +277,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
           category: category || 'consumo',
         };
         result = { ok: true, message: 'Lançamento adicionado à conta' };
-        return prev.map((a) =>
+        const next = prev.map((a) =>
           a.id === accountId
             ? {
                 ...a,
@@ -286,6 +286,8 @@ export function PmsProvider({ children }: { children: ReactNode }) {
               }
             : a
         );
+        saveAccounts(next);
+        return next;
       });
       return result;
     },
@@ -328,7 +330,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
               ? 'Lançamento adicionado à conta'
               : `${newCharges.length} lançamentos adicionados à conta`,
         };
-        return prev.map((a) =>
+        const next = prev.map((a) =>
           a.id === accountId
             ? {
                 ...a,
@@ -337,6 +339,8 @@ export function PmsProvider({ children }: { children: ReactNode }) {
               }
             : a
         );
+        saveAccounts(next);
+        return next;
       });
       return result;
     },

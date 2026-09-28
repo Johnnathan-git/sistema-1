@@ -198,6 +198,12 @@ export function AccountModal({
 
   const attachCard = async () => {
     if (!account || !res) return;
+
+    if (typeof window === 'undefined' || !('NDEFReader' in window)) {
+      toast.info('Este computador não possui leitura NFC. Abra esta conta em um dispositivo compatível para vincular a mídia.');
+      return;
+    }
+
     setScanningCard(true);
     try {
       const { uidHex } = await scanNfcOnce();

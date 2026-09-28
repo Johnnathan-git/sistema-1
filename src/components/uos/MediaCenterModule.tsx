@@ -347,6 +347,7 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
               )}
             </div>
           ) : (
+            <div>
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-center gap-3">
               <div className="h-11 w-11 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
                 <CheckCircle2 className="w-6 h-6" />
@@ -385,6 +386,7 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
                 <p className="text-[11px] text-slate-500">UH {mediaReadLookup.card.roomNumber || '—'} · {mediaReadLookup.card.accountId ? `Conta ${mediaReadLookup.card.accountId}` : 'Sem conta vinculada'} · UID {mediaReadLookup.card.uidHex}</p>
               </div>
             )}
+            </div>
           )}
 
           <div>

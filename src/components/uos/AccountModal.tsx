@@ -303,6 +303,7 @@ export function AccountModal({
       toast.error(e instanceof Error ? e.message : 'Falha NFC');
     } finally {
       setScanningCard(false);
+      setAddingCompanionCard(false);
     }
   };
 

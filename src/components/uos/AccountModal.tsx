@@ -35,7 +35,6 @@ export function AccountModal({
   const { hotel, accounts, reservations, addPayment, addCharge, createCompanionAccount } = usePms();
   const [cardTick, setCardTick] = useState(0);
   const [scanningCard, setScanningCard] = useState(false);
-  const [addingCompanionCard, setAddingCompanionCard] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState(accountId || '');
   const [companionPickerOpen, setCompanionPickerOpen] = useState(false);
   useEffect(() => onCloudSync(() => setCardTick((value) => value + 1)), []);
@@ -238,15 +237,13 @@ export function AccountModal({
       toast.error(e instanceof Error ? e.message : 'Falha NFC');
     } finally {
       setScanningCard(false);
-      setAddingCompanionCard(false);
     }
   };
 
-  const handleAddCompanion = async (companionId: string) => {
+  const handleAddCompanion = (companionId: string) => {
     if (!res) return;
     const companion = (res.companions || []).find((c) => c.id === companionId);
     if (!companion) return;
-    setCompanionPickerOpen(false);
 
     const created = createCompanionAccount(res.id, companionId);
     if (!created.ok || !created.accountId) {
@@ -254,57 +251,9 @@ export function AccountModal({
       return;
     }
 
+    setCompanionPickerOpen(false);
     setSelectedAccountId(created.accountId);
-    setAddingCompanionCard(true);
-    setScanningCard(true);
-    try {
-      const { uidHex } = await scanNfcOnce();
-      const existing = lookupByUid(uidHex);
-      let cardId = existing.card?.id;
-
-      if (existing.card?.accountId && existing.card.accountId !== created.accountId) {
-        toast.error(
-          `Esta mídia já está vinculada a ${existing.card.guestName || 'outra conta'}. Desvincule primeiro.`,
-        );
-        return;
-      }
-
-      if (existing.card?.accountId === created.accountId) {
-        toast('Esta mídia já está vinculada a esta conta');
-        return;
-      }
-
-      if (!cardId) {
-        const reg = registerCard({ uidHex, hotelId: hotel.id });
-        if (!reg.ok) {
-          toast.error(reg.message);
-          return;
-        }
-        cardId = reg.card.id;
-      }
-
-      const linked = linkCard({
-        cardId,
-        reservationId: res.id,
-        guestId: companion.id,
-        guestName: companion.name,
-        roomNumber: res.roomNumber,
-        accountId: created.accountId,
-      });
-
-      if (!linked.ok) {
-        toast.error(linked.message);
-        return;
-      }
-
-      setCardTick((value) => value + 1);
-      toast.success(`Conta de ${companion.name} criada e mídia vinculada`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Falha NFC');
-    } finally {
-      setScanningCard(false);
-      setAddingCompanionCard(false);
-    }
+    toast.success(`Conta de ${companion.name} criada`);
   };
 
   return (
@@ -368,7 +317,9 @@ export function AccountModal({
                   title={person.name}
                 >
                   <span className="block truncate">{person.name}</span>
-                  <span className="block text-[9px] font-normal text-slate-400">{person.accountId}</span>
+                  <span className="block text-[9px] font-normal text-slate-400">
+                    {person.titular ? 'Titular' : `Acpt ${(res?.companions || []).findIndex((c) => c.id === person.companionId) + 1}`}
+                  </span>
                 </button>
               ))}
             </div>
@@ -610,12 +561,11 @@ export function AccountModal({
                   <button
                     key={companion.id}
                     type="button"
-                    disabled={scanningCard}
-                    onClick={() => void handleAddCompanion(companion.id)}
+                    onClick={() => handleAddCompanion(companion.id)}
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-left hover:bg-slate-50 disabled:opacity-60"
                   >
                     <p className="text-[13px] font-semibold text-slate-800">{companion.name}</p>
-                    <p className="text-[10px] text-slate-400">Criar conta e aproximar nova mídia</p>
+                    <p className="text-[10px] text-slate-400">Criar conta do acompanhante</p>
                   </button>
                 ))
               )}

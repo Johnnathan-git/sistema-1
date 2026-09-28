@@ -32,23 +32,65 @@ export function AccountModal({
   reservationId?: string;
   onClose: () => void;
 }) {
-  const { hotel, accounts, reservations, addPayment, addCharge } = usePms();
+  const { hotel, accounts, reservations, addPayment, addCharge, createCompanionAccount } = usePms();
   const [cardTick, setCardTick] = useState(0);
   const [scanningCard, setScanningCard] = useState(false);
+  const [selectedAccountId, setSelectedAccountId] = useState(accountId || '');
+  const [companionPickerOpen, setCompanionPickerOpen] = useState(false);
   useEffect(() => onCloudSync(() => setCardTick((value) => value + 1)), []);
 
-  const account = useMemo(() => {
+  const baseAccount = useMemo(() => {
     if (accountId) return accounts.find((a) => a.id === accountId);
-    if (reservationId)
-      return accounts.find((a) => a.reservationId === reservationId);
+    if (reservationId) return accounts.find((a) => a.reservationId === reservationId && a.type === 'hospede');
     return undefined;
   }, [accounts, accountId, reservationId]);
 
-  const res = account?.reservationId
-    ? reservations.find((r) => r.id === account.reservationId)
+  const res = baseAccount?.reservationId
+    ? reservations.find((r) => r.id === baseAccount.reservationId)
     : reservationId
       ? reservations.find((r) => r.id === reservationId)
       : undefined;
+
+  const account = useMemo(
+    () => accounts.find((a) => a.id === selectedAccountId) || baseAccount,
+    [accounts, selectedAccountId, baseAccount],
+  );
+
+  useEffect(() => {
+    if (accountId) {
+      setSelectedAccountId(accountId);
+      return;
+    }
+    if (!selectedAccountId && baseAccount) setSelectedAccountId(baseAccount.id);
+  }, [accountId, baseAccount, selectedAccountId]);
+
+  const reservationPeople = useMemo(() => {
+    if (!res) return [];
+    const titular = accounts.find(
+      (a) => a.id === res.accountId || (a.reservationId === res.id && a.guestId === res.guestId),
+    );
+    const people: { accountId: string; name: string; titular: boolean; companionId?: string }[] = [];
+    if (titular) people.push({ accountId: titular.id, name: titular.guestName, titular: true });
+    for (const companion of res.companions || []) {
+      if (!companion.accountId) continue;
+      const companionAccount = accounts.find((a) => a.id === companion.accountId);
+      if (companionAccount) {
+        people.push({
+          accountId: companionAccount.id,
+          name: companionAccount.guestName,
+          titular: false,
+          companionId: companion.id,
+        });
+      }
+    }
+    return people;
+  }, [accounts, res]);
+
+  const availableCompanions = useMemo(
+    () => (res?.companions || []).filter((companion) => !companion.accountId && companion.name.trim()),
+    [res],
+  );
+
   const cards = useMemo(() => listCards(hotel.id), [hotel.id, cardTick]);
   const linkedCards = cards.filter(
     (card) => card.accountId === account?.id && card.status === 'ativo',
@@ -180,8 +222,8 @@ export function AccountModal({
       const result = linkCard({
         cardId,
         reservationId: res.id,
-        guestId: res.guestId,
-        guestName: res.guestName,
+        guestId: account.guestId || res.guestId,
+        guestName: account.guestName,
         roomNumber: res.roomNumber,
         accountId: account.id,
       });
@@ -198,30 +240,154 @@ export function AccountModal({
     }
   };
 
+  const handleAddCompanion = async (companionId: string) => {
+    if (!res) return;
+    const companion = (res.companions || []).find((c) => c.id === companionId);
+    if (!companion) return;
+    setCompanionPickerOpen(false);
+
+    const created = createCompanionAccount(res.id, companionId);
+    if (!created.ok || !created.accountId) {
+      toast.error(created.message);
+      return;
+    }
+
+    setSelectedAccountId(created.accountId);
+    setScanningCard(true);
+    try {
+      const { uidHex } = await scanNfcOnce();
+      const existing = lookupByUid(uidHex);
+      let cardId = existing.card?.id;
+
+      if (existing.card?.accountId && existing.card.accountId !== created.accountId) {
+        toast.error(
+          `Esta mídia já está vinculada a ${existing.card.guestName || 'outra conta'}. Desvincule primeiro.`,
+        );
+        return;
+      }
+
+      if (existing.card?.accountId === created.accountId) {
+        toast('Esta mídia já está vinculada a esta conta');
+        return;
+      }
+
+      if (!cardId) {
+        const reg = registerCard({ uidHex, hotelId: hotel.id });
+        if (!reg.ok) {
+          toast.error(reg.message);
+          return;
+        }
+        cardId = reg.card.id;
+      }
+
+      const linked = linkCard({
+        cardId,
+        reservationId: res.id,
+        guestId: companion.id,
+        guestName: companion.name,
+        roomNumber: res.roomNumber,
+        accountId: created.accountId,
+      });
+
+      if (!linked.ok) {
+        toast.error(linked.message);
+        return;
+      }
+
+      setCardTick((value) => value + 1);
+      toast.success(`Conta de ${companion.name} criada e mídia vinculada`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Falha NFC');
+    } finally {
+      setScanningCard(false);
+    }
+  };
+
   return (
     <Overlay onClose={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-200 flex items-start justify-between shrink-0">
-          <div>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
+          <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-indigo-500">
-              Conta do hóspede
+              Conta da reserva
             </p>
-            <h2 className="text-lg font-semibold text-slate-900">{account.guestName}</h2>
             <p className="text-[12px] text-slate-500 mt-0.5">
-              {res ? `${res.code} · ${res.roomNumber || res.roomType}` : account.type} ·{' '}
-              aberta em {formatDateBR(account.openedAt)}
+              {res ? `${res.code} · UH ${res.roomNumber || res.roomType}` : account.type}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {res?.status === 'checkin' && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title="Adicionar conta de acompanhante"
+                onClick={() => {
+                  if (!availableCompanions.length) {
+                    toast.info(
+                      res.companions?.length
+                        ? 'Todos os acompanhantes cadastrados já possuem conta.'
+                        : 'Cadastre primeiro o acompanhante na reserva.',
+                    );
+                    return;
+                  }
+                  setCompanionPickerOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        {/* Resumo */}
+        {res && reservationPeople.length > 0 && (
+          <div className="border-b border-slate-200 bg-white px-3 pt-2">
+            <div className="flex items-end gap-1 overflow-x-auto">
+              {reservationPeople.map((person) => (
+                <button
+                  key={person.accountId}
+                  type="button"
+                  onClick={() => setSelectedAccountId(person.accountId)}
+                  className={cn(
+                    'shrink-0 max-w-[220px] px-4 py-2.5 rounded-t-lg text-[12px] font-semibold border border-b-0 transition-colors',
+                    selectedAccountId === person.accountId
+                      ? 'bg-slate-50 border-slate-200 text-slate-900'
+                      : 'bg-white border-transparent text-slate-500 hover:bg-slate-50',
+                  )}
+                  title={person.name}
+                >
+                  {person.name}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!availableCompanions.length) {
+                    toast.info(
+                      res.companions?.length
+                        ? 'Todos os acompanhantes cadastrados já possuem conta.'
+                        : 'Cadastre primeiro o acompanhante na reserva.',
+                    );
+                    return;
+                  }
+                  setCompanionPickerOpen(true);
+                }}
+                className="shrink-0 px-3 py-2.5 rounded-t-lg text-[12px] font-semibold text-indigo-600 hover:bg-indigo-50"
+              >
+                + Acompanhante
+              </button>
+            </div>
+          </div>
+        )}
+
+
         <div className="px-5 py-3 border-b border-slate-100 grid grid-cols-3 gap-3 shrink-0 bg-slate-50/80">
           <div>
             <p className="text-[10px] uppercase text-slate-400 font-semibold">Lançamentos</p>
@@ -418,6 +584,58 @@ export function AccountModal({
           </div>
         </div>
       </div>
+
+      {companionPickerOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/40"
+            aria-label="Fechar seleção de acompanhante"
+            onClick={() => setCompanionPickerOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-indigo-500">
+                  Nova conta
+                </p>
+                <h3 className="text-base font-semibold text-slate-900">Adicionar acompanhante</h3>
+                <p className="mt-1 text-[12px] text-slate-500">
+                  Selecione um acompanhante já cadastrado na reserva.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCompanionPickerOpen(false)}
+                className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="mt-4 space-y-2">
+              {availableCompanions.length === 0 ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-[12px] text-amber-800">
+                  Não há acompanhante disponível. Cadastre o acompanhante primeiro na reserva.
+                </div>
+              ) : (
+                availableCompanions.map((companion) => (
+                  <button
+                    key={companion.id}
+                    type="button"
+                    disabled={scanningCard}
+                    onClick={() => void handleAddCompanion(companion.id)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-left hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    <p className="text-[13px] font-semibold text-slate-800">{companion.name}</p>
+                    <p className="text-[10px] text-slate-400">Criar conta e aproximar nova mídia</p>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </Overlay>
   );
 }

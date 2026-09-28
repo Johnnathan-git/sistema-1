@@ -13,6 +13,7 @@ let readyPromise: Promise<void> | null = null;
 let origSetItem: ((k: string, v: string) => void) | null = null;
 let origRemoveItem: ((k: string) => void) | null = null;
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
+const localWriteAt = new Map<string, number>();
 
 function shouldSync(key: string) {
   return key.startsWith(PREFIX) && !LOCAL_ONLY.has(key);
@@ -21,32 +22,41 @@ function shouldSync(key: string) {
 function push(key: string, value: string | null) {
   const t = timers.get(key);
   if (t) clearTimeout(t);
+  const writeAt = Date.now();
+  localWriteAt.set(key, writeAt);
   timers.set(
     key,
     setTimeout(async () => {
       timers.delete(key);
+      const updatedAt = new Date(writeAt).toISOString();
       if (value === null) {
         await supabase.from('app_state').delete().eq('key', key);
       } else {
         await supabase
           .from('app_state')
-          .upsert({ key, value, updated_at: new Date().toISOString() });
+          .upsert({ key, value, updated_at: updatedAt });
       }
     }, 300),
   );
 }
 
-function applyRemote(key: string, value: string | null) {
+function applyRemote(key: string, value: string | null, remoteUpdatedAt?: string) {
   if (!shouldSync(key)) return;
 
-  // Uma atualização remota é a fonte mais recente disponível.
-  // Cancelamos qualquer push local pendente para não reenviar estado antigo
-  // e sobrescrever uma alteração feita em outro aparelho.
+  const remoteTime = remoteUpdatedAt ? Date.parse(remoteUpdatedAt) : NaN;
+  const localTime = localWriteAt.get(key) || 0;
+
+  // Nunca deixa uma versão remota mais antiga sobrescrever uma alteração
+  // local que acabou de ser feita neste aparelho.
+  if (Number.isFinite(remoteTime) && remoteTime < localTime) return;
+
   const pending = timers.get(key);
   if (pending) {
     clearTimeout(pending);
     timers.delete(key);
   }
+
+  if (Number.isFinite(remoteTime)) localWriteAt.set(key, remoteTime);
 
   const current = localStorage.getItem(key);
   if (current === value) return;
@@ -101,7 +111,7 @@ export function startCloudSync(): Promise<void> {
           if (k) applyRemote(k, null);
         } else {
           const row = payload.new as { key: string; value: string };
-          applyRemote(row.key, row.value);
+          applyRemote(row.key, row.value, row.updated_at);
         }
       })
       .subscribe();

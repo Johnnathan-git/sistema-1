@@ -161,29 +161,12 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
   const cartTotal = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
   const resolveAccountId = (card: NonNullable<ReturnType<typeof lookupByUid>['card']>): string | null => {
-    if (card.accountId) {
-      const byId = accounts.find((a) => a.id === card.accountId && a.status !== 'quitada');
-      if (byId) return byId.id;
-    }
-    if (card.reservationId) {
-      const id = resolveAccountForReservation(card.reservationId);
-      if (id) return id;
-    }
-    if (card.guestName) {
-      const byGuest = accounts.find(
-        (a) => a.status !== 'quitada' && a.guestName === card.guestName,
-      );
-      if (byGuest) return byGuest.id;
-    }
-    if (card.roomNumber) {
-      const byRoom = accounts.find((a) => {
-        if (a.status === 'quitada') return false;
-        const resv = reservations.find((r) => r.id === a.reservationId);
-        return resv?.roomNumber === card.roomNumber || a.roomId === card.roomNumber;
-      });
-      if (byRoom) return byRoom.id;
-    }
-    return null;
+    if (!card.accountId) return null;
+    const account = accounts.find((a) => a.id === card.accountId && a.status !== 'quitada');
+    if (!account) return null;
+    if (card.reservationId && account.reservationId !== card.reservationId) return null;
+    if (card.guestId && account.guestId && account.guestId !== card.guestId) return null;
+    return account.id;
   };
 
   const applyUid = (raw: string) => {
@@ -196,7 +179,7 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
     else {
       const accId = resolveAccountId(r.card);
       if (!accId) {
-        toast.error('Pulseira vinculada, mas a conta não foi encontrada. Abra a conta em Recepção → Hospedados.');
+        toast.error('Mídia vinculada sem conta válida. Vincule a mídia diretamente à conta do hóspede antes de vender.');
       } else {
         toast.success(`${r.card.guestName} · UH ${r.card.roomNumber || '—'} · pronto para lançar`);
       }
@@ -238,7 +221,7 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
     const card = pdvLookup.card;
     const accountId = resolveAccountId(card);
     if (!accountId) {
-      toast.error('Conta não encontrada — confira a pulseira em Recepção → Hospedados → Conta');
+      toast.error('Conta não encontrada na mídia — vincule a mídia diretamente à conta do hóspede antes de vender');
       return;
     }
     if (cartItems.length === 0) {

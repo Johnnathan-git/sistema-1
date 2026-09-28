@@ -14,7 +14,6 @@ import {
 import { cn } from '@/lib/utils';
 import { IdCard, LogIn, LogOut, Pencil, Plus, Save, Search, Ticket, Trash2, Wallet, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { listCards, linkCard, unlinkCard } from '@/lib/nfc-cards';
 
 const ROOM_TYPES: RoomType[] = ['Standard', 'Superior', 'Apartamento', 'Chalé Master', 'Bangalô', 'Suite'];
 const inputCls =
@@ -94,7 +93,7 @@ function Overlay({ onClose, children }: { onClose: () => void; children: React.R
 }
 
 export function ReservationModal({ reservationId, onClose }: { reservationId: string; onClose: () => void }) {
-  const { hotel, reservations, rooms, accounts, guests, upsertReservation, checkIn, checkOut, markFnrh, createCompanionAccount } = usePms();
+  const { hotel, reservations, rooms, accounts, guests, upsertReservation, checkIn, checkOut, markFnrh } = usePms();
   const res = reservations.find((r) => r.id === reservationId);
   const [tab, setTab] = useState<ModalTab>('geral');
   const [draft, setDraft] = useState<Reservation | null>(null);
@@ -105,7 +104,6 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
   const [vehiclePlate, setVehiclePlate] = useState('');
   const [companions, setCompanions] = useState<Companion[]>([]);
   const [editingCompanionId, setEditingCompanionId] = useState<string | null>(null);
-  const [cardTick, setCardTick] = useState(0);
   const [titular, setTitular] = useState({ fullName: '', cpf: '', email: '', birthDate: '', cep: '', phone: '' });
   const [dailyRate, setDailyRate] = useState(0);
   const [discountPct, setDiscountPct] = useState(0);
@@ -165,9 +163,6 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
       .slice(0, 15);
   }, [guests, guestQuery]);
 
-  const companionCards = useMemo(() => listCards(hotel.id), [hotel.id, cardTick]);
-  const companionLinkedCard = (accountId?: string) =>
-    accountId ? companionCards.find((card) => card.accountId === accountId && card.status === 'ativo') : undefined;
 
   if (!res || !draft) {
     return (
@@ -265,59 +260,6 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
       toast.success(r.message);
       onClose();
     } else toast.error(r.message);
-  };
-
-  const handleCreateCompanionAccount = (companionId: string) => {
-    const result = createCompanionAccount(draft.id, companionId);
-    if (!result.ok || !result.accountId) {
-      toast.error(result.message);
-      return;
-    }
-    setCompanions((list) =>
-      list.map((c) => (c.id === companionId ? { ...c, accountId: result.accountId } : c))
-    );
-    setDraft((current) =>
-      current
-        ? {
-            ...current,
-            companions: (current.companions || []).map((c) =>
-              c.id === companionId ? { ...c, accountId: result.accountId } : c
-            ),
-          }
-        : current
-    );
-    toast.success(result.message);
-  };
-
-  const handleLinkCompanionCard = (companion: Companion, cardId: string) => {
-    if (!companion.accountId || !draft.roomId) {
-      toast.error('Crie a conta do acompanhante antes de vincular a mídia');
-      return;
-    }
-    const result = linkCard({
-      cardId,
-      reservationId: draft.id,
-      guestId: companion.id,
-      guestName: companion.name,
-      roomNumber: draft.roomNumber,
-      accountId: companion.accountId,
-    });
-    if (!result.ok) {
-      toast.error(result.message);
-      return;
-    }
-    setCardTick((value) => value + 1);
-    toast.success(`Mídia vinculada a ${companion.name}`);
-  };
-
-  const handleUnlinkCompanionCard = (cardId: string) => {
-    const result = unlinkCard(cardId);
-    if (!result.ok) {
-      toast.error(result.message);
-      return;
-    }
-    setCardTick((value) => value + 1);
-    toast.success('Mídia do acompanhante desvinculada');
   };
 
   const pickGuest = (g: { id: string; name: string; document?: string; email?: string; phone?: string }) => {
@@ -725,61 +667,6 @@ export function ReservationModal({ reservationId, onClose }: { reservationId: st
                       Reserva: {draft.adults} adulto(s) · {draft.children} criança(s). Informe todos os acompanhantes (ou ajuste AD/CH) antes do check-in.
                     </p>
 
-                    {isInHouse && companions.length > 0 && (
-                      <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/50 p-3 space-y-2">
-                        <div>
-                          <p className="text-[11px] font-semibold text-slate-700">Contas e mídias dos acompanhantes</p>
-                          <p className="text-[10px] text-slate-500">Cada mídia vinculada ao acompanhante lança o consumo somente na conta dele.</p>
-                        </div>
-                        <div className="space-y-2">
-                          {companions.map((companion) => {
-                            const linked = companionLinkedCard(companion.accountId);
-                            const available = companionCards.filter((card) => card.status === 'disponivel');
-                            return (
-                              <div key={companion.id} className="rounded-lg border border-slate-200 bg-white p-2.5">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-[12px] font-semibold text-slate-800 truncate">{companion.name}</p>
-                                    <p className="text-[10px] text-slate-400">
-                                      {companion.accountId ? `Conta ${companion.accountId}` : 'Sem conta própria'}
-                                    </p>
-                                  </div>
-                                  {!companion.accountId && (
-                                    <button type="button" onClick={() => handleCreateCompanionAccount(companion.id)} className="h-8 px-2.5 rounded-lg bg-blue-600 text-white text-[11px] font-semibold">
-                                      Criar conta
-                                    </button>
-                                  )}
-                                </div>
-                                {companion.accountId && (
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {linked ? (
-                                      <>
-                                        <div className="flex-1 min-w-[180px] h-9 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 flex items-center text-[11px] text-emerald-800">
-                                          Mídia: {linked.label || linked.uidHex} · vinculada
-                                        </div>
-                                        <button type="button" onClick={() => handleUnlinkCompanionCard(linked.id)} className="h-9 px-2.5 rounded-lg border border-slate-200 bg-white text-[11px] font-semibold">
-                                          Desvincular
-                                        </button>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <select defaultValue="" onChange={(e) => { if (e.target.value) handleLinkCompanionCard(companion, e.target.value); }} className="h-9 flex-1 min-w-[180px] rounded-lg border border-slate-200 bg-white px-2 text-[11px]">
-                                          <option value="">Selecione uma mídia disponível</option>
-                                          {available.map((card) => (
-                                            <option key={card.id} value={card.id}>{card.label || card.uidHex}</option>
-                                          ))}
-                                        </select>
-                                        {available.length === 0 && <span className="text-[10px] text-slate-400 self-center">Nenhuma mídia disponível</span>}
-                                      </>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
                   </Section>
                 </div>
 

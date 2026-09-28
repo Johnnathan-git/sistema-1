@@ -61,8 +61,8 @@ export function AccountModal({
       setSelectedAccountId(accountId);
       return;
     }
-    if (!selectedAccountId && baseAccount) setSelectedAccountId(baseAccount.id);
-  }, [accountId, baseAccount, selectedAccountId]);
+    if (baseAccount) setSelectedAccountId(baseAccount.id);
+  }, [accountId, baseAccount?.id]);
 
   const reservationPeople = useMemo(() => {
     if (!res) return [];

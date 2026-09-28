@@ -253,8 +253,32 @@ export function AccountModal({
                 <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Nfc className="h-5 w-5" /></div>
                 <div className="min-w-0">
                   <p className="text-xs font-bold uppercase text-muted-foreground">Pulseira de consumo</p>
-                  {linkedCard ? (
-                    <p className="truncate text-sm font-semibold text-foreground">{linkedCard.label || linkedCard.uidHex} · ativa</p>
+                  {linkedCards.length > 0 ? (
+                    <div className="space-y-1">
+                      {linkedCards.map((card) => (
+                        <div key={card.id} className="flex items-center gap-2">
+                          <p className="truncate text-sm font-semibold text-foreground">
+                            {card.label || card.uidHex} · ativa
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const result = unlinkCard(card.id);
+                              if (!result.ok) {
+                                toast.error(result.message);
+                                return;
+                              }
+                              setCardTick((value) => value + 1);
+                              toast.success('Pulseira desvinculada');
+                            }}
+                          >
+                            <Unlink /> Desvincular
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">Nenhuma pulseira vinculada</p>
                   )}

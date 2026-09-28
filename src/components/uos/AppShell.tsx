@@ -33,10 +33,11 @@ const NAV: {
   items: { id: ModuleId; label: string; icon: typeof DoorOpen }[];
 }[] = [
   {
-    section: 'Recepção',
+    section: 'Operação',
     items: [
       { id: 'recepcao', label: 'Recepção', icon: DoorOpen },
       { id: 'contas', label: 'Contas', icon: Wallet },
+      { id: 'governanca', label: 'Governança', icon: Sparkles },
     ],
   },
   {
@@ -44,16 +45,15 @@ const NAV: {
     items: [{ id: 'reservas', label: 'Reservas', icon: CalendarRange }],
   },
   {
-    section: 'Operações',
+    section: 'A&B',
     items: [
-      { id: 'governanca', label: 'Governança', icon: Sparkles },
       { id: 'cartoes', label: 'Central de Mídias', icon: CreditCard },
-      { id: 'venda', label: 'Venda', icon: ShoppingBag },
+      { id: 'venda', label: 'Vendas', icon: ShoppingBag },
       { id: 'produtos', label: 'Produtos', icon: Package },
     ],
   },
   {
-    section: 'Backoffice',
+    section: 'Financeiro',
     items: [{ id: 'auditoria', label: 'Auditoria Life', icon: ClipboardCheck }],
   },
 ];

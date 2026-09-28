@@ -164,8 +164,9 @@ export function PmsProvider({ children }: { children: ReactNode }) {
   const [rooms, setRooms] = useState(INITIAL_ROOMS);
   const [guests] = useState(INITIAL_GUESTS);
   const [reservations, setReservations] = useState(INITIAL_RESERVATIONS);
-  const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
-  const accountsRef = useRef<Account[]>(INITIAL_ACCOUNTS);
+  const initialAccounts = useMemo(() => loadAccounts(), []);
+  const [accounts, setAccounts] = useState<Account[]>(initialAccounts);
+  const accountsRef = useRef<Account[]>(initialAccounts);
   const [roomLogs, setRoomLogs] = useState<RoomStatusLog[]>([]);
   const [module, setModule] = useState<ModuleId>('recepcao');
   const [cashOpen, setCashOpen] = useState(true);
@@ -799,6 +800,19 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       createCompanionAccount,
     ]
   );
+
+  if (!ready) {
+    return (
+      <PmsContext.Provider value={value}>
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto h-7 w-7 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+            <p className="mt-3 text-sm text-muted-foreground">Sincronizando dados…</p>
+          </div>
+        </div>
+      </PmsContext.Provider>
+    );
+  }
 
   return <PmsContext.Provider value={value}>{children}</PmsContext.Provider>;
 }

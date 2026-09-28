@@ -77,7 +77,7 @@ function formatWhen(iso?: string) {
 }
 
 export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'venda' }) {
-  const { hotel, accounts, addCharges } = usePms();
+  const { hotel, accounts, reservations, addCharges } = usePms();
   const session = getSession();
   const [tab, setTab] = useState<Tab>(mode === 'venda' ? 'venda' : 'cartoes');
   // Force tab when mode changes
@@ -152,36 +152,45 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
   const cartTotal = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
   const resolveAccountId = (card: NonNullable<ReturnType<typeof lookupByUid>['card']>): string | null => {
-    // A conta indicada pela mídia é a primeira referência. Se ela estiver
-    // desatualizada, reconciliamos pelo vínculo forte reserva + hóspede.
-    const direct = card.accountId
-      ? accounts.find((a) => a.id === card.accountId && a.status !== 'quitada')
+    // A conta canônica vem da reserva/hóspede. A mídia nunca deve escolher
+    // uma conta arbitrária da lista.
+    const reservation = card.reservationId
+      ? reservations.find((r) => r.id === card.reservationId)
       : undefined;
 
-    const canonical = accounts.find((a) =>
-      a.status !== 'quitada' &&
-      (!card.reservationId || a.reservationId === card.reservationId) &&
-      (!card.guestId || a.guestId === card.guestId)
-    );
+    let canonicalAccountId = reservation?.accountId;
 
-    const account = direct &&
-      (!card.reservationId || direct.reservationId === card.reservationId) &&
-      (!card.guestId || !direct.guestId || direct.guestId === card.guestId)
-      ? direct
-      : canonical;
+    // Mídias de acompanhantes usam a conta individual do acompanhante.
+    if (reservation && card.guestId && card.guestId !== reservation.guestId) {
+      canonicalAccountId = reservation.companions?.find((c) => c.id === card.guestId)?.accountId;
+    }
 
+    const canonical = canonicalAccountId
+      ? accounts.find((a) => a.id === canonicalAccountId && a.status !== 'quitada')
+      : undefined;
+
+    const direct = card.accountId
+      ? accounts.find((a) =>
+          a.id === card.accountId &&
+          a.status !== 'quitada' &&
+          (!card.reservationId || a.reservationId === card.reservationId) &&
+          (!card.guestId || !a.guestId || a.guestId === card.guestId)
+        )
+      : undefined;
+
+    const account = canonical || direct;
     if (!account) return null;
 
-    // Corrige automaticamente uma referência de conta antiga na mídia.
     if (card.accountId !== account.id) {
-      linkCard({
+      const linked = linkCard({
         cardId: card.id,
-        reservationId: card.reservationId,
-        guestId: card.guestId,
+        reservationId: reservation?.id || card.reservationId,
+        guestId: card.guestId || reservation?.guestId,
         guestName: card.guestName || account.guestName,
-        roomNumber: card.roomNumber,
+        roomNumber: card.roomNumber || reservation?.roomNumber,
         accountId: account.id,
       });
+      if (!linked.ok) return null;
     }
 
     return account.id;

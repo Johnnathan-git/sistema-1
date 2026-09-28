@@ -258,7 +258,7 @@ export function AccountModal({
 
   return (
     <Overlay onClose={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[90vh] max-h-[90vh] flex flex-col overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-indigo-500">

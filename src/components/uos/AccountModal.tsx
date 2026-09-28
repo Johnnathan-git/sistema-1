@@ -33,7 +33,7 @@ export function AccountModal({
 }) {
   const { hotel, accounts, reservations, addPayment, addCharge } = usePms();
   const [cardTick, setCardTick] = useState(0);
-  const [selectedCardId, setSelectedCardId] = useState('');
+  const [scanningCard, setScanningCard] = useState(false);
   useEffect(() => onCloudSync(() => setCardTick((value) => value + 1)), []);
 
   const account = useMemo(() => {

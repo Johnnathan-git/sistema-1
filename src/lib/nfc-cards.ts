@@ -65,6 +65,7 @@ export function uidHexToDec(hex: string): string {
 }
 
 function loadCards(): NfcCard[] {
+  if (typeof localStorage === 'undefined') return [];
   try {
     const raw = localStorage.getItem(LS_CARDS);
     if (!raw) return [];
@@ -76,10 +77,12 @@ function loadCards(): NfcCard[] {
 }
 
 function saveCards(cards: NfcCard[]) {
+  if (typeof localStorage === 'undefined') return;
   localStorage.setItem(LS_CARDS, JSON.stringify(cards));
 }
 
 function loadLogs(): NfcChargeLog[] {
+  if (typeof localStorage === 'undefined') return [];
   try {
     const raw = localStorage.getItem(LS_LOGS);
     if (!raw) return [];
@@ -91,6 +94,7 @@ function loadLogs(): NfcChargeLog[] {
 }
 
 function saveLogs(logs: NfcChargeLog[]) {
+  if (typeof localStorage === 'undefined') return;
   localStorage.setItem(LS_LOGS, JSON.stringify(logs.slice(0, 500)));
 }
 

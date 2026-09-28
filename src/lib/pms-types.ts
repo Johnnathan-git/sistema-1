@@ -150,9 +150,21 @@ export function formatBRL(n: number): string {
 
 export function formatDateBR(iso: string): string {
   if (!iso) return '—';
-  const [y, m, d] = iso.split('-');
+  const datePart = iso.split('T')[0].split(' ')[0];
+  const [y, m, d] = datePart.split('-');
   if (!y || !m || !d) return iso;
   return `${d}/${m}/${y}`;
+}
+
+export function formatDateTimeBR(iso: string): string {
+  if (!iso) return '—';
+  const datePart = iso.split('T')[0].split(' ')[0];
+  const [y, m, d] = datePart.split('-');
+  if (!y || !m || !d) return iso;
+  const timePart = iso.includes('T')
+    ? iso.split('T')[1]?.slice(0, 5)
+    : iso.split(' ')[1]?.slice(0, 5);
+  return timePart ? `${d}/${m}/${y} ${timePart}` : `${d}/${m}/${y}`;
 }
 
 /** UH pronta para receber check-in */

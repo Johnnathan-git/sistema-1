@@ -176,10 +176,10 @@ async function pdfToText(file: File): Promise<string> {
         lines
           .map((line) => line.parts.join(' ').replace(/\s+/g, ' ').trim())
           .filter(Boolean)
-          .join('\\n'),
+          .join('\n'),
       );
     }
-    const text = parts.join('\\n');
+    const text = parts.join('\n');
     if (!text.trim()) {
       throw new Error('PDF sem texto legível (pode ser imagem). Use «Colar texto».');
     }

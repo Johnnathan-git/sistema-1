@@ -7,9 +7,9 @@ import {
 import { toast } from 'sonner';
 import { TaxasFeeMatrix } from '@/components/uos/TaxasFeeMatrix';
 import {
-  parseHitsText, parseGetnetText, parseSantanderText, reconcileHitsGetnet, reconcileGetnetBank,
+  parsePmsText, parseGetnetText, parseSantanderText, reconcilePmsGetnet, reconcileGetnetBank,
   formatBRL, formatDateBR, todayISO, isFriday, fileToText,
-  type HitsPayment, type GetnetSale, type BankLine, type FeeRule, CHECKLIST,
+  type PmsPayment, type GetnetSale, type BankLine, type FeeRule, CHECKLIST,
 } from '@/lib/auditoria-core';
 import {
   auditStorageKey, defaultFeesForHotel, feesStorageKey, type HotelId,
@@ -116,11 +116,11 @@ export function AuditoriaHotelWorkspace({
     } catch {}
     return defaultFeesForHotel(hotelId);
   });
-  const [hits, setHits] = useState<HitsPayment[]>([]);
+  const [pms, setPms] = useState<PmsPayment[]>([]);
   const [getnet, setGetnet] = useState<GetnetSale[]>([]);
   const [bank, setBank] = useState<BankLine[]>([]);
   const [busy, setBusy] = useState(false);
-  const [pasteOpen, setPasteOpen] = useState<'hits' | 'getnet' | 'bank' | null>(null);
+  const [pasteOpen, setPasteOpen] = useState<'pms' | 'getnet' | 'bank' | null>(null);
   const [pasteText, setPasteText] = useState('');
   const [tick, setTick] = useState(0);
   const [modalRecord, setModalRecord] = useState<AuditRecord | null>(null);
@@ -130,7 +130,7 @@ export function AuditoriaHotelWorkspace({
     setTopTab('etapas');
     setEtapa(onlyPendencias ? 'pendencias' : 'abrir');
     setConciliacaoSub('hits_getnet');
-    setHits([]);
+    setPms([]);
     setGetnet([]);
     setBank([]);
     setHeader({ date: todayISO(), analyst: '', period: 'Dia completo', sentToGoAt: '' });
@@ -158,7 +158,7 @@ export function AuditoriaHotelWorkspace({
     }));
   }, [hotelId, tick]);
 
-  const hitsMatches = useMemo(() => reconcileHitsGetnet(hits, getnet), [hits, getnet]);
+  const pmsMatches = useMemo(() => reconcilePmsGetnet(pms, getnet), [pms, getnet]);
   const bankMatches = useMemo(() => reconcileGetnetBank(getnet, bank, fees), [getnet, bank, fees]);
 
   const setAnswer = useCallback((id: number, patch: Partial<ItemAnswer>) => {
@@ -354,14 +354,14 @@ export function AuditoriaHotelWorkspace({
     toast.message('Pendência devolvida ao hotel');
   };
 
-  const loadFile = async (kind: 'hits' | 'getnet' | 'bank', file: File) => {
+  const loadFile = async (kind: 'pms' | 'getnet' | 'bank', file: File) => {
     setBusy(true);
     try {
       const text = await fileToText(file);
-      if (kind === 'hits') {
-        const rows = parseHitsText(text);
-        setHits(rows);
-        toast.success(`${rows.length} pagamento(s) HITS`);
+      if (kind === 'pms') {
+        const rows = parsePmsText(text);
+        setPms(rows);
+        toast.success(`${rows.length} pagamento(s) PMS`);
       } else if (kind === 'getnet') {
         const rows = parseGetnetText(text);
         setGetnet(rows);
@@ -381,10 +381,10 @@ export function AuditoriaHotelWorkspace({
   const applyPaste = () => {
     if (!pasteOpen) return;
     try {
-      if (pasteOpen === 'hits') {
-        const rows = parseHitsText(pasteText);
-        setHits(rows);
-        toast.success(`${rows.length} pagamento(s) HITS`);
+      if (pasteOpen === 'pms') {
+        const rows = parsePmsText(pasteText);
+        setPms(rows);
+        toast.success(`${rows.length} pagamento(s) PMS`);
       } else if (pasteOpen === 'getnet') {
         const rows = parseGetnetText(pasteText);
         setGetnet(rows);
@@ -662,10 +662,10 @@ export function AuditoriaHotelWorkspace({
         <ConciliationPanel
           sub={conciliacaoSub}
           setSub={setConciliacaoSub}
-          hits={hits}
+          pms={pms}
           getnet={getnet}
           bank={bank}
-          hitsMatches={hitsMatches}
+          pmsMatches={pmsMatches}
           bankMatches={bankMatches}
           busy={busy}
           onLoadFile={loadFile}

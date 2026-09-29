@@ -373,10 +373,6 @@ export function AuditoriaHotelWorkspace({
         const rows = parsePmsText(text);
         setPms(rows);
         toast.success(`${rows.length} pagamento(s) PMS`);
-      } else if (kind === 'getnet') {
-        const rows = parseGetnetText(text);
-        setGetnet(rows);
-        toast.success(`${rows.length} venda(s) Getnet`);
       } else {
         const rows = parseSantanderText(text);
         setBank(rows);

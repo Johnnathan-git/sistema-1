@@ -300,8 +300,12 @@ export function parseGetnetText(raw: string): GetnetSale[] {
     const header = chunk.match(
       /(?:Comercial\s+)?\d+\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s+[\s\S]*?(Mastercard|Visa|Elo|Amex|Hipercard|Cabal)\s+(Crédito|Credito|Débito|Debito)\s+(.+?)\s+(Aprovada|Negada|Autorizada|Cancelada)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2})(?:\s+(\d{2}\/\d{2}\/\d{4}))?/i,
     );
+    // No relatório Getnet, os dados da venda ficam em uma linha própria:
+    // cartão, AUT, CV, meio de captura, terminal, bruto, taxa, líquido, emissor.
+    // A versão anterior procurava os valores depois do título "Valor Bruto",
+    // mas o PDF exportado coloca o título em uma linha separada da venda.
     const detail = chunk.match(
-      /Número do Cartão[\s\S]*?Valor Bruto\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+(-?R\$\s*[\d.]+,\d{2})\s+(-?R\$\s*[\d.]+,\d{2})\s+(R\$\s*[\d.]+,\d{2})\s+([^\s]+)/i
+      /(\d{6,}\*+\d{4})\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(R\$\s*[\d.]+,\d{2})\s+(-?R\$\s*[\d.]+,\d{2})\s+(R\$\s*[\d.]+,\d{2})\s+(\S+)/i
     );
     if (!header || !detail) continue;
 

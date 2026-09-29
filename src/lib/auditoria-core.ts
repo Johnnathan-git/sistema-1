@@ -208,8 +208,9 @@ export function parsePmsText(raw: string): PmsPayment[] {
   const out: PmsPayment[] = [];
   let idx = 0;
 
-  // O PDF do PMS pode separar visualmente os caracteres de datas e valores.
-  // Normalizamos apenas esses separadores antes de aplicar o parser.
+  // O PDF do PMS pode fragmentar datas e valores em vários itens de texto.
+  // Primeiro normalizamos somente esses fragmentos; depois identificamos
+  // cada pagamento pelo cabeçalho e extraímos os quatro valores financeiros.
   const normalized = raw
     .replace(/(\d)\s+(\d)/g, '$1$2')
     .replace(/\s*\/\s*/g, '/')
@@ -219,18 +220,24 @@ export function parsePmsText(raw: string): PmsPayment[] {
     .replace(/\s+/g, ' ')
     .trim();
 
-  const txRe =
-    /(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+\$\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$\s*([\d.]+,\d{2})\s+\$\s*([\d.]+,\d{2})/gi;
+  const headerRe =
+    /(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+([^$]+?)\s+(?=\$)/gi;
+  const moneyRe = /\$?\s*([\d.]+,\d{2})/g;
 
-  let match: RegExpExecArray | null;
-  while ((match = txRe.exec(normalized))) {
-    const operation = match[2];
+  const headers = [...normalized.matchAll(headerRe)];
+  for (let i = 0; i < headers.length; i++) {
+    const match = headers[i];
+    const nextStart = headers[i + 1]?.index ?? normalized.length;
+    const block = normalized.slice(match.index!, nextStart);
     const guest = match[5].trim();
+
     if (/^(Data|Resumo|Resultado|Sub Total|Tipo\b)/i.test(guest)) continue;
 
-    const after = normalized.slice(match.index + match[0].length);
-    const nextTx = after.search(/\d{2}\/\d{2}\/\d{2,4}\s+#?\d+\s+[A-Z]{1,3}\s+\d{2}\/\d{2}\/\d{2,4}/i);
-    const detail = (nextTx >= 0 ? after.slice(0, nextTx) : after).slice(0, 700);
+    const money = [...block.matchAll(moneyRe)].slice(0, 4);
+    if (money.length < 4) continue;
+
+    const detailStart = match.index! + match[0].length;
+    const detail = normalized.slice(detailStart, nextStart).slice(0, 700);
 
     const parcel = detail.match(/Parcelas:\s*(\d+)x\s*\$\s*([\d.]+,\d{2})/i);
     const cash = detail.match(/Caixa:\s*([^|]+)/i);
@@ -239,24 +246,24 @@ export function parsePmsText(raw: string): PmsPayment[] {
     const user = detail.match(/Usuário:\s*([^|]+)/i);
     const reservation = detail.match(/Reservas?\s*:\s*(#?\d+)/i);
 
-    const before = normalized.slice(Math.max(0, match.index - 1800), match.index);
-    const headers = [...before.matchAll(/(?:Cielo|PIX|Getnet|Stone|Rede|Elo|Visa|Master|Amex|Hipercard)[^0-9$]{0,100}/gi)];
-    const group = headers.length ? headers[headers.length - 1][0].trim() : '';
+    const before = normalized.slice(Math.max(0, match.index! - 1800), match.index!);
+    const headersBefore = [...before.matchAll(/(?:Cielo|PIX|Getnet|Stone|Rede|Elo|Visa|Master|Amex|Hipercard)[^0-9$]{0,100}/gi)];
+    const group = headersBefore.length ? headersBefore[headersBefore.length - 1][0].trim() : '';
 
     out.push({
       id: `pms-${++idx}`,
       date: toISODate(match[1]),
-      operation,
+      operation: match[2],
       operationType: match[3],
       due: toISODate(match[4]),
       guest,
-      amount: parseBRNumber(match[6]),
-      balance: parseBRNumber(match[7]),
-      fee: parseBRNumber(match[8]),
-      net: parseBRNumber(match[9]),
+      amount: parseBRNumber(money[0][1]),
+      balance: parseBRNumber(money[1][1]),
+      fee: parseBRNumber(money[2][1]),
+      net: parseBRNumber(money[3][1]),
       paymentGroup: group,
       installments: parcel ? Number(parcel[1]) : 1,
-      installmentAmount: parcel ? parseBRNumber(parcel[2]) : parseBRNumber(match[6]),
+      installmentAmount: parcel ? parseBRNumber(parcel[2]) : parseBRNumber(money[0][1]),
       cashRegister: cash?.[1]?.trim() || '',
       pdv: pdv?.[1]?.trim() || '',
       auth: auth?.[1]?.trim() || '',

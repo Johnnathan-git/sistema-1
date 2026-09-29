@@ -142,12 +142,44 @@ async function pdfToText(file: File): Promise<string> {
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
-      const line = content.items
-        .map((it: any) => (typeof it === 'object' && it && 'str' in it ? String(it.str || '') : ''))
-        .join(' ');
-      parts.push(line);
+      const items = content.items
+        .map((it: any) => ({
+          str: typeof it === 'object' && it && 'str' in it ? String(it.str || '') : '',
+          x: typeof it === 'object' && it && Array.isArray(it.transform) ? Number(it.transform[4]) || 0 : 0,
+          y: typeof it === 'object' && it && Array.isArray(it.transform) ? Number(it.transform[5]) || 0 : 0,
+          hasEOL: Boolean(it?.hasEOL),
+        }))
+        .filter((it: any) => it.str.trim());
+
+      // O PDF.js entrega cada palavra/fragmento separadamente. Não podemos
+      // simplesmente juntar tudo com espaços: isso destrói as linhas e as
+      // colunas dos relatórios PMS/Getnet. Reconstituímos as linhas pela
+      // coordenada vertical e mantemos a ordem horizontal dentro de cada linha.
+      items.sort((a: any, b: any) => {
+        if (Math.abs(a.y - b.y) > 2.5) return b.y - a.y;
+        return a.x - b.x;
+      });
+
+      const lines: Array<{ y: number; parts: string[] }> = [];
+      for (const item of items) {
+        let line = lines.find((candidate) => Math.abs(candidate.y - item.y) <= 2.5);
+        if (!line) {
+          line = { y: item.y, parts: [] };
+          lines.push(line);
+        }
+        line.parts.push(item.str);
+        if (item.hasEOL) line.parts.push('\\n');
+      }
+
+      lines.sort((a, b) => b.y - a.y);
+      parts.push(
+        lines
+          .map((line) => line.parts.join(' ').replace(/\\s*\\n\\s*/g, '\\n').replace(/ +/g, ' ').trim())
+          .filter(Boolean)
+          .join('\\n'),
+      );
     }
-    const text = parts.join('\n');
+    const text = parts.join('\\n');
     if (!text.trim()) {
       throw new Error('PDF sem texto legível (pode ser imagem). Use «Colar texto».');
     }

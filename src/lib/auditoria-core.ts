@@ -263,7 +263,7 @@ export function parsePmsText(raw: string): PmsPayment[] {
   // de cada pagamento, sem depender da quebra de linha do PDF.js.
   const text = raw
     .replace(/\r/g, ' ')
-    .replace(/\s*#\s*(?=\d)/g, '#')
+    .replace(/#\s*(?=\d)/g, '#')
     .replace(/(\d)\s*\/\s*(?=\d)/g, '$1/')
     .replace(/(\d)\s*\.\s*(?=\d)/g, '$1.')
     .replace(/(\d)\s*,\s*(?=\d)/g, '$1,')
@@ -315,7 +315,7 @@ export function parsePmsText(raw: string): PmsPayment[] {
   let currentIndex = 0;
   for (const originalLine of lines) {
     const line = originalLine
-      .replace(/\s*#\s*(?=\d)/g, '#')
+      .replace(/#\s*(?=\d)/g, '#')
       .replace(/\s*\/\s*/g, '/')
       .replace(/\$\s*/g, '$')
       .replace(/\s+/g, ' ')

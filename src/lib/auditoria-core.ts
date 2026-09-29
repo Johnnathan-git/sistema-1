@@ -142,13 +142,18 @@ async function pdfToText(file: File): Promise<string> {
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
+      // Usa coordenadas de tela (considera páginas rotacionadas/paisagem).
+      const vt = page.getViewport({ scale: 1 }).transform;
       const items = content.items
-        .map((it: any) => ({
-          str: typeof it === 'object' && it && 'str' in it ? String(it.str || '') : '',
-          x: typeof it === 'object' && it && Array.isArray(it.transform) ? Number(it.transform[4]) || 0 : 0,
-          y: typeof it === 'object' && it && Array.isArray(it.transform) ? Number(it.transform[5]) || 0 : 0,
-          hasEOL: Boolean(it?.hasEOL),
-        }))
+        .map((it: any) => {
+          const t = Array.isArray(it?.transform) ? pdfjs.Util.transform(vt, it.transform) : [0, 0, 0, 0, 0, 0];
+          return {
+            str: typeof it === 'object' && it && 'str' in it ? String(it.str || '') : '',
+            x: Number(t[4]) || 0,
+            y: -(Number(t[5]) || 0),
+            hasEOL: Boolean(it?.hasEOL),
+          };
+        })
         .filter((it: any) => it.str.trim());
 
       // O PDF.js entrega cada palavra/fragmento separadamente. Não podemos

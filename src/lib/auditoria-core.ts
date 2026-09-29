@@ -274,20 +274,6 @@ export function parsePmsText(raw: string): PmsPayment[] {
   const paymentRe =
     /(\d{2}\/\d{2}\/\d{2,4})\s+#?(\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})/gi;
 
-  const headers = [...text.matchAll(/(?:Cielo|PIX|Getnet|Stone|Rede|Elo|Visa|Master|Amex|Hipercard)[^$\d\r\n]{0,120}/gi)];
-  let headerCursor = 0;
-
-  const groupBefore = (position: number) => {
-    for (const h of headers) {
-      if ((h.index ?? 0) <= position) headerCursor = (h.index ?? 0);
-      else break;
-    }
-    const segment = headerCursor ? text.slice(headerCursor, position) : '';
-    const lastLine = segment.split(/(?:Sub Total|Pagamento)\s+/i).pop()?.trim() || '';
-    const match = lastLine.match(/(Cielo[^$]{0,100}|PIX|Getnet|Stone|Rede|Elo|Visa|Master[^$]{0,100}|Amex|Hipercard)/i);
-    return match?.[1]?.trim() || paymentGroup;
-  };
-
   for (const m of text.matchAll(paymentRe)) {
     const guest = m[5].trim().replace(/\s+/g, ' ');
     if (!guest || /^(Data|Resumo|Resultado|Sub Total|Tipo|Pagamento)/i.test(guest)) continue;
@@ -326,6 +312,7 @@ export function parsePmsText(raw: string): PmsPayment[] {
   ).filter(Boolean);
 
   let current: PmsPayment | undefined;
+  let currentIndex = 0;
   for (const originalLine of lines) {
     const line = originalLine
       .replace(/\s*#\s*(?=\d)/g, '#')
@@ -336,8 +323,7 @@ export function parsePmsText(raw: string): PmsPayment[] {
 
     const rowStart = line.match(/^\d{2}\/\d{2}\/\d{2,4}\s+#?\d+\s+[A-Z]{1,3}\s+\d{2}\/\d{2}\/\d{2,4}\b/i);
     if (rowStart) {
-      const op = line.match(/#?(\d+)/);
-      current = op ? out.find((p) => p.operation === op[1]) : undefined;
+      current = out[currentIndex++];
       continue;
     }
     if (!current) continue;

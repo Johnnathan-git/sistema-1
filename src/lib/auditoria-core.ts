@@ -258,55 +258,110 @@ export function parsePmsText(raw: string): PmsPayment[] {
   let idx = 0;
   let paymentGroup = 'Geral';
 
-  for (const originalLine of raw.split(/\r?\n/)) {
-    const line = originalLine
-      .replace(/(\d)\s+(?=\d)/g, '$1')
-      .replace(/#\s*(?=\d)/g, '#')
-      .replace(/\s*\/\s*/g, '/')
-      .replace(/\s*\.\s*(?=\d)/g, '.')
-      .replace(/\s*,\s*(?=\d)/g, ',')
-      .replace(/\$\s*/g, '$')
-      .replace(/\s+/g, ' ')
-      .trim();
+  // O PDF do PMS pode chegar com quebras de linha, espaços entre fragmentos
+  // e até o "#" separado do número. Procuramos diretamente o padrão estrutural
+  // de cada pagamento, sem depender da quebra de linha do PDF.js.
+  const text = raw
+    .replace(/\r/g, ' ')
+    .replace(/\s*#\s*(?=\d)/g, '#')
+    .replace(/(\d)\s*\/\s*(?=\d)/g, '$1/')
+    .replace(/(\d)\s*\.\s*(?=\d)/g, '$1.')
+    .replace(/(\d)\s*,\s*(?=\d)/g, '$1,')
+    .replace(/\$\s*/g, '$')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-    if (!line) continue;
+  const paymentRe =
+    /(\d{2}\/\d{2}\/\d{2,4})\s+#?(\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})/gi;
 
-    // Guarda o grupo de pagamento atual para as linhas seguintes.
-    if (/^(Cielo|PIX|Getnet|Stone|Rede|Elo|Visa|Master|Amex|Hipercard)/i.test(line) &&
-        !/^\d{2}\/\d{2}/.test(line)) {
-      paymentGroup = line;
-      continue;
+  const headers = [...text.matchAll(/(?:Cielo|PIX|Getnet|Stone|Rede|Elo|Visa|Master|Amex|Hipercard)[^$\d\r\n]{0,120}/gi)];
+  let headerCursor = 0;
+
+  const groupBefore = (position: number) => {
+    for (const h of headers) {
+      if ((h.index ?? 0) <= position) headerCursor = (h.index ?? 0);
+      else break;
     }
+    const segment = headerCursor ? text.slice(headerCursor, position) : '';
+    const lastLine = segment.split(/(?:Sub Total|Pagamento)\s+/i).pop()?.trim() || '';
+    const match = lastLine.match(/(Cielo[^$]{0,100}|PIX|Getnet|Stone|Rede|Elo|Visa|Master[^$]{0,100}|Amex|Hipercard)/i);
+    return match?.[1]?.trim() || paymentGroup;
+  };
 
-    const row = line.match(
-      /^(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})$/i
-    );
+  for (const m of text.matchAll(paymentRe)) {
+    const guest = m[5].trim().replace(/\s+/g, ' ');
+    if (!guest || /^(Data|Resumo|Resultado|Sub Total|Tipo|Pagamento)/i.test(guest)) continue;
 
-    if (!row) continue;
-
-    const guest = row[5].trim();
-    if (!guest || /^(Data|Resumo|Resultado|Sub Total|Tipo)/i.test(guest)) continue;
+    const pos = m.index ?? 0;
+    const before = text.slice(Math.max(0, pos - 180), pos);
+    const groupMatch = before.match(/(Cielo[^\d$]{0,100}|PIX|Getnet|Stone|Rede|Elo|Visa|Master[^\d$]{0,100}|Amex|Hipercard)\s*$/i);
+    if (groupMatch?.[1]) paymentGroup = groupMatch[1].replace(/\s+/g, ' ').trim();
 
     out.push({
       id: `pms-${++idx}`,
-      date: toISODate(row[1]),
-      operation: row[2],
-      operationType: row[3],
-      due: toISODate(row[4]),
+      date: toISODate(m[1]),
+      operation: m[2],
+      operationType: m[3],
+      due: toISODate(m[4]),
       guest,
-      amount: parseBRNumber(row[6]),
-      balance: parseBRNumber(row[7]),
-      fee: parseBRNumber(row[8]),
-      net: parseBRNumber(row[9]),
+      amount: parseBRNumber(m[6]),
+      balance: parseBRNumber(m[7]),
+      fee: parseBRNumber(m[8]),
+      net: parseBRNumber(m[9]),
       paymentGroup,
       installments: 1,
-      installmentAmount: parseBRNumber(row[6]),
+      installmentAmount: parseBRNumber(m[6]),
       cashRegister: '',
       pdv: '',
       auth: '',
       user: '',
       reservation: '',
     });
+  }
+
+  // Enriquece os pagamentos com as linhas de detalhe que o PMS imprime logo
+  // abaixo de cada operação (parcelas, caixa, PDV, AUT, usuário e reserva).
+  const lines = raw.split(/\r?\n/).map((line) =>
+    line.replace(/\s+/g, ' ').trim()
+  ).filter(Boolean);
+
+  let current: PmsPayment | undefined;
+  for (const originalLine of lines) {
+    const line = originalLine
+      .replace(/\s*#\s*(?=\d)/g, '#')
+      .replace(/\s*\/\s*/g, '/')
+      .replace(/\$\s*/g, '$')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const rowStart = line.match(/^\d{2}\/\d{2}\/\d{2,4}\s+#?\d+\s+[A-Z]{1,3}\s+\d{2}\/\d{2}\/\d{2,4}\b/i);
+    if (rowStart) {
+      const op = line.match(/#?(\d+)/);
+      current = op ? out.find((p) => p.operation === op[1]) : undefined;
+      continue;
+    }
+    if (!current) continue;
+
+    const parcel = line.match(/Parcelas:\s*(\d+)x\s*([\d.]+,\d{2})/i);
+    if (parcel) {
+      current.installments = Number(parcel[1]) || 1;
+      current.installmentAmount = parseBRNumber(parcel[2]);
+    }
+
+    const caixa = line.match(/Caixa:\s*([^\s]+)(?:\s+|$)/i);
+    if (caixa) current.cashRegister = caixa[1];
+
+    const pdv = line.match(/PDV:\s*([^\s]+)(?:\s+|$)/i);
+    if (pdv) current.pdv = pdv[1];
+
+    const auth = line.match(/AUT:\s*([^\s]+)/i);
+    if (auth) current.auth = auth[1];
+
+    const user = line.match(/Usu[aá]rio:\s*(.+?)(?=\s+Reservas?:|$)/i);
+    if (user) current.user = user[1].trim();
+
+    const reservation = line.match(/Reservas?:\s*(\S+)/i);
+    if (reservation) current.reservation = reservation[1];
   }
 
   return out;

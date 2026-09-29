@@ -1,6 +1,36 @@
 /* Auditoria Life — core */
 export type MatchSide = 'both' | 'hits_only' | 'getnet_only' | 'value_diff';
 export interface HitsPayment { id: string; date: string; pgto: string; op: string; due: string; guest: string; method: string; amount: number; fee: number; net: number; }
+export interface PmsPayment {
+  id: string;
+  date: string;
+  operation: string;
+  operationType: string;
+  due: string;
+  guest: string;
+  amount: number;
+  balance: number;
+  fee: number;
+  net: number;
+  paymentGroup: string;
+  installments: number;
+  installmentAmount: number;
+  cashRegister: string;
+  pdv: string;
+  auth: string;
+  user: string;
+  reservation: string;
+}
+export type PmsGetnetMatchSide = 'both' | 'pms_only' | 'getnet_only' | 'divergence';
+export interface PmsGetnetMatch {
+  id: string;
+  side: PmsGetnetMatchSide;
+  pms?: PmsPayment;
+  getnet?: GetnetSale;
+  score: number;
+  matchedBy: string;
+  differences: string[];
+}
 export interface GetnetSale { id: string; date: string; time?: string; brand: string; modality: string; form: string; status: string; installments: number; settleDate: string; auth: string; cv: string; terminal: string; card: string; gross: number; fee: number; net: number; }
 export interface BankLine { id: string; date: string; description: string; amount: number; ref?: string; kind: 'getnet' | 'cielo' | 'pix' | 'other' | 'debit_out'; }
 export interface FeeRule { id: string; label: string; brand: string; modality: string; feePercent: number; feeFixed: number; active: boolean; }
@@ -135,6 +165,61 @@ export async function fileToText(file: File): Promise<string> {
     return pdfToText(file);
   }
   return file.text();
+}
+
+export function parsePmsText(raw: string): PmsPayment[] {
+  const lines = raw.split(/\r?\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const out: PmsPayment[] = [];
+  let group = '';
+  let idx = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^Sub Total\b/i.test(line) || /^Resumo\b/i.test(line) || /^Resultado\b/i.test(line)) continue;
+    if (/^Data Pgto\.\s+Op\.\s+Vencto\./i.test(line)) continue;
+
+    const header = line.match(/^(Cielo|PIX|Getnet|Stone|Rede|Elo|Visa|Master|Amex|Hipercard).*$/i);
+    if (header && !/\d{2}\/\d{2}\/\d{2,4}/.test(line)) {
+      group = line;
+      continue;
+    }
+
+    const dateMatch = line.match(/^(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+(?=\$)/);
+    if (!dateMatch) continue;
+
+    const money = [...line.matchAll(/\$\s*([\d.]+,\d{2})/g)].map((m) => parseBRNumber(m[1]));
+    if (money.length < 4) continue;
+
+    const detail = lines[i + 1] || '';
+    const parcel = detail.match(/Parcelas:\s*(\d+)x\s*\$\s*([\d.]+,\d{2})/i);
+    const cash = detail.match(/Caixa:\s*([^|]+)/i);
+    const pdv = detail.match(/PDV:\s*([^|]+)/i);
+    const auth = detail.match(/AUT\.:\s*([^|]+)/i);
+    const user = detail.match(/Usuário:\s*([^|]+)/i);
+    const reservation = detail.match(/Reservas?\s*:\s*(#?\d+)/i);
+
+    out.push({
+      id: `pms-${++idx}`,
+      date: toISODate(dateMatch[1]),
+      operation: dateMatch[2],
+      operationType: dateMatch[3],
+      due: toISODate(dateMatch[4]),
+      guest: dateMatch[5].trim(),
+      amount: money[0],
+      balance: money[1],
+      fee: money[2],
+      net: money[3],
+      paymentGroup: group,
+      installments: parcel ? Number(parcel[1]) : 1,
+      installmentAmount: parcel ? parseBRNumber(parcel[2]) : money[0],
+      cashRegister: cash?.[1]?.trim() || '',
+      pdv: pdv?.[1]?.trim() || '',
+      auth: auth?.[1]?.trim() || '',
+      user: user?.[1]?.trim() || '',
+      reservation: reservation?.[1]?.trim() || '',
+    });
+  }
+  return out;
 }
 
 export function parseHitsText(raw: string): HitsPayment[] {
@@ -361,6 +446,79 @@ export function parseSantanderText(raw: string): BankLine[] {
     seen.add(k);
     return true;
   });
+}
+
+export function reconcilePmsGetnet(pms: PmsPayment[], getnet: GetnetSale[]): PmsGetnetMatch[] {
+  const eligible = getnet.filter((g) => {
+    const st = (g.status || '').toLowerCase();
+    return !/negada|cancelada|expirado/.test(st) && (g.gross > 0 || g.net > 0);
+  });
+  const pool = eligible.map((g) => ({ g, used: false }));
+  const rows: PmsGetnetMatch[] = [];
+  let idx = 0;
+
+  const normAuth = (v: string) => (v || '').trim().toUpperCase().replace(/\s+/g, '');
+  const dayDistance = (a: string, b: string) => {
+    if (!a || !b) return 999;
+    return Math.abs((new Date(a + 'T12:00:00').getTime() - new Date(b + 'T12:00:00').getTime()) / 86400000);
+  };
+  const modalityCompatible = (p: PmsPayment, g: GetnetSale) => {
+    const blob = `${g.modality} ${g.form}`.toLowerCase();
+    if (/pix/.test(p.paymentGroup.toLowerCase()) && /pix/.test(blob)) return true;
+    if (/d[eé]bito/.test(p.paymentGroup.toLowerCase())) return /d[eé]bito/.test(blob);
+    if (p.installments > 1) return /parcel/.test(blob) || g.installments === p.installments;
+    return /cr[eé]dito/.test(blob) || g.installments === 1;
+  };
+
+  for (const p of pms) {
+    let best = -1;
+    let bestScore = -Infinity;
+    let bestReason = '';
+    for (let j = 0; j < pool.length; j++) {
+      if (pool[j].used) continue;
+      const g = pool[j].g;
+      const authMatch = normAuth(p.auth) && normAuth(p.auth) === normAuth(g.auth);
+      const amountMatch = moneyEq(p.amount, g.gross);
+      const installmentMatch = p.installments === g.installments;
+      const dateDiff = dayDistance(p.date, g.date);
+      const dateMatch = dateDiff <= 1;
+      const modalityMatch = modalityCompatible(p, g);
+
+      let score = 0;
+      if (authMatch) score += 100;
+      if (amountMatch) score += 35;
+      if (installmentMatch) score += 15;
+      if (modalityMatch) score += 10;
+      if (dateMatch) score += Math.max(0, 8 - dateDiff * 8);
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = j;
+        bestReason = authMatch ? 'AUT' : amountMatch && installmentMatch && dateMatch ? 'valor + parcelas + data' : amountMatch && dateMatch ? 'valor + data' : 'critérios secundários';
+      }
+    }
+
+    if (best >= 0 && bestScore >= 35) {
+      const g = pool[best].g;
+      pool[best].used = true;
+      const differences: string[] = [];
+      if (!moneyEq(p.amount, g.gross)) differences.push(`Valor bruto: PMS ${formatBRL(p.amount)} × Getnet ${formatBRL(g.gross)}`);
+      if (!moneyEq(p.fee, g.fee)) differences.push(`Taxa: PMS ${formatBRL(p.fee)} × Getnet ${formatBRL(g.fee)}`);
+      if (!moneyEq(p.net, g.net)) differences.push(`Líquido: PMS ${formatBRL(p.net)} × Getnet ${formatBRL(g.net)}`);
+      if (p.installments !== g.installments) differences.push(`Parcelas: PMS ${p.installments} × Getnet ${g.installments}`);
+      if (p.auth && g.auth && normAuth(p.auth) !== normAuth(g.auth)) differences.push(`AUT: PMS ${p.auth} × Getnet ${g.auth}`);
+      rows.push({ id: `pm-${++idx}`, side: differences.length ? 'divergence' : 'both', pms: p, getnet: g, score: bestScore, matchedBy: bestReason, differences });
+    } else {
+      rows.push({ id: `pm-${++idx}`, side: 'pms_only', pms: p, score: 0, matchedBy: 'não encontrado', differences: [] });
+    }
+  }
+
+  for (const item of pool) {
+    if (!item.used) {
+      rows.push({ id: `pm-${++idx}`, side: 'getnet_only', getnet: item.g, score: 0, matchedBy: 'não encontrado no PMS', differences: [] });
+    }
+  }
+  return rows;
 }
 
 export function reconcileHitsGetnet(hits: HitsPayment[], getnet: GetnetSale[]): HitsGetnetMatch[] {

@@ -291,54 +291,50 @@ export function parseGetnetText(raw: string): GetnetSale[] {
   let idx = 0;
   const flat = raw.replace(/\s+/g, ' ').trim();
 
-  // Cada venda do relatório detalhado começa pelo estabelecimento e traz,
-  // na mesma sequência lógica, bandeira/modalidade/status/data e depois
-  // cartão/AUT/CV/captura/terminal/valores.
-  const saleRe =
-    /(?:Comercial\s+)?(\d+)\s+(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})\s+(.+?)\s+(Mastercard|Visa|Elo|Amex|Hipercard|Cabal)\s+(Crédito|Credito|Débito|Debito)\s+(.+?)\s+(Aprovada|Negada|Autorizada|Cancelada)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2})(?:\s+(\d{2}\/\d{2}\/\d{4}))?\s+Valor Taxa Número do Terminal.*?Número do Cartão Valor Líquido.*?(\d{6,}\*+\d{4})\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(R\$\s*[\d.]+,\d{2})\s+(-?R\$\s*[\d.]+,\d{2})\s+(R\$\s*[\d.]+,\d{2})\s+(\S+)/gi;
+  // O PDF pode entregar os títulos e os valores em blocos separados.
+  // Por isso identificamos cabeçalhos e linhas de valores independentemente
+  // e os associamos pela posição no documento.
+  const headerRe =
+    /(?:Comercial\s+)?\d+\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s+.*?\s+(Mastercard|Visa|Elo|Amex|Hipercard|Cabal)\s+(Crédito|Credito|Débito|Debito)\s+(.+?)\s+(Aprovada|Negada|Autorizada|Cancelada)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2})(?:\s+(\d{2}\/\d{2}\/\d{4}))?/gi;
+  const detailRe =
+    /(\d{6,}\*+\d{4})\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(R\$\s*[\d.]+,\d{2})\s+(-?R\$\s*[\d.]+,\d{2})\s+(R\$\s*[\d.]+,\d{2})\s+(\S+)/gi;
 
-  let match: RegExpExecArray | null;
-  while ((match = saleRe.exec(flat))) {
-    const status = match[7];
+  const headers: Array<{ index: number; match: RegExpExecArray }> = [];
+  const details: Array<{ index: number; match: RegExpExecArray }> = [];
+  let m: RegExpExecArray | null;
+
+  while ((m = headerRe.exec(flat))) headers.push({ index: m.index, match: m });
+  while ((m = detailRe.exec(flat))) details.push({ index: m.index, match: m });
+
+  for (const h of headers) {
+    const d = details.find((candidate) => candidate.index > h.index);
+    if (!d) continue;
+
+    // Não associe uma linha de valores que já pertence a um cabeçalho anterior.
+    const nextHeader = headers.find((candidate) => candidate.index > h.index);
+    if (nextHeader && d.index > nextHeader.index) continue;
+
+    const hm = h.match;
+    const dm = d.match;
     out.push({
       id: `g-${++idx}`,
-      date: toISODate(match[8]),
-      time: match[9],
-      brand: match[4],
-      modality: match[5],
-      form: match[6].trim(),
-      status,
-      installments: Number(match[10]) || 1,
-      settleDate: match[11] ? toISODate(match[11]) : toISODate(match[8]),
-      auth: match[13] === 'N/A' ? '' : match[13],
-      cv: match[14],
-      terminal: match[16],
-      card: match[12],
-      gross: Math.abs(parseBRNumber(match[17])),
-      fee: Math.abs(parseBRNumber(match[18])),
-      net: Math.abs(parseBRNumber(match[19])),
+      date: toISODate(hm[5]),
+      time: hm[6],
+      brand: hm[1],
+      modality: hm[2],
+      form: hm[3].trim(),
+      status: hm[4],
+      installments: Number(hm[7]) || 1,
+      settleDate: hm[8] ? toISODate(hm[8]) : toISODate(hm[5]),
+      auth: dm[2] === 'N/A' ? '' : dm[2],
+      cv: dm[3],
+      terminal: dm[5],
+      card: dm[1],
+      gross: Math.abs(parseBRNumber(dm[6])),
+      fee: Math.abs(parseBRNumber(dm[7])),
+      net: Math.abs(parseBRNumber(dm[8])),
     });
-  }
-
-  // Fallback para exportações em que o cabeçalho "Valor Taxa..." não fica
-  // na mesma sequência textual. Divide pelo início de cada venda e extrai
-  // cabeçalho + linha de valores separadamente.
-  if (out.length === 0) {
-    const starts = [...flat.matchAll(/(?:Comercial\s+)?\d+\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s+/gi)].map((m) => m.index || 0);
-    starts.push(flat.length);
-    for (let i = 0; i < starts.length - 1; i++) {
-      const chunk = flat.slice(starts[i], starts[i + 1]);
-      const h = chunk.match(/(?:Comercial\s+)?\d+\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s+.*?\s+(Mastercard|Visa|Elo|Amex|Hipercard|Cabal)\s+(Crédito|Credito|Débito|Debito)\s+(.+?)\s+(Aprovada|Negada|Autorizada|Cancelada)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2})(?:\s+(\d{2}\/\d{2}\/\d{4}))?/i);
-      const d = chunk.match(/(\d{6,}\*+\d{4})\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(R\$\s*[\d.]+,\d{2})\s+(-?R\$\s*[\d.]+,\d{2})\s+(R\$\s*[\d.]+,\d{2})\s+(\S+)/i);
-      if (!h || !d) continue;
-      out.push({
-        id: `g-${++idx}`, date: toISODate(h[5]), time: h[6], brand: h[1],
-        modality: h[2], form: h[3].trim(), status: h[4],
-        installments: Number(h[7]) || 1, settleDate: h[8] ? toISODate(h[8]) : toISODate(h[5]),
-        auth: d[2] === 'N/A' ? '' : d[2], cv: d[3], terminal: d[5], card: d[1],
-        gross: Math.abs(parseBRNumber(d[6])), fee: Math.abs(parseBRNumber(d[7])), net: Math.abs(parseBRNumber(d[8])),
-      });
-    }
+    d.match = [] as unknown as RegExpExecArray;
   }
 
   const seen = new Set<string>();

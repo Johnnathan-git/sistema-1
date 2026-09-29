@@ -396,7 +396,7 @@ export function AccountModal({
                 </div>
               </div>
               <Button type="button" onClick={attachCard} disabled={scanningCard}>
-                <Nfc /> {scanningCard ? (addingCompanionCard ? 'Aproxime a nova mídia…' : 'Aproxime a mídia…') : 'Aproximar mídia para vincular'}
+                <Nfc /> {scanningCard ? 'Aproxime a mídia…' : 'Aproximar mídia para vincular'}
               </Button>
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">

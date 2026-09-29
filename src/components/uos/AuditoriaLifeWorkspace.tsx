@@ -354,18 +354,25 @@ export function AuditoriaHotelWorkspace({
     toast.message('Pendência devolvida ao hotel');
   };
 
-  const loadFile = async (kind: 'pms' | 'getnet' | 'bank', file: File) => {
+  const loadFile = async (kind: 'pms' | 'getnet' | 'bank', file: File | File[]) => {
     setBusy(true);
     try {
-      const text = await fileToText(file);
+      if (kind === 'getnet') {
+        const files = Array.isArray(file) ? file : [file];
+        const all: GetnetSale[] = [];
+        for (const f of files) {
+          const rows = parseGetnetText(await fileToText(f));
+          rows.forEach((r) => all.push({ ...r, id: `g-${all.length + 1}` }));
+        }
+        setGetnet(all);
+        toast.success(`${all.length} venda(s) Getnet em ${files.length} arquivo(s)`);
+        return;
+      }
+      const text = await fileToText(Array.isArray(file) ? file[0] : file);
       if (kind === 'pms') {
         const rows = parsePmsText(text);
         setPms(rows);
         toast.success(`${rows.length} pagamento(s) PMS`);
-      } else if (kind === 'getnet') {
-        const rows = parseGetnetText(text);
-        setGetnet(rows);
-        toast.success(`${rows.length} venda(s) Getnet`);
       } else {
         const rows = parseSantanderText(text);
         setBank(rows);

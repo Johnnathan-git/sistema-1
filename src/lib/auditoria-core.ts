@@ -213,6 +213,7 @@ export function parsePmsText(raw: string): PmsPayment[] {
   const normalized = raw
     .replace(/\s+/g, ' ')
     .replace(/(\d)\s+(?=\d)/g, '$1')
+    .replace(/#\s+(?=\d)/g, '#')
     .replace(/\s*\/\s*/g, '/')
     .replace(/\s*\.\s*(?=\d)/g, '.')
     .replace(/\s*,\s*(?=\d)/g, ',')

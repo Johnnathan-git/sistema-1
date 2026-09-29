@@ -208,37 +208,40 @@ export function parsePmsText(raw: string): PmsPayment[] {
   const out: PmsPayment[] = [];
   let idx = 0;
 
-  // O PDF do PMS pode fragmentar datas e valores em vários itens de texto.
-  // Primeiro normalizamos somente esses fragmentos; depois identificamos
-  // cada pagamento pelo cabeçalho e extraímos os quatro valores financeiros.
+  // O PMS pode fragmentar caracteres do relatório em vários itens do PDF.js.
+  // Compactamos apenas separadores/dígitos antes de procurar cada lançamento.
   const normalized = raw
-    .replace(/(\d)\s+(\d)/g, '$1$2')
-    .replace(/\s*\/\s*/g, '/')
-    .replace(/(\d)\s*\.\s*(?=\d)/g, '$1.')
-    .replace(/(\d)\s*,\s*(?=\d)/g, '$1,')
-    .replace(/\$\s*/g, '$')
     .replace(/\s+/g, ' ')
+    .replace(/(\d)\s+(?=\d)/g, '$1')
+    .replace(/\s*\/\s*/g, '/')
+    .replace(/\s*\.\s*(?=\d)/g, '.')
+    .replace(/\s*,\s*(?=\d)/g, ',')
+    .replace(/\$\s*/g, '$')
     .trim();
 
-  const headerRe =
-    /(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+([^$]+?)\s+(?=\$)/gi;
+  // O identificador da operação é o ponto mais estável do relatório:
+  // Data + #operação + tipo + vencimento.
+  const txRe =
+    /(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})/gi;
   const moneyRe = /\$?\s*([\d.]+,\d{2})/g;
+  const matches = [...normalized.matchAll(txRe)];
 
-  const headers = [...normalized.matchAll(headerRe)];
-  for (let i = 0; i < headers.length; i++) {
-    const match = headers[i];
-    const nextStart = headers[i + 1]?.index ?? normalized.length;
-    const block = normalized.slice(match.index!, nextStart);
-    const guest = match[5].trim();
+  for (let i = 0; i < matches.length; i++) {
+    const match = matches[i];
+    const nextStart = matches[i + 1]?.index ?? normalized.length;
+    const blockStart = match.index! + match[0].length;
+    const block = normalized.slice(blockStart, nextStart);
 
-    if (/^(Data|Resumo|Resultado|Sub Total|Tipo\b)/i.test(guest)) continue;
+    const firstMoney = block.search(/\$/);
+    if (firstMoney < 0) continue;
+
+    const guest = block.slice(0, firstMoney).trim();
+    if (!guest || /^(Data|Resumo|Resultado|Sub Total|Tipo\b)/i.test(guest)) continue;
 
     const money = [...block.matchAll(moneyRe)].slice(0, 4);
     if (money.length < 4) continue;
 
-    const detailStart = match.index! + match[0].length;
-    const detail = normalized.slice(detailStart, nextStart).slice(0, 700);
-
+    const detail = block.slice(firstMoney).slice(0, 900);
     const parcel = detail.match(/Parcelas:\s*(\d+)x\s*\$\s*([\d.]+,\d{2})/i);
     const cash = detail.match(/Caixa:\s*([^|]+)/i);
     const pdv = detail.match(/PDV:\s*([^|]+)/i);

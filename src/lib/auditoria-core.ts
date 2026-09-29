@@ -170,7 +170,9 @@ export async function fileToText(file: File): Promise<string> {
 export function parsePmsText(raw: string): PmsPayment[] {
   const normalized = raw
     .replace(/(?=(?:Cielo|PIX|Getnet|Stone|Rede|Elo|Visa|Master|Amex|Hipercard)\s+)/gi, '\n')
-    .replace(/(?=\d{2}\/\d{2}\/\d{2,4}\s+#?\d+\s+[A-Z]{1,3}\s+\d{2}\/\d{2}\/\d{2,4}\s+)/g, '\n');
+    .replace(/(?=\d{2}\/\d{2}\/\d{2,4}\s+#?\d+\s+[A-Z]{1,3}\s+\d{2}\/\d{2}\/\d{2,4}\s+)/g, '\n')
+    .replace(/(?=Parcelas:\s*)/gi, '\n')
+    .replace(/(?=Sub Total\s+)/gi, '\n');
   const lines = normalized.split(/\r?\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const out: PmsPayment[] = [];
   let group = '';

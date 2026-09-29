@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { TaxasFeeMatrix } from '@/components/uos/TaxasFeeMatrix';
 import {
   parsePmsText, parseGetnetText, parseSantanderText, reconcilePmsGetnet, reconcileGetnetBank,
-  formatBRL, formatDateBR, todayISO, isFriday, fileToText,
+  formatBRL, formatDateBR, todayISO, isFriday, fileToText, pmsFileToText,
   type PmsPayment, type GetnetSale, type BankLine, type FeeRule, CHECKLIST,
 } from '@/lib/auditoria-core';
 import {
@@ -368,7 +368,8 @@ export function AuditoriaHotelWorkspace({
         toast.success(`${all.length} venda(s) Getnet em ${files.length} arquivo(s)`);
         return;
       }
-      const text = await fileToText(Array.isArray(file) ? file[0] : file);
+      const selectedFile = Array.isArray(file) ? file[0] : file;
+      const text = kind === 'pms' ? await pmsFileToText(selectedFile) : await fileToText(selectedFile);
       if (kind === 'pms') {
         const rows = parsePmsText(text);
         setPms(rows);

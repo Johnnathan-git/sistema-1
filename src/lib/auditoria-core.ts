@@ -239,7 +239,8 @@ async function pdfToPmsText(file: File): Promise<string> {
 export async function pmsFileToText(file: File): Promise<string> {
   const name = file.name.toLowerCase();
   if (name.endsWith('.pdf') || file.type === 'application/pdf') {
-    return pdfToPmsText(file);
+    // Reutiliza o extrator que já reconstrói as linhas do PDF.
+    return pdfToText(file);
   }
   return file.text();
 }
@@ -255,47 +256,36 @@ export async function fileToText(file: File): Promise<string> {
 export function parsePmsText(raw: string): PmsPayment[] {
   const out: PmsPayment[] = [];
   let idx = 0;
+  let paymentGroup = 'Geral';
 
-  // O relatório PMS é tabular e o PDF pode separar caracteres em fragmentos.
-  // Primeiro reconstruímos os tokens básicos (datas, #operação e valores).
-  const text = raw
-    .replace(/\r/g, '')
-    .replace(/(\d)\s+(?=\d)/g, '$1')
-    .replace(/#\s*(?=\d)/g, '#')
-    .replace(/\s*\/\s*/g, '/')
-    .replace(/\s*\.\s*(?=\d)/g, '.')
-    .replace(/\s*,\s*(?=\d)/g, ',')
-    .replace(/\$\s*/g, '$');
+  for (const originalLine of raw.split(/\r?\n/)) {
+    const line = originalLine
+      .replace(/(\d)\s+(?=\d)/g, '$1')
+      .replace(/#\s*(?=\d)/g, '#')
+      .replace(/\s*\/\s*/g, '/')
+      .replace(/\s*\.\s*(?=\d)/g, '.')
+      .replace(/\s*,\s*(?=\d)/g, ',')
+      .replace(/\$\s*/g, '$')
+      .replace(/\s+/g, ' ')
+      .trim();
 
-  // Localiza cada início de lançamento independentemente de quebras de linha.
-  const starts = [...text.matchAll(/\b(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+/gi)];
+    if (!line) continue;
 
-  for (let i = 0; i < starts.length; i++) {
-    const m = starts[i];
-    const startAt = m.index ?? 0;
-    const endAt = starts[i + 1]?.index ?? text.length;
-    const block = text.slice(startAt, endAt).replace(/\s+/g, ' ').trim();
+    // Guarda o grupo de pagamento atual para as linhas seguintes.
+    if (/^(Cielo|PIX|Getnet|Stone|Rede|Elo|Visa|Master|Amex|Hipercard)/i.test(line) &&
+        !/^\d{2}\/\d{2}/.test(line)) {
+      paymentGroup = line;
+      continue;
+    }
 
-    // O cabeçalho/rodapé do relatório não é um lançamento.
-    const row = block.match(
-      /^(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})/i
+    const row = line.match(
+      /^(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})$/i
     );
+
     if (!row) continue;
 
     const guest = row[5].trim();
     if (!guest || /^(Data|Resumo|Resultado|Sub Total|Tipo)/i.test(guest)) continue;
-
-    const detail = block.slice(row[0].length);
-    const parcel = detail.match(/Parcelas\s*:\s*(\d+)\s*x\s*\$?\s*([\d.]+,\d{2})/i);
-    const cash = detail.match(/Caixa\s*:\s*([^|]+)/i);
-    const pdv = detail.match(/PDV\s*:\s*([^|]+)/i);
-    const auth = detail.match(/AUT\.?\s*:\s*([^|]+)/i);
-    const user = detail.match(/Usuário\s*:\s*([^|]+)/i);
-    const reservation = detail.match(/Reservas?\s*:\s*(#?\d+)/i);
-
-    const before = text.slice(0, startAt);
-    const groups = [...before.matchAll(/(?:Cielo|PIX|Getnet|Stone|Rede|Elo|Visa|Master|Amex|Hipercard)[^\d$\r\n]{0,100}/gi)];
-    const group = groups.length ? groups[groups.length - 1][0].trim() : '';
 
     out.push({
       id: `pms-${++idx}`,
@@ -308,14 +298,14 @@ export function parsePmsText(raw: string): PmsPayment[] {
       balance: parseBRNumber(row[7]),
       fee: parseBRNumber(row[8]),
       net: parseBRNumber(row[9]),
-      paymentGroup: group,
-      installments: parcel ? Number(parcel[1]) : 1,
-      installmentAmount: parcel ? parseBRNumber(parcel[2]) : parseBRNumber(row[6]),
-      cashRegister: cash?.[1]?.trim() || '',
-      pdv: pdv?.[1]?.trim() || '',
-      auth: auth?.[1]?.trim() || '',
-      user: user?.[1]?.trim() || '',
-      reservation: reservation?.[1]?.trim() || '',
+      paymentGroup,
+      installments: 1,
+      installmentAmount: parseBRNumber(row[6]),
+      cashRegister: '',
+      pdv: '',
+      auth: '',
+      user: '',
+      reservation: '',
     });
   }
 

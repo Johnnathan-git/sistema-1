@@ -168,13 +168,13 @@ async function pdfToText(file: File): Promise<string> {
           lines.push(line);
         }
         line.parts.push(item.str);
-        if (item.hasEOL) line.parts.push('\\n');
+        if (item.hasEOL) line.parts.push('\n');
       }
 
       lines.sort((a, b) => b.y - a.y);
       parts.push(
         lines
-          .map((line) => line.parts.join(' ').replace(/\\s*\\n\\s*/g, '\\n').replace(/ +/g, ' ').trim())
+          .map((line) => line.parts.join(' ').replace(/\s+/g, ' ').trim())
           .filter(Boolean)
           .join('\\n'),
       );

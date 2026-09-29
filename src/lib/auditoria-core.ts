@@ -254,46 +254,74 @@ export function parseHitsText(raw: string): HitsPayment[] {
 
 export function parseGetnetText(raw: string): GetnetSale[] {
   const out: GetnetSale[] = [];
-  const blocks = raw.split(/(?=Estabelecimento\s+CPF\/CNPJ)/i);
   let idx = 0;
-  const pushFromChunk = (chunk: string) => {
-    const statusM = chunk.match(/\b(Negada|Aprovada|Autorizada|Cancelada)\b/i);
-    const brandM = chunk.match(/\b(Mastercard|Visa|Elo|Amex|Hipercard|Cabal)\b/i);
-    const modM = chunk.match(/\b(Crédito|Credito|Débito|Debito)\b/i);
-    const formM = chunk.match(/\b(Crédito À Vista|Credito A Vista|Débito|Debito|Parcelado[^\n]*)/i);
-    const dates = [...chunk.matchAll(/(\d{2}\/\d{2}\/\d{4})(?:\s+(\d{2}:\d{2}))?/g)];
-    const amounts = [...chunk.matchAll(/-?R\$\s*([\d.]*\d,\d{2})/g)].map((x) => parseBRNumber(x[0]));
-    const authM = chunk.match(/Autoriza[cç][aã]o[^0-9A-Z]*([0-9A-Z]{4,})/i);
-    const parcM = chunk.match(/\b0?(\d{1,2})\s*(?:\n|$)/);
-    if (!brandM && amounts.length < 2) return;
-    if (!statusM && amounts.length < 2) return;
-    const saleDate = dates[0] ? toISODate(dates[0][1]) : '';
-    const settleDate = dates.length > 1 ? toISODate(dates[dates.length - 1][1]) : saleDate ? addDaysISO(saleDate, 1) : '';
-    let gross = 0, fee = 0, net = 0;
-    if (amounts.length >= 3) { gross = Math.abs(amounts[0]); fee = Math.abs(amounts[1]); net = Math.abs(amounts[2]); }
-    else if (amounts.length === 2) { gross = Math.abs(amounts[0]); net = Math.abs(amounts[1]); fee = Math.max(0, gross - net); }
-    else if (amounts.length === 1) { gross = net = Math.abs(amounts[0]); }
-    if (!gross && !net) return;
-    out.push({ id: `g-${++idx}`, date: saleDate, time: dates[0]?.[2], brand: brandM?.[1] || '', modality: modM?.[1] || '', form: formM?.[1] || '', status: statusM?.[1] || '', installments: parcM ? Number(parcM[1]) : 1, settleDate, auth: authM?.[1] || '', cv: '', terminal: '', card: '', gross, fee, net });
-  };
-  if (blocks.length > 1) for (const b of blocks) pushFromChunk(b);
-  else for (const p of raw.split(/(?=\b(?:Negada|Aprovada|Autorizada)\b)/i)) pushFromChunk(p);
+  const chunks = raw.split(/(?=Comercial\s+\d+\s+)/i).filter((chunk) => /Data\/Hora da Venda/i.test(chunk));
 
+  for (const chunk of chunks) {
+    const header = chunk.match(
+      /(?:Comercial\s+\d+\s+[^\n]*?)(Mastercard|Visa|Elo|Amex|Hipercard|Cabal)\s+(Crédito|Credito|Débito|Debito)\s+(.+?)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2})(?:\s+(\d{2}\/\d{2}\/\d{4}))?/i,
+    );
+    const detail = chunk.match(
+      /Valor Líquido[\s\S]*?Valor Bruto\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+(-?R\$\s*[\d.]+,\d{2})\s+(-?R\$\s*[\d.]+,\d{2})\s+(R\$\s*[\d.]+,\d{2})\s+([^\s]+)\s+(Aprovada|Negada|Autorizada|Cancelada)/i,
+    );
+    if (!header || !detail) continue;
+
+    const status = detail[10];
+    const gross = Math.abs(parseBRNumber(detail[6]));
+    const fee = Math.abs(parseBRNumber(detail[7]));
+    const net = Math.abs(parseBRNumber(detail[8]));
+
+    out.push({
+      id: `g-${++idx}`,
+      date: toISODate(header[4]),
+      time: header[5],
+      brand: header[1],
+      modality: header[2],
+      form: header[3].trim(),
+      status,
+      installments: Number(header[6]) || 1,
+      settleDate: header[7] ? toISODate(header[7]) : toISODate(header[4]),
+      auth: detail[5] === 'N/A' ? '' : detail[5],
+      cv: detail[3],
+      terminal: detail[2],
+      card: detail[1],
+      gross,
+      fee,
+      net,
+    });
+  }
+
+  // Alguns relatórios exportados trazem PIX fora da estrutura de cartão.
   for (const line of raw.split(/\r?\n/)) {
-    if (!/\bPaga\b/i.test(line)) continue;
-    if (/\bExpirado\b/i.test(line)) continue;
+    if (!/\bPaga\b/i.test(line) || /\bExpirado\b/i.test(line)) continue;
     const dm = line.match(/(\d{2}\/\d{2}\/\d{4})/);
     const am = line.match(/R\$\s*([\d.]+,\d{2})/);
     if (!dm || !am) continue;
     const gross = parseBRNumber(am[1]);
     if (gross <= 0) continue;
     const saleDate = toISODate(dm[1]);
-    out.push({ id: `g-${++idx}`, date: saleDate, brand: 'PIX', modality: 'PIX', form: 'PIX', status: 'Paga', installments: 1, settleDate: saleDate, auth: '', cv: '', terminal: '', card: '', gross, fee: 0, net: gross });
+    out.push({
+      id: `g-${++idx}`,
+      date: saleDate,
+      brand: 'PIX',
+      modality: 'PIX',
+      form: 'PIX',
+      status: 'Paga',
+      installments: 1,
+      settleDate: saleDate,
+      auth: '',
+      cv: '',
+      terminal: '',
+      card: '',
+      gross,
+      fee: 0,
+      net: gross,
+    });
   }
 
   const seen = new Set<string>();
   return out.filter((s) => {
-    const k = `${s.date}|${s.auth}|${s.net}|${s.gross}|${s.status}|${s.brand}|${s.modality}`;
+    const k = `${s.date}|${s.time || ''}|${s.auth}|${s.cv}|${s.gross.toFixed(2)}|${s.status}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;

@@ -200,34 +200,26 @@ export async function fileToText(file: File): Promise<string> {
 }
 
 export function parsePmsText(raw: string): PmsPayment[] {
-  const normalized = raw
-    .replace(/(?=(?:Cielo|PIX|Getnet|Stone|Rede|Elo|Visa|Master|Amex|Hipercard)\s+)/gi, '\n')
-    .replace(/(?=\d{2}\/\d{2}\/\d{2,4}\s+#?\d+\s+[A-Z]{1,3}\s+\d{2}\/\d{2}\/\d{2,4}\s+)/g, '\n')
-    .replace(/(?=Parcelas:\s*)/gi, '\n')
-    .replace(/(?=Sub Total\s+)/gi, '\n');
-  const lines = normalized.split(/\r?\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const out: PmsPayment[] = [];
-  let group = '';
   let idx = 0;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^Sub Total\b/i.test(line) || /^Resumo\b/i.test(line) || /^Resultado\b/i.test(line)) continue;
-    if (/^Data Pgto\.\s+Op\.\s+Vencto\./i.test(line)) continue;
+  // Funciona tanto com o texto preservado pelo PDF.js quanto com o texto
+  // achatado. O relatório PMS identifica cada pagamento pela sequência:
+  // data + operação + tipo + vencimento + hóspede + 4 valores.
+  const flat = raw.replace(/\s+/g, ' ').trim();
+  const txRe =
+    /(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+\$\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$\s*([\d.]+,\d{2})\s+\$\s*([\d.]+,\d{2})/gi;
 
-    const header = line.match(/^(Cielo|PIX|Getnet|Stone|Rede|Elo|Visa|Master|Amex|Hipercard).*$/i);
-    if (header && !/\d{2}\/\d{2}\/\d{2,4}/.test(line)) {
-      group = line;
-      continue;
-    }
+  let match: RegExpExecArray | null;
+  while ((match = txRe.exec(flat))) {
+    const operation = match[2];
+    const guest = match[5].trim();
+    if (/^(Data|Resumo|Resultado|Sub Total|Tipo\b)/i.test(guest)) continue;
 
-    const dateMatch = line.match(/^(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+(?=\$)/);
-    if (!dateMatch) continue;
+    const after = flat.slice(match.index + match[0].length);
+    const nextTx = after.search(/\d{2}\/\d{2}\/\d{2,4}\s+#?\d+\s+[A-Z]{1,3}\s+\d{2}\/\d{2}\/\d{2,4}/i);
+    const detail = (nextTx >= 0 ? after.slice(0, nextTx) : after).slice(0, 700);
 
-    const money = [...line.matchAll(/\$\s*([\d.]+,\d{2})/g)].map((m) => parseBRNumber(m[1]));
-    if (money.length < 4) continue;
-
-    const detail = lines[i + 1] || '';
     const parcel = detail.match(/Parcelas:\s*(\d+)x\s*\$\s*([\d.]+,\d{2})/i);
     const cash = detail.match(/Caixa:\s*([^|]+)/i);
     const pdv = detail.match(/PDV:\s*([^|]+)/i);
@@ -235,20 +227,24 @@ export function parsePmsText(raw: string): PmsPayment[] {
     const user = detail.match(/Usuário:\s*([^|]+)/i);
     const reservation = detail.match(/Reservas?\s*:\s*(#?\d+)/i);
 
+    const before = flat.slice(Math.max(0, match.index - 1800), match.index);
+    const headers = [...before.matchAll(/(?:Cielo|PIX|Getnet|Stone|Rede|Elo|Visa|Master|Amex|Hipercard)[^0-9$]{0,100}/gi)];
+    const group = headers.length ? headers[headers.length - 1][0].trim() : '';
+
     out.push({
       id: `pms-${++idx}`,
-      date: toISODate(dateMatch[1]),
-      operation: dateMatch[2],
-      operationType: dateMatch[3],
-      due: toISODate(dateMatch[4]),
-      guest: dateMatch[5].trim(),
-      amount: money[0],
-      balance: money[1],
-      fee: money[2],
-      net: money[3],
+      date: toISODate(match[1]),
+      operation,
+      operationType: match[3],
+      due: toISODate(match[4]),
+      guest,
+      amount: parseBRNumber(match[6]),
+      balance: parseBRNumber(match[7]),
+      fee: parseBRNumber(match[8]),
+      net: parseBRNumber(match[9]),
       paymentGroup: group,
       installments: parcel ? Number(parcel[1]) : 1,
-      installmentAmount: parcel ? parseBRNumber(parcel[2]) : money[0],
+      installmentAmount: parcel ? parseBRNumber(parcel[2]) : parseBRNumber(match[6]),
       cashRegister: cash?.[1]?.trim() || '',
       pdv: pdv?.[1]?.trim() || '',
       auth: auth?.[1]?.trim() || '',
@@ -256,6 +252,7 @@ export function parsePmsText(raw: string): PmsPayment[] {
       reservation: reservation?.[1]?.trim() || '',
     });
   }
+
   return out;
 }
 
@@ -292,74 +289,56 @@ export function parseHitsText(raw: string): HitsPayment[] {
 export function parseGetnetText(raw: string): GetnetSale[] {
   const out: GetnetSale[] = [];
   let idx = 0;
-  const chunks = raw
-    .split(/(?=(?:Comercial\s+)?\d+\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s+)/i)
-    .filter((chunk) => /Data\/Hora da Venda|Mastercard\s+(?:Crédito|Credito|Débito|Debito)/i.test(chunk));
+  const flat = raw.replace(/\s+/g, ' ').trim();
 
-  for (const chunk of chunks) {
-    const header = chunk.match(
-      /(?:Comercial\s+)?\d+\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s+[\s\S]*?(Mastercard|Visa|Elo|Amex|Hipercard|Cabal)\s+(Crédito|Credito|Débito|Debito)\s+(.+?)\s+(Aprovada|Negada|Autorizada|Cancelada)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2})(?:\s+(\d{2}\/\d{2}\/\d{4}))?/i,
-    );
-    // No relatório Getnet, os dados da venda ficam em uma linha própria:
-    // cartão, AUT, CV, meio de captura, terminal, bruto, taxa, líquido, emissor.
-    // A versão anterior procurava os valores depois do título "Valor Bruto",
-    // mas o PDF exportado coloca o título em uma linha separada da venda.
-    const detail = chunk.match(
-      /(\d{6,}\*+\d{4})\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(R\$\s*[\d.]+,\d{2})\s+(-?R\$\s*[\d.]+,\d{2})\s+(R\$\s*[\d.]+,\d{2})\s+(\S+)/i
-    );
-    if (!header || !detail) continue;
+  // Cada venda do relatório detalhado começa pelo estabelecimento e traz,
+  // na mesma sequência lógica, bandeira/modalidade/status/data e depois
+  // cartão/AUT/CV/captura/terminal/valores.
+  const saleRe =
+    /(?:Comercial\s+)?(\d+)\s+(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})\s+(.+?)\s+(Mastercard|Visa|Elo|Amex|Hipercard|Cabal)\s+(Crédito|Credito|Débito|Debito)\s+(.+?)\s+(Aprovada|Negada|Autorizada|Cancelada)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2})(?:\s+(\d{2}\/\d{2}\/\d{4}))?\s+Valor Taxa Número do Terminal.*?Número do Cartão Valor Líquido.*?(\d{6,}\*+\d{4})\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(R\$\s*[\d.]+,\d{2})\s+(-?R\$\s*[\d.]+,\d{2})\s+(R\$\s*[\d.]+,\d{2})\s+(\S+)/gi;
 
-    const status = header[4];
-    const gross = Math.abs(parseBRNumber(detail[6]));
-    const fee = Math.abs(parseBRNumber(detail[7]));
-    const net = Math.abs(parseBRNumber(detail[8]));
-
+  let match: RegExpExecArray | null;
+  while ((match = saleRe.exec(flat))) {
+    const status = match[7];
     out.push({
       id: `g-${++idx}`,
-      date: toISODate(header[5]),
-      time: header[6],
-      brand: header[1],
-      modality: header[2],
-      form: header[3].trim(),
+      date: toISODate(match[8]),
+      time: match[9],
+      brand: match[4],
+      modality: match[5],
+      form: match[6].trim(),
       status,
-      installments: Number(header[7]) || 1,
-      settleDate: header[8] ? toISODate(header[8]) : toISODate(header[5]),
-      auth: detail[2] === 'N/A' ? '' : detail[2],
-      cv: detail[3],
-      terminal: detail[5],
-      card: detail[1],
-      gross,
-      fee,
-      net,
+      installments: Number(match[10]) || 1,
+      settleDate: match[11] ? toISODate(match[11]) : toISODate(match[8]),
+      auth: match[13] === 'N/A' ? '' : match[13],
+      cv: match[14],
+      terminal: match[16],
+      card: match[12],
+      gross: Math.abs(parseBRNumber(match[17])),
+      fee: Math.abs(parseBRNumber(match[18])),
+      net: Math.abs(parseBRNumber(match[19])),
     });
   }
 
-  // Alguns relatórios exportados trazem PIX fora da estrutura de cartão.
-  for (const line of raw.split(/\r?\n/)) {
-    if (!/\bPaga\b/i.test(line) || /\bExpirado\b/i.test(line)) continue;
-    const dm = line.match(/(\d{2}\/\d{2}\/\d{4})/);
-    const am = line.match(/R\$\s*([\d.]+,\d{2})/);
-    if (!dm || !am) continue;
-    const gross = parseBRNumber(am[1]);
-    if (gross <= 0) continue;
-    const saleDate = toISODate(dm[1]);
-    out.push({
-      id: `g-${++idx}`,
-      date: saleDate,
-      brand: 'PIX',
-      modality: 'PIX',
-      form: 'PIX',
-      status: 'Paga',
-      installments: 1,
-      settleDate: saleDate,
-      auth: '',
-      cv: '',
-      terminal: '',
-      card: '',
-      gross,
-      fee: 0,
-      net: gross,
-    });
+  // Fallback para exportações em que o cabeçalho "Valor Taxa..." não fica
+  // na mesma sequência textual. Divide pelo início de cada venda e extrai
+  // cabeçalho + linha de valores separadamente.
+  if (out.length === 0) {
+    const starts = [...flat.matchAll(/(?:Comercial\s+)?\d+\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s+/gi)].map((m) => m.index || 0);
+    starts.push(flat.length);
+    for (let i = 0; i < starts.length - 1; i++) {
+      const chunk = flat.slice(starts[i], starts[i + 1]);
+      const h = chunk.match(/(?:Comercial\s+)?\d+\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s+.*?\s+(Mastercard|Visa|Elo|Amex|Hipercard|Cabal)\s+(Crédito|Credito|Débito|Debito)\s+(.+?)\s+(Aprovada|Negada|Autorizada|Cancelada)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2})(?:\s+(\d{2}\/\d{2}\/\d{4}))?/i);
+      const d = chunk.match(/(\d{6,}\*+\d{4})\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(R\$\s*[\d.]+,\d{2})\s+(-?R\$\s*[\d.]+,\d{2})\s+(R\$\s*[\d.]+,\d{2})\s+(\S+)/i);
+      if (!h || !d) continue;
+      out.push({
+        id: `g-${++idx}`, date: toISODate(h[5]), time: h[6], brand: h[1],
+        modality: h[2], form: h[3].trim(), status: h[4],
+        installments: Number(h[7]) || 1, settleDate: h[8] ? toISODate(h[8]) : toISODate(h[5]),
+        auth: d[2] === 'N/A' ? '' : d[2], cv: d[3], terminal: d[5], card: d[1],
+        gross: Math.abs(parseBRNumber(d[6])), fee: Math.abs(parseBRNumber(d[7])), net: Math.abs(parseBRNumber(d[8])),
+      });
+    }
   }
 
   const seen = new Set<string>();

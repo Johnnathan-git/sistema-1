@@ -264,31 +264,31 @@ export function parseGetnetText(raw: string): GetnetSale[] {
 
   for (const chunk of chunks) {
     const header = chunk.match(
-      /(?:Comercial\s+)?\d+\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s+[\s\S]*?(Mastercard|Visa|Elo|Amex|Hipercard|Cabal)\s+(Crédito|Credito|Débito|Debito)\s+(.+?)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2})(?:\s+(\d{2}\/\d{2}\/\d{4}))?/i,
+      /(?:Comercial\s+)?\d+\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s+[\s\S]*?(Mastercard|Visa|Elo|Amex|Hipercard|Cabal)\s+(Crédito|Credito|Débito|Debito)\s+(.+?)\s+(Aprovada|Negada|Autorizada|Cancelada)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2})(?:\s+(\d{2}\/\d{2}\/\d{4}))?/i,
     );
     const detail = chunk.match(
-      /Valor Líquido[\s\S]*?Valor Bruto\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+(-?R\$\s*[\d.]+,\d{2})\s+(-?R\$\s*[\d.]+,\d{2})\s+(R\$\s*[\d.]+,\d{2})\s+([^\s]+)\s+(Aprovada|Negada|Autorizada|Cancelada)/i,
+      /Valor Bruto[\s\S]*?Valor Bruto\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+(-?R\$\s*[\d.]+,\d{2})\s+(-?R\$\s*[\d.]+,\d{2})\s+(R\$\s*[\d.]+,\d{2})\s+([^\s]+)/i,
     );
     if (!header || !detail) continue;
 
-    const status = detail[10];
+    const status = header[4];
     const gross = Math.abs(parseBRNumber(detail[6]));
     const fee = Math.abs(parseBRNumber(detail[7]));
     const net = Math.abs(parseBRNumber(detail[8]));
 
     out.push({
       id: `g-${++idx}`,
-      date: toISODate(header[4]),
-      time: header[5],
+      date: toISODate(header[5]),
+      time: header[6],
       brand: header[1],
       modality: header[2],
       form: header[3].trim(),
       status,
-      installments: Number(header[6]) || 1,
-      settleDate: header[7] ? toISODate(header[7]) : toISODate(header[4]),
-      auth: detail[5] === 'N/A' ? '' : detail[5],
+      installments: Number(header[7]) || 1,
+      settleDate: header[8] ? toISODate(header[8]) : toISODate(header[5]),
+      auth: detail[2] === 'N/A' ? '' : detail[2],
       cv: detail[3],
-      terminal: detail[2],
+      terminal: detail[5],
       card: detail[1],
       gross,
       fee,

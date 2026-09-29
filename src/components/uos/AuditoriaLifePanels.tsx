@@ -9,8 +9,8 @@ import {
   type BankLine,
   type BankMatchRow,
   type GetnetSale,
-  type HitsGetnetMatch,
-  type HitsPayment,
+  type PmsGetnetMatch,
+  type PmsPayment,
 } from '@/lib/auditoria-core';
 import type { AuditRecord } from '@/lib/auditoria-workflow';
 import { statusLabel } from '@/lib/auditoria-workflow';
@@ -64,10 +64,10 @@ function openAttachment(dataUrl?: string, fileName?: string) {
 export function ConciliationPanel({
   sub,
   setSub,
-  hits = [],
+  pms = [],
   getnet = [],
   bank = [],
-  hitsMatches = [],
+  pmsMatches = [],
   bankMatches = [],
   busy,
   onLoadFile,
@@ -79,22 +79,30 @@ export function ConciliationPanel({
 }: {
   sub: 'hits_getnet' | 'getnet_bank';
   setSub: (sub: 'hits_getnet' | 'getnet_bank') => void;
-  hits?: HitsPayment[];
+  pms?: PmsPayment[];
   getnet?: GetnetSale[];
   bank?: BankLine[];
-  hitsMatches?: HitsGetnetMatch[];
+  pmsMatches?: PmsGetnetMatch[];
   bankMatches?: BankMatchRow[];
   busy: boolean;
-  onLoadFile: (kind: 'hits' | 'getnet' | 'bank', file: File) => void;
-  pasteOpen: 'hits' | 'getnet' | 'bank' | null;
-  setPasteOpen: (kind: 'hits' | 'getnet' | 'bank' | null) => void;
+  onLoadFile: (kind: 'pms' | 'getnet' | 'bank', file: File) => void;
+  pasteOpen: 'pms' | 'getnet' | 'bank' | null;
+  setPasteOpen: (kind: 'pms' | 'getnet' | 'bank' | null) => void;
   pasteText: string;
   setPasteText: (text: string) => void;
   onApplyPaste: () => void;
 }) {
   const sources = sub === 'hits_getnet'
-    ? ([['HITS', 'hits', hits.length], ['Getnet', 'getnet', getnet.length]] as const)
+    ? ([['PMS', 'pms', pms.length], ['Getnet', 'getnet', getnet.length]] as const)
     : ([['Getnet', 'getnet', getnet.length], ['Banco', 'bank', bank.length]] as const);
+
+  const pmsSummary = {
+    total: pmsMatches.length,
+    ok: pmsMatches.filter((r) => r.side === 'both').length,
+    divergence: pmsMatches.filter((r) => r.side === 'divergence').length,
+    pmsOnly: pmsMatches.filter((r) => r.side === 'pms_only').length,
+    getnetOnly: pmsMatches.filter((r) => r.side === 'getnet_only').length,
+  };
 
   return (
     <div className="space-y-4">
@@ -102,6 +110,7 @@ export function ConciliationPanel({
         <button type="button" onClick={() => setSub('hits_getnet')} className={cn('h-8 px-3 rounded-md text-[12px] font-semibold transition-colors', sub === 'hits_getnet' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>PMS × Getnet</button>
         <button type="button" onClick={() => setSub('getnet_bank')} className={cn('h-8 px-3 rounded-md text-[12px] font-semibold transition-colors', sub === 'getnet_bank' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>Getnet × Banco</button>
       </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {sources.map(([label, kind, count]) => (
           <div key={label} className="rounded-xl border border-slate-200/80 bg-white p-4 space-y-3 shadow-sm hover:border-slate-300/80 transition-colors">
@@ -125,10 +134,27 @@ export function ConciliationPanel({
         ))}
       </div>
 
+      {sub === 'hits_getnet' && pms.length > 0 && getnet.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          {[
+            ['Conciliadas', pmsSummary.ok, 'bg-emerald-50 text-emerald-800 border-emerald-100'],
+            ['Divergências', pmsSummary.divergence, 'bg-amber-50 text-amber-900 border-amber-100'],
+            ['Só PMS', pmsSummary.pmsOnly, 'bg-rose-50 text-rose-800 border-rose-100'],
+            ['Só Getnet', pmsSummary.getnetOnly, 'bg-sky-50 text-sky-800 border-sky-100'],
+            ['Total', pmsSummary.total, 'bg-slate-50 text-slate-800 border-slate-100'],
+          ].map(([label, value, cls]) => (
+            <div key={label} className={cn('rounded-xl border px-3 py-2.5', cls)}>
+              <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{label}</p>
+              <p className="text-[18px] font-semibold tabular-nums mt-0.5">{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {pasteOpen && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[12px] font-semibold text-slate-700">Colar dados de {pasteOpen === 'hits' ? 'HITS' : pasteOpen === 'getnet' ? 'Getnet' : 'Banco'}</p>
+            <p className="text-[12px] font-semibold text-slate-700">Colar dados de {pasteOpen === 'pms' ? 'PMS' : pasteOpen === 'getnet' ? 'Getnet' : 'Banco'}</p>
             <button type="button" onClick={() => setPasteOpen(null)} className="h-7 w-7 rounded-md text-slate-500 hover:bg-slate-100 inline-flex items-center justify-center"><X className="h-4 w-4" /></button>
           </div>
           <textarea value={pasteText} onChange={(e) => setPasteText(e.target.value)} className="w-full min-h-32 rounded-lg border border-slate-200 p-3 text-[12px] outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20" placeholder="Cole aqui as linhas do relatório…" />
@@ -137,28 +163,48 @@ export function ConciliationPanel({
       )}
 
       <div className="rounded-xl border border-slate-200/80 bg-white overflow-hidden shadow-sm">
-        <div className="max-h-[420px] overflow-y-auto divide-y divide-slate-100">
-          {(sub === 'hits_getnet' ? hitsMatches : bankMatches).length === 0 && (
+        <div className="max-h-[520px] overflow-y-auto divide-y divide-slate-100">
+          {(sub === 'hits_getnet' ? pmsMatches : bankMatches).length === 0 && (
             <p className="px-4 py-12 text-center text-[13px] text-slate-400">Sem dados ainda</p>
           )}
-          {sub === 'hits_getnet' && hitsMatches.map((row) => {
+
+          {sub === 'hits_getnet' && pmsMatches.map((row) => {
             const ok = row.side === 'both';
-            const value = row.hits?.amount ?? row.getnet?.gross ?? 0;
-            const label = row.hits?.guest || row.getnet?.brand || 'Lançamento';
-            const detail = ok ? 'Conciliado' : row.side === 'hits_only' ? 'Somente no HITS' : row.side === 'getnet_only' ? 'Somente na Getnet' : `Diferença de ${formatBRL(Math.abs(row.delta || 0))}`;
-            return <div key={row.id} className="px-4 py-3 flex items-start gap-2.5 text-[12px] hover:bg-slate-50/60 transition-colors">
-              {ok ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              ) : (
-                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="font-medium text-slate-800">{label}</p>
-                <p className="text-slate-500 mt-0.5">{detail}</p>
+            const div = row.side === 'divergence';
+            const value = row.pms?.amount ?? row.getnet?.gross ?? 0;
+            const label = row.pms?.guest || row.getnet?.brand || 'Transação';
+            const reservation = row.pms?.reservation ? ` · Reserva ${row.pms.reservation}` : '';
+            const detail = ok
+              ? `Conciliado por ${row.matchedBy}`
+              : div
+                ? row.differences.join(' · ')
+                : row.side === 'pms_only'
+                  ? 'Somente no PMS'
+                  : 'Somente na Getnet';
+
+            return (
+              <div key={row.id} className="px-4 py-3.5 text-[12px] hover:bg-slate-50/60 transition-colors">
+                <div className="flex items-start gap-2.5">
+                  {ok ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" /> : <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium text-slate-800">{label}{reservation}</p>
+                      <span className="font-semibold tabular-nums text-slate-700">{formatBRL(value)}</span>
+                    </div>
+                    <p className="text-slate-500 mt-0.5">{detail}</p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-[11px] text-slate-400">
+                      {row.pms?.operation && <span>PMS {row.pms.operation}</span>}
+                      {row.pms?.auth && <span>AUT {row.pms.auth}</span>}
+                      {row.getnet?.cv && <span>CV {row.getnet.cv}</span>}
+                      {row.getnet?.status && <span>{row.getnet.status}</span>}
+                      {row.getnet?.date && <span>Getnet {formatDateBR(row.getnet.date)}{row.getnet.time ? ` ${row.getnet.time}` : ''}</span>}
+                    </div>
+                  </div>
+                </div>
               </div>
-              <span className="font-semibold tabular-nums text-slate-700">{formatBRL(value)}</span>
-            </div>;
+            );
           })}
+
           {sub === 'getnet_bank' && bankMatches.map((row) => {
             const ok = row.status === 'ok';
             return <div key={row.id} className="px-4 py-3 flex items-start gap-2.5 text-[12px] hover:bg-slate-50/60 transition-colors">

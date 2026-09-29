@@ -85,7 +85,7 @@ export function ConciliationPanel({
   pmsMatches?: PmsGetnetMatch[];
   bankMatches?: BankMatchRow[];
   busy: boolean;
-  onLoadFile: (kind: 'pms' | 'getnet' | 'bank', file: File) => void;
+  onLoadFile: (kind: 'pms' | 'getnet' | 'bank', file: File | File[]) => void;
   pasteOpen: 'pms' | 'getnet' | 'bank' | null;
   setPasteOpen: (kind: 'pms' | 'getnet' | 'bank' | null) => void;
   pasteText: string;
@@ -119,11 +119,11 @@ export function ConciliationPanel({
             </p>
             <div className="flex flex-wrap gap-2">
               <label className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-300 transition-all">
-                <Upload className="w-3.5 h-3.5 text-slate-500" /> Arquivo
-                <input type="file" accept=".pdf,.txt,.csv,text/plain,application/pdf" className="hidden" disabled={busy} onChange={(e) => {
-                  const file = e.target.files?.[0];
+                <Upload className="w-3.5 h-3.5 text-slate-500" /> {kind === 'getnet' ? 'Arquivos (cartão + Pix)' : 'Arquivo'}
+                <input type="file" multiple={kind === 'getnet'} accept=".pdf,.txt,.csv,text/plain,application/pdf" className="hidden" disabled={busy} onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
                   e.target.value = '';
-                  if (file) onLoadFile(kind, file);
+                  if (files.length) onLoadFile(kind, kind === 'getnet' ? files : files[0]);
                 }} />
               </label>
               <button type="button" onClick={() => setPasteOpen(kind)} disabled={busy} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-50">
@@ -195,6 +195,10 @@ export function ConciliationPanel({
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-[11px] text-slate-400">
                       {row.pms?.operation && <span>PMS {row.pms.operation}</span>}
                       {row.pms?.auth && <span>AUT {row.pms.auth}</span>}
+                      {row.getnet?.auth && <span>AUT Getnet {row.getnet.auth}</span>}
+                      {row.pms?.paymentGroup && <span>PMS {row.pms.paymentGroup}</span>}
+                      {row.getnet?.brand && <span>Bandeira {row.getnet.brand}</span>}
+                      {row.getnet?.name && <span>Nome Getnet {row.getnet.name}</span>}
                       {row.getnet?.cv && <span>CV {row.getnet.cv}</span>}
                       {row.getnet?.status && <span>{row.getnet.status}</span>}
                       {row.getnet?.date && <span>Getnet {formatDateBR(row.getnet.date)}{row.getnet.time ? ` ${row.getnet.time}` : ''}</span>}

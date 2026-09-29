@@ -31,7 +31,7 @@ export interface PmsGetnetMatch {
   matchedBy: string;
   differences: string[];
 }
-export interface GetnetSale { id: string; date: string; time?: string; brand: string; modality: string; form: string; status: string; installments: number; settleDate: string; auth: string; cv: string; terminal: string; card: string; gross: number; fee: number; net: number; }
+export interface GetnetSale { id: string; date: string; time?: string; brand: string; modality: string; form: string; status: string; installments: number; settleDate: string; auth: string; cv: string; terminal: string; card: string; gross: number; fee: number; net: number; name?: string; }
 export interface BankLine { id: string; date: string; description: string; amount: number; ref?: string; kind: 'getnet' | 'cielo' | 'pix' | 'other' | 'debit_out'; }
 export interface FeeRule { id: string; label: string; brand: string; modality: string; feePercent: number; feeFixed: number; active: boolean; }
 export interface HitsGetnetMatch { id: string; side: MatchSide; hits?: HitsPayment; getnet?: GetnetSale; delta?: number; }
@@ -333,6 +333,7 @@ export function parseGetnetText(raw: string): GetnetSale[] {
       gross: Math.abs(parseBRNumber(dm[6])),
       fee: Math.abs(parseBRNumber(dm[7])),
       net: Math.abs(parseBRNumber(dm[8])),
+      name: (flat.slice(h.index, nextHeader ? nextHeader.index : h.index + 1500).match(/(?:Nome(?: do (?:Pagador|Portador|Cliente))?|Pagador)\s*:?\s+([A-ZÀ-Ú][A-Za-zÀ-ú' ]{3,60}?)(?=\s+(?:CPF|CNPJ|R\$|\d)|$)/)?.[1] || '').trim() || undefined,
     });
     d.match = [] as unknown as RegExpExecArray;
   }
@@ -516,6 +517,26 @@ export function reconcilePmsGetnet(pms: PmsPayment[], getnet: GetnetSale[]): Pms
     return /cr[eé]dito/.test(blob) || g.installments === 1;
   };
 
+  const brandOf = (v: string) => {
+    const t = (v || '').toLowerCase();
+    if (/pix/.test(t)) return 'PIX';
+    if (/master/.test(t)) return 'Mastercard';
+    if (/visa/.test(t)) return 'Visa';
+    if (/\belo\b/.test(t)) return 'Elo';
+    if (/amex|american/.test(t)) return 'Amex';
+    if (/hiper/.test(t)) return 'Hipercard';
+    if (/cabal/.test(t)) return 'Cabal';
+    return '';
+  };
+  const normName = (v: string) => (v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const nameMatch = (a: string, b: string) => {
+    const x = normName(a), y = normName(b);
+    if (!x || !y) return true;
+    if (x === y || x.includes(y) || y.includes(x)) return true;
+    const wa = x.split(' '), wb = new Set(y.split(' '));
+    return wa[0] === y.split(' ')[0] && wa.filter((w) => w.length > 2 && wb.has(w)).length >= 2;
+  };
+
   for (const p of pms) {
     let best = -1;
     let bestScore = -Infinity;
@@ -536,6 +557,9 @@ export function reconcilePmsGetnet(pms: PmsPayment[], getnet: GetnetSale[]): Pms
       if (installmentMatch) score += 15;
       if (modalityMatch) score += 10;
       if (dateMatch) score += Math.max(0, 8 - dateDiff * 8);
+      const pb = brandOf(p.paymentGroup), gb = brandOf(`${g.brand} ${g.form}`);
+      if (pb && gb && pb === gb) score += 12;
+      if (g.name && nameMatch(p.guest, g.name)) score += 20;
 
       if (score > bestScore) {
         bestScore = score;
@@ -553,6 +577,10 @@ export function reconcilePmsGetnet(pms: PmsPayment[], getnet: GetnetSale[]): Pms
       if (!moneyEq(p.net, g.net)) differences.push(`Líquido: PMS ${formatBRL(p.net)} × Getnet ${formatBRL(g.net)}`);
       if (p.installments !== g.installments) differences.push(`Parcelas: PMS ${p.installments} × Getnet ${g.installments}`);
       if (p.auth && g.auth && normAuth(p.auth) !== normAuth(g.auth)) differences.push(`AUT: PMS ${p.auth} × Getnet ${g.auth}`);
+      else if (!p.auth && g.auth && !/pix/i.test(p.paymentGroup)) differences.push(`AUT: PMS sem AUT × Getnet ${g.auth}`);
+      const pb = brandOf(p.paymentGroup), gb = brandOf(`${g.brand} ${g.form}`);
+      if (pb && gb && pb !== gb) differences.push(`Bandeira: PMS ${pb} × Getnet ${gb}`);
+      if (g.name && !nameMatch(p.guest, g.name)) differences.push(`Nome: PMS ${p.guest} × Getnet ${g.name}`);
       rows.push({ id: `pm-${++idx}`, side: differences.length ? 'divergence' : 'both', pms: p, getnet: g, score: bestScore, matchedBy: bestReason, differences });
     } else {
       rows.push({ id: `pm-${++idx}`, side: 'pms_only', pms: p, score: 0, matchedBy: 'não encontrado', differences: [] });

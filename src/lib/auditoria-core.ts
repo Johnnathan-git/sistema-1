@@ -258,11 +258,13 @@ export function parseHitsText(raw: string): HitsPayment[] {
 export function parseGetnetText(raw: string): GetnetSale[] {
   const out: GetnetSale[] = [];
   let idx = 0;
-  const chunks = raw.split(/(?=Comercial\s+\d+\s+)/i).filter((chunk) => /Data\/Hora da Venda/i.test(chunk));
+  const chunks = raw
+    .split(/(?=(?:Comercial\s+)?\d+\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s+)/i)
+    .filter((chunk) => /Data\/Hora da Venda|Mastercard\s+(?:Crédito|Credito|Débito|Debito)/i.test(chunk));
 
   for (const chunk of chunks) {
     const header = chunk.match(
-      /(?:Comercial\s+\d+\s+[^\n]*?)(Mastercard|Visa|Elo|Amex|Hipercard|Cabal)\s+(Crédito|Credito|Débito|Debito)\s+(.+?)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2})(?:\s+(\d{2}\/\d{2}\/\d{4}))?/i,
+      /(?:Comercial\s+)?\d+\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s+[\s\S]*?(Mastercard|Visa|Elo|Amex|Hipercard|Cabal)\s+(Crédito|Credito|Débito|Debito)\s+(.+?)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2})(?:\s+(\d{2}\/\d{2}\/\d{4}))?/i,
     );
     const detail = chunk.match(
       /Valor Líquido[\s\S]*?Valor Bruto\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+(-?R\$\s*[\d.]+,\d{2})\s+(-?R\$\s*[\d.]+,\d{2})\s+(R\$\s*[\d.]+,\d{2})\s+([^\s]+)\s+(Aprovada|Negada|Autorizada|Cancelada)/i,

@@ -208,20 +208,27 @@ export function parsePmsText(raw: string): PmsPayment[] {
   const out: PmsPayment[] = [];
   let idx = 0;
 
-  // Funciona tanto com o texto preservado pelo PDF.js quanto com o texto
-  // achatado. O relatório PMS identifica cada pagamento pela sequência:
-  // data + operação + tipo + vencimento + hóspede + 4 valores.
-  const flat = raw.replace(/\s+/g, ' ').trim();
+  // O PDF do PMS pode separar visualmente os caracteres de datas e valores.
+  // Normalizamos apenas esses separadores antes de aplicar o parser.
+  const normalized = raw
+    .replace(/(\d)\s+(\d)/g, '$1$2')
+    .replace(/\s*\/\s*/g, '/')
+    .replace(/(\d)\s*\.\s*(?=\d)/g, '$1.')
+    .replace(/(\d)\s*,\s*(?=\d)/g, '$1,')
+    .replace(/\$\s*/g, '$')
+    .replace(/\s+/g, ' ')
+    .trim();
+
   const txRe =
     /(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+\$\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$\s*([\d.]+,\d{2})\s+\$\s*([\d.]+,\d{2})/gi;
 
   let match: RegExpExecArray | null;
-  while ((match = txRe.exec(flat))) {
+  while ((match = txRe.exec(normalized))) {
     const operation = match[2];
     const guest = match[5].trim();
     if (/^(Data|Resumo|Resultado|Sub Total|Tipo\b)/i.test(guest)) continue;
 
-    const after = flat.slice(match.index + match[0].length);
+    const after = normalized.slice(match.index + match[0].length);
     const nextTx = after.search(/\d{2}\/\d{2}\/\d{2,4}\s+#?\d+\s+[A-Z]{1,3}\s+\d{2}\/\d{2}\/\d{2,4}/i);
     const detail = (nextTx >= 0 ? after.slice(0, nextTx) : after).slice(0, 700);
 
@@ -232,7 +239,7 @@ export function parsePmsText(raw: string): PmsPayment[] {
     const user = detail.match(/Usuário:\s*([^|]+)/i);
     const reservation = detail.match(/Reservas?\s*:\s*(#?\d+)/i);
 
-    const before = flat.slice(Math.max(0, match.index - 1800), match.index);
+    const before = normalized.slice(Math.max(0, match.index - 1800), match.index);
     const headers = [...before.matchAll(/(?:Cielo|PIX|Getnet|Stone|Rede|Elo|Visa|Master|Amex|Hipercard)[^0-9$]{0,100}/gi)];
     const group = headers.length ? headers[headers.length - 1][0].trim() : '';
 

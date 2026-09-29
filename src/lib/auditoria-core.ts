@@ -196,6 +196,54 @@ async function pdfToText(file: File): Promise<string> {
   }
 }
 
+async function pdfToPmsText(file: File): Promise<string> {
+  const pdfjs = await import('pdfjs-dist');
+  const data = new Uint8Array(await file.arrayBuffer());
+  if (pdfjs.GlobalWorkerOptions) {
+    try {
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+        'pdfjs-dist/build/pdf.worker.min.mjs',
+        import.meta.url,
+      ).toString();
+    } catch {}
+  }
+
+  const doc = await pdfjs.getDocument({ data }).promise;
+  const pages: string[] = [];
+
+  for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
+    const page = await doc.getPage(pageNo);
+    const content = await page.getTextContent();
+    const items = content.items
+      .map((item: any) => ({
+        str: typeof item?.str === 'string' ? item.str : '',
+        hasEOL: Boolean(item?.hasEOL),
+      }))
+      .filter((item: any) => item.str.trim());
+
+    let pageText = '';
+    for (const item of items) {
+      pageText += item.str;
+      pageText += item.hasEOL ? '\n' : ' ';
+    }
+    pages.push(pageText);
+  }
+
+  const text = pages.join('\n');
+  if (!text.trim()) {
+    throw new Error('PDF PMS sem texto legível. Use «Colar texto».');
+  }
+  return text;
+}
+
+export async function pmsFileToText(file: File): Promise<string> {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.pdf') || file.type === 'application/pdf') {
+    return pdfToPmsText(file);
+  }
+  return file.text();
+}
+
 export async function fileToText(file: File): Promise<string> {
   const name = file.name.toLowerCase();
   if (name.endsWith('.pdf') || file.type === 'application/pdf') {

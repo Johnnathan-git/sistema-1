@@ -3,12 +3,11 @@ import { usePms } from '@/lib/pms-store';
 import {
   accountBalance,
   formatBRL,
-  formatDateBR,
   formatDateTimeBR,
   type Account,
 } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
-import { CreditCard, Link2, Nfc, Plus, Unlink, X } from 'lucide-react';
+import { Nfc, Plus, Unlink, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { listCards, linkCard, unlinkCard, lookupByUid, registerCard } from '@/lib/nfc-cards';
 import { scanNfcOnce } from '@/components/uos/MediaCenterModule';
@@ -125,8 +124,6 @@ export function AccountModal({
         amount: p.amount,
       });
     }
-    // Mantém a ordem cronológica: os lançamentos mais recentes ficam no final.
-    // Quando dois itens têm o mesmo instante, preserva a ordem em que foram adicionados.
     return items.sort((a, b) => a.date.localeCompare(b.date));
   }, [account]);
 
@@ -136,6 +133,36 @@ export function AccountModal({
   const [chargeAmount, setChargeAmount] = useState('');
   const [chargeCat, setChargeCat] =
     useState<Account['charges'][0]['category']>('consumo');
+
+  if (account?.type === 'hospede' && res?.status !== 'checkin') {
+    return (
+      <Overlay onClose={onClose}>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="flex justify-between items-start mb-3">
+            <h2 className="font-semibold text-lg">Conta do hóspede</h2>
+            <button type="button" onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-[13px] text-slate-600">
+            A conta do hóspede é liberada somente depois que o check-in é concluído na Recepção.
+          </p>
+          {res && (
+            <p className="mt-2 text-[12px] text-slate-400">
+              Reserva {res.code} · {res.guestName}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-4 h-9 px-4 rounded-lg bg-slate-900 text-white text-[13px] font-semibold"
+          >
+            Fechar
+          </button>
+        </div>
+      </Overlay>
+    );
+  }
 
   if (!account) {
     return (
@@ -148,8 +175,7 @@ export function AccountModal({
             </button>
           </div>
           <p className="text-[13px] text-slate-500">
-            Esta reserva ainda não possui conta aberta. A conta é criada automaticamente no
-            check-in.
+            Esta reserva ainda não possui conta aberta. A conta é criada automaticamente no check-in.
           </p>
           {res && (
             <p className="mt-2 text-[12px] text-slate-400">
@@ -178,9 +204,13 @@ export function AccountModal({
       toast.error('Informe o valor do pagamento');
       return;
     }
-    addPayment(account.id, n, payMethod);
+    const result = addPayment(account.id, n, payMethod);
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
     setPayAmount('');
-    toast.success('Pagamento lançado');
+    toast.success(result.message);
   };
 
   const submitCharge = () => {
@@ -189,10 +219,14 @@ export function AccountModal({
       toast.error('Descrição e valor obrigatórios');
       return;
     }
-    addCharge(account.id, chargeDesc.trim(), n, chargeCat);
+    const result = addCharge(account.id, chargeDesc.trim(), n, chargeCat);
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
     setChargeDesc('');
     setChargeAmount('');
-    toast.success('Lançamento adicionado');
+    toast.success(result.message);
   };
 
   const attachCard = async () => {
@@ -342,7 +376,7 @@ export function AccountModal({
             <p
               className={cn(
                 'text-[15px] font-semibold tabular-nums',
-                balance > 0.01 ? 'text-rose-600' : 'text-emerald-600'
+                balance > 0.01 ? 'text-rose-600' : 'text-emerald-600',
               )}
             >
               {formatBRL(balance)}
@@ -400,7 +434,6 @@ export function AccountModal({
           </div>
         )}
 
-        {/* Extrato */}
         <div className="flex-1 overflow-y-auto">
           <table className="w-full text-[12px]">
             <thead className="sticky top-0 bg-white border-b border-slate-100">
@@ -414,21 +447,15 @@ export function AccountModal({
             <tbody className="divide-y divide-slate-50">
               {lines.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-5 py-10 text-center text-slate-400">
-                    Nenhum lançamento
-                  </td>
+                  <td colSpan={4} className="px-5 py-10 text-center text-slate-400">Nenhum lançamento</td>
                 </tr>
               ) : (
                 lines.map((l) => (
                   <tr key={l.id} className="hover:bg-slate-50/80">
-                    <td className="px-5 py-2.5 whitespace-nowrap text-slate-500">
-                      {formatDateTimeBR(l.date)}
-                    </td>
+                    <td className="px-5 py-2.5 whitespace-nowrap text-slate-500">{formatDateTimeBR(l.date)}</td>
                     <td className="px-3 py-2.5">
                       <p className="font-medium text-slate-800">{l.label}</p>
-                      {l.extra && (
-                        <p className="text-[10px] text-slate-400">{l.extra}</p>
-                      )}
+                      {l.extra && <p className="text-[10px] text-slate-400">{l.extra}</p>}
                     </td>
                     <td className="px-3 py-2.5">
                       {l.type === 'charge' ? (
@@ -440,7 +467,7 @@ export function AccountModal({
                     <td
                       className={cn(
                         'px-5 py-2.5 text-right tabular-nums font-semibold',
-                        l.type === 'payment' ? 'text-emerald-600' : 'text-slate-800'
+                        l.type === 'payment' ? 'text-emerald-600' : 'text-slate-800',
                       )}
                     >
                       {l.type === 'payment' ? '−' : '+'} {formatBRL(l.amount)}
@@ -452,7 +479,6 @@ export function AccountModal({
           </table>
         </div>
 
-        {/* Lançar */}
         <div className="border-t border-slate-200 px-5 py-3 space-y-3 shrink-0 bg-slate-50">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
@@ -466,9 +492,7 @@ export function AccountModal({
               <div className="flex gap-2">
                 <select
                   value={chargeCat}
-                  onChange={(e) =>
-                    setChargeCat(e.target.value as Account['charges'][0]['category'])
-                  }
+                  onChange={(e) => setChargeCat(e.target.value as Account['charges'][0]['category'])}
                   className="h-9 rounded-lg border border-slate-200 px-2 text-[12px] flex-1"
                 >
                   <option value="consumo">Consumo</option>
@@ -483,11 +507,7 @@ export function AccountModal({
                   placeholder="Valor"
                   className="h-9 w-24 rounded-lg border border-slate-200 px-2 text-[13px]"
                 />
-                <button
-                  type="button"
-                  onClick={submitCharge}
-                  className="h-9 px-2.5 rounded-lg bg-slate-900 text-white"
-                >
+                <button type="button" onClick={submitCharge} className="h-9 px-2.5 rounded-lg bg-slate-900 text-white">
                   <Plus className="w-4 h-4" />
                 </button>
               </div>
@@ -512,11 +532,7 @@ export function AccountModal({
                   placeholder="Valor"
                   className="h-9 w-24 rounded-lg border border-slate-200 px-2 text-[13px]"
                 />
-                <button
-                  type="button"
-                  onClick={submitPay}
-                  className="h-9 px-3 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold"
-                >
+                <button type="button" onClick={submitPay} className="h-9 px-3 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold">
                   Pagar
                 </button>
               </div>
@@ -536,19 +552,11 @@ export function AccountModal({
           <div className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-indigo-500">
-                  Nova conta
-                </p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-indigo-500">Nova conta</p>
                 <h3 className="text-base font-semibold text-slate-900">Adicionar acompanhante</h3>
-                <p className="mt-1 text-[12px] text-slate-500">
-                  Selecione um acompanhante já cadastrado na reserva.
-                </p>
+                <p className="mt-1 text-[12px] text-slate-500">Selecione um acompanhante já cadastrado na reserva.</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setCompanionPickerOpen(false)}
-                className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center"
-              >
+              <button type="button" onClick={() => setCompanionPickerOpen(false)} className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center">
                 <X className="w-4 h-4" />
               </button>
             </div>

@@ -79,6 +79,24 @@ function emptyAnswers(): Record<number, ItemAnswer> {
   return init;
 }
 
+function mergeGetnetSales(current: GetnetSale[], incoming: GetnetSale[]): GetnetSale[] {
+  const seen = new Set<string>();
+  const merged: GetnetSale[] = [];
+  const all = [...current, ...incoming];
+
+  for (const sale of all) {
+    const key = [
+      sale.date || '', sale.time || '', sale.auth || '', sale.cv || '', sale.brand || '',
+      sale.form || sale.modality || '', String(sale.installments || 1), sale.gross.toFixed(2), sale.status || '',
+    ].join('|').toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push({ ...sale, id: `g-${merged.length + 1}` });
+  }
+
+  return merged;
+}
+
 export function AuditoriaHotelWorkspace({
   hotelId,
   hotelName,
@@ -158,7 +176,11 @@ export function AuditoriaHotelWorkspace({
     }));
   }, [hotelId, tick]);
 
-  const pmsMatches = useMemo(() => reconcilePmsGetnet(pms, getnet), [pms, getnet]);
+  const pmsForGetnet = useMemo(
+    () => pms.filter((row) => !/\bdinheiro\b/i.test(row.paymentGroup || '')),
+    [pms],
+  );
+  const pmsMatches = useMemo(() => reconcilePmsGetnet(pmsForGetnet, getnet), [pmsForGetnet, getnet]);
   const bankMatches = useMemo(() => reconcileGetnetBank(getnet, bank, fees), [getnet, bank, fees]);
 
   const setAnswer = useCallback((id: number, patch: Partial<ItemAnswer>) => {
@@ -359,13 +381,13 @@ export function AuditoriaHotelWorkspace({
     try {
       if (kind === 'getnet') {
         const files = Array.isArray(file) ? file : [file];
-        const all: GetnetSale[] = [];
+        const incoming: GetnetSale[] = [];
         for (const f of files) {
           const rows = parseGetnetText(await fileToText(f));
-          rows.forEach((r) => all.push({ ...r, id: `g-${all.length + 1}` }));
+          rows.forEach((r) => incoming.push(r));
         }
-        setGetnet(all);
-        toast.success(`${all.length} venda(s) Getnet em ${files.length} arquivo(s)`);
+        setGetnet((current) => mergeGetnetSales(current, incoming));
+        toast.success(`${incoming.length} venda(s) Getnet adicionada(s) de ${files.length} arquivo(s)`);
         return;
       }
       const selectedFile = Array.isArray(file) ? file[0] : file;
@@ -395,8 +417,8 @@ export function AuditoriaHotelWorkspace({
         toast.success(`${rows.length} pagamento(s) PMS`);
       } else if (pasteOpen === 'getnet') {
         const rows = parseGetnetText(pasteText);
-        setGetnet(rows);
-        toast.success(`${rows.length} venda(s) Getnet`);
+        setGetnet((current) => mergeGetnetSales(current, rows));
+        toast.success(`${rows.length} venda(s) Getnet adicionada(s)`);
       } else {
         const rows = parseSantanderText(pasteText);
         setBank(rows);

@@ -301,67 +301,82 @@ export function parseSantanderText(raw: string): BankLine[] {
 }
 
 export function reconcilePmsGetnet(pms: PmsPayment[], getnet: GetnetSale[]): PmsGetnetMatch[] {
-  const eligible = getnet.filter((g) => { const st = (g.status || '').toLowerCase(); return !/negada|cancelada|expirado/.test(st) && (g.gross > 0 || g.net > 0); });
-  const pool = eligible.map((g) => ({ g, used: false })); const rows: PmsGetnetMatch[] = []; let idx = 0;
+  const eligible = getnet.filter((g) => {
+    const st = (g.status || '').toLowerCase();
+    return !/negada|cancelada|expirado/.test(st) && (g.gross > 0 || g.net > 0);
+  });
+  const pool = eligible.map((g) => ({ g, used: false }));
+  const rows: PmsGetnetMatch[] = [];
+  let idx = 0;
+
   const normAuth = (v: string) => (v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const dayDistance = (a: string, b: string) => { if (!a || !b) return 999; return Math.abs((new Date(a + 'T12:00:00').getTime() - new Date(b + 'T12:00:00').getTime()) / 86400000); };
-  const modalityCompatible = (p: PmsPayment, g: GetnetSale) => { const blob = `${g.modality} ${g.form}`.toLowerCase(); if (/pix/.test(p.paymentGroup.toLowerCase()) && /pix/.test(blob)) return true; if (/d[eé]bito/.test(p.paymentGroup.toLowerCase())) return /d[eé]bito/.test(blob); if (p.installments > 1) return /parcel/.test(blob) || g.installments === p.installments; return /cr[eé]dito/.test(blob) || g.installments === 1; };
-  const brandOf = (v: string) => { const t = (v || '').toLowerCase(); if (/pix/.test(t)) return 'PIX'; if (/master/.test(t)) return 'Mastercard'; if (/visa/.test(t)) return 'Visa'; if (/\belo\b/.test(t)) return 'Elo'; if (/amex|american/.test(t)) return 'Amex'; if (/hiper/.test(t)) return 'Hipercard'; if (/cabal/.test(t)) return 'Cabal'; return ''; };
-  const normName = (v: string) => (v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
-  const nameMatch = (a: string, b: string) => { const x = normName(a), y = normName(b); if (!x || !y) return true; if (x === y || x.includes(y) || y.includes(x)) return true; const wa = x.split(' '), wb = new Set(y.split(' ')); return wa[0] === y.split(' ')[0] && wa.filter((w) => w.length > 2 && wb.has(w)).length >= 2; };
+  const brandOf = (v: string) => {
+    const t = (v || '').toLowerCase();
+    if (/master/.test(t)) return 'Mastercard';
+    if (/visa/.test(t)) return 'Visa';
+    if (/\belo\b/.test(t)) return 'Elo';
+    if (/amex|american/.test(t)) return 'Amex';
+    if (/hiper/.test(t)) return 'Hipercard';
+    if (/cabal/.test(t)) return 'Cabal';
+    return '';
+  };
 
   for (const p of pms) {
-    let best = -1, bestScore = -Infinity, bestReason = '';
     const pAuth = normAuth(p.auth);
+    const pBrand = brandOf(p.paymentGroup);
+    let best = -1;
+    let bestScore = -1;
+
     for (let j = 0; j < pool.length; j++) {
       if (pool[j].used) continue;
       const g = pool[j].g;
       const gAuth = normAuth(g.auth);
+      const gBrand = brandOf(`${g.brand} ${g.form}`);
+
+      const grossMatch = moneyEq(p.amount, g.gross);
       const authMatch = !!pAuth && !!gAuth && pAuth === gAuth;
-      if (pAuth && gAuth && !authMatch) continue;
-      if (pAuth && !gAuth) continue;
+      const brandMatch = !!pBrand && !!gBrand && pBrand === gBrand;
+      const installmentsMatch = p.installments === g.installments;
 
-      const amountMatch = moneyEq(p.amount, g.gross);
-      const installmentMatch = p.installments === g.installments;
-      const dateDiff = dayDistance(p.date, g.date);
-      const dateMatch = dateDiff <= 1;
-      const modalityMatch = modalityCompatible(p, g);
-      const pb = brandOf(p.paymentGroup), gb = brandOf(`${g.brand} ${g.form}`);
-      const brandMatch = !!pb && !!gb && pb === gb;
-
-      if (!pAuth && !(amountMatch && dateMatch)) continue;
-
-      let score = 0;
-      if (authMatch) score += 100;
-      if (amountMatch) score += 35;
-      if (installmentMatch) score += 15;
-      if (modalityMatch) score += 10;
-      if (dateMatch) score += 8;
-      if (brandMatch) score += 12;
-      if (g.name && nameMatch(p.guest, g.name)) score += 20;
+      const score = Number(grossMatch) + Number(authMatch) + Number(brandMatch) + Number(installmentsMatch);
       if (score > bestScore) {
         bestScore = score;
         best = j;
-        bestReason = authMatch ? 'AUT' : 'valor + data';
       }
     }
 
-    if (best >= 0 && bestScore >= 43) {
-      const g = pool[best].g; pool[best].used = true;
+    // Só pareia quando há evidência forte: pelo menos 3 dos 4 critérios.
+    // Taxa e líquido não participam da conciliação.
+    if (best >= 0 && bestScore >= 3) {
+      const g = pool[best].g;
+      pool[best].used = true;
       const differences: string[] = [];
+      const gAuth = normAuth(g.auth);
+      const gBrand = brandOf(`${g.brand} ${g.form}`);
+
       if (!moneyEq(p.amount, g.gross)) differences.push(`Valor bruto: PMS ${formatBRL(p.amount)} × Getnet ${formatBRL(g.gross)}`);
-      if (!moneyEq(p.fee, g.fee)) differences.push(`Taxa: PMS ${formatBRL(p.fee)} × Getnet ${formatBRL(g.fee)}`);
-      if (!moneyEq(p.net, g.net)) differences.push(`Líquido: PMS ${formatBRL(p.net)} × Getnet ${formatBRL(g.net)}`);
+      if (pAuth !== gAuth) differences.push(`AUT: PMS ${p.auth || '—'} × Getnet ${g.auth || '—'}`);
+      if (pBrand !== gBrand) differences.push(`Bandeira: PMS ${pBrand || '—'} × Getnet ${gBrand || '—'}`);
       if (p.installments !== g.installments) differences.push(`Parcelas: PMS ${p.installments} × Getnet ${g.installments}`);
-      const pb = brandOf(p.paymentGroup), gb = brandOf(`${g.brand} ${g.form}`);
-      if (pb && gb && pb !== gb) differences.push(`Bandeira: PMS ${pb} × Getnet ${gb}`);
-      if (g.name && !nameMatch(p.guest, g.name)) differences.push(`Nome: PMS ${p.guest} × Getnet ${g.name}`);
-      rows.push({ id: `pm-${++idx}`, side: differences.length ? 'divergence' : 'both', pms: p, getnet: g, score: bestScore, matchedBy: bestReason, differences });
+
+      const exact = differences.length === 0;
+      rows.push({
+        id: `pm-${++idx}`,
+        side: exact ? 'both' : 'divergence',
+        pms: p,
+        getnet: g,
+        score: bestScore,
+        matchedBy: exact ? 'valor bruto + AUT + bandeira + parcelas' : '3 de 4 critérios',
+        differences,
+      });
     } else {
       rows.push({ id: `pm-${++idx}`, side: 'pms_only', pms: p, score: 0, matchedBy: 'não encontrado', differences: [] });
     }
   }
-  for (const item of pool) if (!item.used) rows.push({ id: `pm-${++idx}`, side: 'getnet_only', getnet: item.g, score: 0, matchedBy: 'não encontrado no PMS', differences: [] });
+
+  for (const item of pool) {
+    if (!item.used) rows.push({ id: `pm-${++idx}`, side: 'getnet_only', getnet: item.g, score: 0, matchedBy: 'não encontrado no PMS', differences: [] });
+  }
   return rows;
 }
 

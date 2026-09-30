@@ -205,6 +205,7 @@ export function ConciliationPanel({
 
             const pmsBrand = row.pms ? pmsBrandFromGroup(row.pms.paymentGroup) : '';
             const pmsModality = row.pms ? pmsModalityFromGroup(row.pms.paymentGroup, row.pms.installments) : '';
+            const pmsIsPix = !!row.pms && /^PIX\b/i.test((row.pms.paymentGroup || '').trim());
             const pmsReferenceLabel = row.pms?.account ? 'Conta' : 'Reserva';
             const pmsReferenceValue = row.pms?.account || row.pms?.reservation || '';
 
@@ -232,8 +233,14 @@ export function ConciliationPanel({
                       <div>
                         <DataLine label="Data" value={formatDateBR(row.pms.date)} />
                         <DataLine label={pmsReferenceLabel} value={pmsReferenceValue ? (pmsReferenceLabel === 'Reserva' ? `#${pmsReferenceValue}` : pmsReferenceValue) : '—'} />
-                        <DataLine label="Bandeira" value={pmsBrand || '—'} />
-                        <DataLine label="Modalidade" value={pmsModality || '—'} />
+                        {pmsIsPix ? (
+                          <DataLine label="Forma de pagamento" value={row.pms.paymentGroup || 'PIX'} />
+                        ) : (
+                          <>
+                            <DataLine label="Bandeira" value={pmsBrand || '—'} />
+                            <DataLine label="Modalidade" value={pmsModality || '—'} />
+                          </>
+                        )}
                         <DataLine label="AUT" value={row.pms.auth || '—'} strong />
                         <DataLine label="Parcelas" value={`${row.pms.installments}x`} />
                         <DataLine label="Bruto" value={formatBRL(row.pms.amount)} strong />

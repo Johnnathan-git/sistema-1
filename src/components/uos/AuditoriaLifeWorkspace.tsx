@@ -97,6 +97,11 @@ function mergeGetnetSales(current: GetnetSale[], incoming: GetnetSale[]): Getnet
   return merged;
 }
 
+function isPmsGetnetPayment(row: PmsPayment): boolean {
+  const group = (row.paymentGroup || '').trim();
+  return /^(?:Get(?:net)?\b|PIX\b)/i.test(group);
+}
+
 export function AuditoriaHotelWorkspace({
   hotelId,
   hotelName,
@@ -176,10 +181,7 @@ export function AuditoriaHotelWorkspace({
     }));
   }, [hotelId, tick]);
 
-  const pmsForGetnet = useMemo(
-    () => pms.filter((row) => !/\bdinheiro\b/i.test(row.paymentGroup || '')),
-    [pms],
-  );
+  const pmsForGetnet = useMemo(() => pms.filter(isPmsGetnetPayment), [pms]);
   const pmsMatches = useMemo(() => reconcilePmsGetnet(pmsForGetnet, getnet), [pmsForGetnet, getnet]);
   const bankMatches = useMemo(() => reconcileGetnetBank(getnet, bank, fees), [getnet, bank, fees]);
 
@@ -394,8 +396,10 @@ export function AuditoriaHotelWorkspace({
       const text = kind === 'pms' ? await pmsFileToText(selectedFile) : await fileToText(selectedFile);
       if (kind === 'pms') {
         const rows = parsePmsText(text);
+        const getnetRows = rows.filter(isPmsGetnetPayment);
+        const ignored = rows.length - getnetRows.length;
         setPms(rows);
-        toast.success(`${rows.length} pagamento(s) PMS`);
+        toast.success(`${getnetRows.length} pagamento(s) Getnet/PIX no PMS${ignored ? ` · ${ignored} fora da Getnet ignorado(s)` : ''}`);
       } else {
         const rows = parseSantanderText(text);
         setBank(rows);
@@ -413,8 +417,10 @@ export function AuditoriaHotelWorkspace({
     try {
       if (pasteOpen === 'pms') {
         const rows = parsePmsText(pasteText);
+        const getnetRows = rows.filter(isPmsGetnetPayment);
+        const ignored = rows.length - getnetRows.length;
         setPms(rows);
-        toast.success(`${rows.length} pagamento(s) PMS`);
+        toast.success(`${getnetRows.length} pagamento(s) Getnet/PIX no PMS${ignored ? ` · ${ignored} fora da Getnet ignorado(s)` : ''}`);
       } else if (pasteOpen === 'getnet') {
         const rows = parseGetnetText(pasteText);
         setGetnet((current) => mergeGetnetSales(current, rows));
@@ -692,7 +698,7 @@ export function AuditoriaHotelWorkspace({
         <ConciliationPanel
           sub={conciliacaoSub}
           setSub={setConciliacaoSub}
-          pms={pms}
+          pms={pmsForGetnet}
           getnet={getnet}
           bank={bank}
           pmsMatches={pmsMatches}

@@ -5,6 +5,7 @@ import {
   formatDateBR,
   RES_STATUS_LABEL,
   type Reservation,
+  type Room,
   type RoomType,
 } from '@/lib/pms-types';
 import { cn } from '@/lib/utils';
@@ -20,8 +21,41 @@ const ROOM_TYPES: RoomType[] = [
   'Suite',
 ];
 
+function addDays(iso: string, n: number) {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function overlaps(aIn: string, aOut: string, bIn: string, bOut: string) {
+  return aIn < bOut && aOut > bIn;
+}
+
+function activeReservation(r: Reservation) {
+  return r.status !== 'cancelada' && r.status !== 'no_show' && r.status !== 'checkout';
+}
+
+function roomAvailable(
+  room: Room,
+  reservations: Reservation[],
+  checkIn: string,
+  checkOut: string,
+  ignoreReservationId?: string,
+) {
+  if (room.occupancy === 'bloqueado') return false;
+  if (room.governance === 'interditado' || room.governance === 'manutencao') return false;
+  return !reservations.some(
+    (r) =>
+      r.id !== ignoreReservationId &&
+      r.roomId === room.id &&
+      activeReservation(r) &&
+      overlaps(checkIn, checkOut, r.checkIn, r.checkOut),
+  );
+}
+
 export function ReservationsModule() {
   const {
+    hotel,
     reservations,
     rooms,
     upsertReservation,
@@ -43,13 +77,29 @@ export function ReservationsModule() {
         (r) =>
           r.guestName.toLowerCase().includes(query) ||
           r.code.toLowerCase().includes(query) ||
-          (r.roomNumber || '').toLowerCase().includes(query)
+          (r.roomNumber || '').toLowerCase().includes(query),
       );
     }
     return rows;
   }, [reservations, q, statusFilter]);
 
   const selected = reservations.find((r) => r.id === selectedId) || null;
+
+  const saveReservation = (res: Reservation, created = false) => {
+    const result = upsertReservation(res);
+    if (!result.ok) {
+      toast.error(result.message);
+      return false;
+    }
+    if (created) {
+      setCreating(false);
+      setSelectedId(res.id);
+      toast.success('Reserva criada e enviada para a operação');
+    } else {
+      toast.success('Reserva atualizada');
+    }
+    return true;
+  };
 
   return (
     <div className="space-y-5">
@@ -71,9 +121,7 @@ export function ReservationsModule() {
           >
             <option value="todos">Todos os status</option>
             {Object.entries(RES_STATUS_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
+              <option key={k} value={k}>{v}</option>
             ))}
           </select>
           <button
@@ -113,7 +161,7 @@ export function ReservationsModule() {
                     }}
                     className={cn(
                       'border-b border-slate-50 cursor-pointer hover:bg-slate-50/80',
-                      selectedId === r.id && 'bg-slate-50'
+                      selectedId === r.id && 'bg-slate-50',
                     )}
                   >
                     <td className="px-4 py-3 font-mono text-xs">{r.code}</td>
@@ -122,12 +170,17 @@ export function ReservationsModule() {
                       {formatDateBR(r.checkIn)} → {formatDateBR(r.checkOut)}
                     </td>
                     <td className="px-4 py-3">{r.roomNumber || r.roomType}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={r.status} />
-                    </td>
+                    <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
                     <td className="px-4 py-3 tabular-nums">{formatBRL(r.totalAmount)}</td>
                   </tr>
                 ))}
+                {list.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                      Nenhuma reserva encontrada
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -137,24 +190,23 @@ export function ReservationsModule() {
           {creating ? (
             <ReservationForm
               rooms={rooms}
+              reservations={reservations}
+              operationalDate={hotel.operationalDate}
               onCancel={() => setCreating(false)}
-              onSave={(res) => {
-                upsertReservation(res);
-                setCreating(false);
-                setSelectedId(res.id);
-                toast.success('Reserva criada');
-              }}
+              onSave={(res) => saveReservation(res, true)}
             />
           ) : selected ? (
             <ReservationDetail
               key={selected.id}
               res={selected}
               rooms={rooms}
-              onSave={(res) => {
-                upsertReservation(res);
-                toast.success('Reserva atualizada');
-              }}
+              reservations={reservations}
+              onSave={(res) => saveReservation(res)}
               onCancelRes={() => {
+                if (selected.status === 'checkin') {
+                  toast.error('Faça o check-out ou cancele o check-in pela Recepção antes de cancelar a reserva.');
+                  return;
+                }
                 cancelReservation(selected.id);
                 toast.message('Reserva cancelada');
               }}
@@ -194,30 +246,44 @@ function StatusBadge({ status }: { status: Reservation['status'] }) {
 function ReservationDetail({
   res,
   rooms,
+  reservations,
   onSave,
   onCancelRes,
   onFnrh,
   onOpenAccount,
 }: {
   res: Reservation;
-  rooms: { id: string; number: string; type: string; status?: string }[];
-  onSave: (r: Reservation) => void;
+  rooms: Room[];
+  reservations: Reservation[];
+  onSave: (r: Reservation) => boolean;
   onCancelRes: () => void;
   onFnrh: () => void;
   onOpenAccount: () => void;
 }) {
   const [draft, setDraft] = useState(res);
+  const canEditDates = draft.status !== 'checkin' && draft.status !== 'checkout' && draft.status !== 'cancelada';
+
+  const availableRooms = useMemo(
+    () =>
+      rooms.filter(
+        (room) =>
+          room.type === draft.roomType &&
+          roomAvailable(room, reservations, draft.checkIn, draft.checkOut, draft.id),
+      ),
+    [rooms, reservations, draft.roomType, draft.checkIn, draft.checkOut, draft.id],
+  );
+
+  const currentRoom = rooms.find((room) => room.id === draft.roomId);
+  const roomOptions = currentRoom && !availableRooms.some((room) => room.id === currentRoom.id)
+    ? [currentRoom, ...availableRooms]
+    : availableRooms;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            {draft.code}
-          </p>
-          <h3 className="text-lg font-semibold">{draft.guestName}</h3>
-          <StatusBadge status={draft.status} />
-        </div>
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{draft.code}</p>
+        <h3 className="text-lg font-semibold">{draft.guestName}</h3>
+        <StatusBadge status={draft.status} />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -225,16 +291,18 @@ function ReservationDetail({
           <input
             type="date"
             value={draft.checkIn}
+            disabled={!canEditDates}
             onChange={(e) => setDraft({ ...draft, checkIn: e.target.value })}
-            className="field"
+            className="field disabled:bg-slate-50"
           />
         </Field>
         <Field label="Check-out">
           <input
             type="date"
             value={draft.checkOut}
+            disabled={!canEditDates}
             onChange={(e) => setDraft({ ...draft, checkOut: e.target.value })}
-            className="field"
+            className="field disabled:bg-slate-50"
           />
         </Field>
         <Field label="Adultos">
@@ -258,46 +326,42 @@ function ReservationDetail({
         <Field label="Tipo de UH">
           <select
             value={draft.roomType}
-            onChange={(e) => setDraft({ ...draft, roomType: e.target.value as RoomType })}
-            className="field"
+            disabled={!canEditDates}
+            onChange={(e) => setDraft({ ...draft, roomType: e.target.value as RoomType, roomId: undefined, roomNumber: undefined })}
+            className="field disabled:bg-slate-50"
           >
-            {ROOM_TYPES.map((t) => (
-              <option key={t}>{t}</option>
-            ))}
+            {ROOM_TYPES.map((t) => <option key={t}>{t}</option>)}
           </select>
         </Field>
         <Field label="UH atribuída">
           <select
             value={draft.roomId || ''}
+            disabled={!canEditDates}
             onChange={(e) => {
               const room = rooms.find((r) => r.id === e.target.value);
-              setDraft({
-                ...draft,
-                roomId: room?.id,
-                roomNumber: room?.number,
-              });
+              setDraft({ ...draft, roomId: room?.id, roomNumber: room?.number });
             }}
-            className="field"
+            className="field disabled:bg-slate-50"
           >
             <option value="">Sem UH</option>
-            {rooms.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.number} · {r.type} ({r.status})
-              </option>
+            {roomOptions.map((r) => (
+              <option key={r.id} value={r.id}>{r.number} · {r.type}</option>
             ))}
           </select>
         </Field>
         <Field label="Valor total">
           <input
             type="number"
+            min={0}
             value={draft.totalAmount}
             onChange={(e) => setDraft({ ...draft, totalAmount: Number(e.target.value) })}
             className="field"
           />
         </Field>
-        <Field label="Pago">
+        <Field label="Pago na reserva">
           <input
             type="number"
+            min={0}
             value={draft.paidAmount}
             onChange={(e) => setDraft({ ...draft, paidAmount: Number(e.target.value) })}
             className="field"
@@ -314,30 +378,44 @@ function ReservationDetail({
         />
       </Field>
 
+      {canEditDates && availableRooms.length === 0 && !draft.roomId && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Não há UH disponível dessa categoria no período selecionado. A reserva pode ser salva sem UH e atribuída depois.
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-2 pt-1">
         <button
           type="button"
           onClick={() => onSave(draft)}
-          className="h-9 px-4 rounded-lg bg-slate-900 text-white text-sm font-semibold"
+          disabled={draft.status === 'cancelada' || draft.status === 'checkout'}
+          className="h-9 px-4 rounded-lg bg-slate-900 text-white text-sm font-semibold disabled:opacity-40"
         >
           Salvar alterações
         </button>
         <button
           type="button"
           onClick={onFnrh}
-          className="h-9 px-3 rounded-lg border border-slate-200 text-sm inline-flex items-center gap-1.5 hover:bg-slate-50"
+          disabled={draft.status === 'cancelada' || draft.status === 'checkout'}
+          className="h-9 px-3 rounded-lg border border-slate-200 text-sm inline-flex items-center gap-1.5 hover:bg-slate-50 disabled:opacity-40"
         >
           <FileText className="w-3.5 h-3.5" />
           {draft.fnrhFilled ? 'FNRH OK' : 'Marcar FNRH'}
         </button>
-        <button
-          type="button"
-          onClick={onOpenAccount}
-          className="h-9 px-3 rounded-lg border border-slate-200 text-sm inline-flex items-center gap-1.5 hover:bg-slate-50"
-        >
-          <UserRound className="w-3.5 h-3.5" /> Conta do hóspede
-        </button>
-        {draft.status !== 'cancelada' && draft.status !== 'checkout' && (
+        {draft.status === 'checkin' ? (
+          <button
+            type="button"
+            onClick={onOpenAccount}
+            className="h-9 px-3 rounded-lg border border-slate-200 text-sm inline-flex items-center gap-1.5 hover:bg-slate-50"
+          >
+            <UserRound className="w-3.5 h-3.5" /> Conta do hóspede
+          </button>
+        ) : (
+          <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-500">
+            Conta disponível após o check-in
+          </span>
+        )}
+        {draft.status !== 'cancelada' && draft.status !== 'checkout' && draft.status !== 'checkin' && (
           <button
             type="button"
             onClick={onCancelRes}
@@ -353,20 +431,74 @@ function ReservationDetail({
 
 function ReservationForm({
   rooms,
+  reservations,
+  operationalDate,
   onCancel,
   onSave,
 }: {
-  rooms: { id: string; number: string; type: string; status?: string }[];
+  rooms: Room[];
+  reservations: Reservation[];
+  operationalDate: string;
   onCancel: () => void;
-  onSave: (r: Reservation) => void;
+  onSave: (r: Reservation) => boolean;
 }) {
   const [guestName, setGuestName] = useState('');
-  const [checkIn, setCheckIn] = useState('2026-09-16');
-  const [checkOut, setCheckOut] = useState('2026-09-17');
+  const [checkIn, setCheckIn] = useState(operationalDate);
+  const [checkOut, setCheckOut] = useState(addDays(operationalDate, 1));
   const [roomType, setRoomType] = useState<RoomType>('Standard');
   const [roomId, setRoomId] = useState('');
   const [total, setTotal] = useState(450);
   const [adults, setAdults] = useState(2);
+  const [children, setChildren] = useState(0);
+  const [origin, setOrigin] = useState<Reservation['origin']>('direto');
+
+  const availableRooms = useMemo(
+    () =>
+      rooms.filter(
+        (room) =>
+          room.type === roomType && roomAvailable(room, reservations, checkIn, checkOut),
+      ),
+    [rooms, reservations, roomType, checkIn, checkOut],
+  );
+
+  const submit = () => {
+    if (!guestName.trim()) {
+      toast.error('Informe o hóspede');
+      return;
+    }
+    if (!checkIn || !checkOut || checkOut <= checkIn) {
+      toast.error('O check-out deve ser posterior ao check-in');
+      return;
+    }
+    if (adults < 1 || children < 0) {
+      toast.error('Quantidade de hóspedes inválida');
+      return;
+    }
+    const room = rooms.find((r) => r.id === roomId);
+    if (room && !roomAvailable(room, reservations, checkIn, checkOut)) {
+      toast.error('Essa UH deixou de estar disponível para o período. Selecione outra.');
+      return;
+    }
+    const stamp = Date.now().toString(36).toUpperCase();
+    onSave({
+      id: `res-${stamp}-${Math.random().toString(36).slice(2, 6)}`,
+      code: `RSV-${String(Date.now()).slice(-6)}`,
+      guestId: `guest-${stamp}`,
+      guestName: guestName.trim(),
+      roomId: room?.id,
+      roomNumber: room?.number,
+      roomType,
+      checkIn,
+      checkOut,
+      adults,
+      children,
+      status: 'confirmada',
+      origin,
+      totalAmount: Math.max(0, total),
+      paidAmount: 0,
+      fnrhFilled: false,
+    });
+  };
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 space-y-3">
@@ -377,73 +509,51 @@ function ReservationForm({
         </button>
       </div>
       <Field label="Hóspede">
-        <input
-          value={guestName}
-          onChange={(e) => setGuestName(e.target.value)}
-          className="field"
-          placeholder="Nome completo"
-        />
+        <input value={guestName} onChange={(e) => setGuestName(e.target.value)} className="field" placeholder="Nome completo" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Check-in">
-          <input type="date" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} className="field" />
+          <input type="date" value={checkIn} onChange={(e) => { setCheckIn(e.target.value); setRoomId(''); }} className="field" />
         </Field>
         <Field label="Check-out">
-          <input type="date" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} className="field" />
+          <input type="date" value={checkOut} onChange={(e) => { setCheckOut(e.target.value); setRoomId(''); }} className="field" />
         </Field>
         <Field label="Tipo">
-          <select value={roomType} onChange={(e) => setRoomType(e.target.value as RoomType)} className="field">
-            {ROOM_TYPES.map((t) => (
-              <option key={t}>{t}</option>
-            ))}
+          <select value={roomType} onChange={(e) => { setRoomType(e.target.value as RoomType); setRoomId(''); }} className="field">
+            {ROOM_TYPES.map((t) => <option key={t}>{t}</option>)}
           </select>
         </Field>
         <Field label="UH">
           <select value={roomId} onChange={(e) => setRoomId(e.target.value)} className="field">
             <option value="">A definir</option>
-            {rooms
-              .filter((r) => r.status === 'livre')
-              .map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.number}
-                </option>
-              ))}
+            {availableRooms.map((r) => <option key={r.id} value={r.id}>{r.number}</option>)}
           </select>
         </Field>
         <Field label="Adultos">
           <input type="number" min={1} value={adults} onChange={(e) => setAdults(Number(e.target.value))} className="field" />
         </Field>
+        <Field label="Crianças">
+          <input type="number" min={0} value={children} onChange={(e) => setChildren(Number(e.target.value))} className="field" />
+        </Field>
+        <Field label="Origem">
+          <select value={origin} onChange={(e) => setOrigin(e.target.value as Reservation['origin'])} className="field">
+            <option value="direto">Direto</option>
+            <option value="telefone">Telefone</option>
+            <option value="booking">Booking</option>
+            <option value="expedia">Expedia</option>
+            <option value="walkin">Walk-in</option>
+          </select>
+        </Field>
         <Field label="Valor">
-          <input type="number" value={total} onChange={(e) => setTotal(Number(e.target.value))} className="field" />
+          <input type="number" min={0} value={total} onChange={(e) => setTotal(Number(e.target.value))} className="field" />
         </Field>
       </div>
+      <p className="text-[11px] text-slate-500">
+        {availableRooms.length} UH(s) disponível(is) em {roomType} para o período selecionado.
+      </p>
       <button
         type="button"
-        onClick={() => {
-          if (!guestName.trim()) {
-            toast.error('Informe o hóspede');
-            return;
-          }
-          const room = rooms.find((r) => r.id === roomId);
-          onSave({
-            id: `res-${Math.random().toString(36).slice(2, 8)}`,
-            code: `RSV-${Math.floor(1000 + Math.random() * 9000)}`,
-            guestId: 'new',
-            guestName: guestName.trim(),
-            roomId: room?.id,
-            roomNumber: room?.number,
-            roomType,
-            checkIn,
-            checkOut,
-            adults,
-            children: 0,
-            status: 'confirmada',
-            origin: 'direto',
-            totalAmount: total,
-            paidAmount: 0,
-            fnrhFilled: false,
-          });
-        }}
+        onClick={submit}
         className="w-full h-10 rounded-xl bg-slate-900 text-white text-sm font-semibold"
       >
         Criar reserva

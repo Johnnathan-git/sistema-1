@@ -61,6 +61,15 @@ function openAttachment(dataUrl?: string, fileName?: string) {
   }
 }
 
+function DataLine({ label, value, strong = false }: { label: string; value?: string; strong?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-1 border-b border-slate-100 last:border-b-0">
+      <span className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">{label}</span>
+      <span className={cn('text-[12px] text-right text-slate-700', strong && 'font-semibold text-slate-900')}>{value || '—'}</span>
+    </div>
+  );
+}
+
 export function ConciliationPanel({
   sub,
   setSub,
@@ -104,48 +113,59 @@ export function ConciliationPanel({
     getnetOnly: pmsMatches.filter((r) => r.side === 'getnet_only').length,
   };
 
+  const orderedPmsMatches = [...pmsMatches].sort((a, b) => {
+    const order: Record<PmsGetnetMatch['side'], number> = { divergence: 0, pms_only: 1, getnet_only: 2, both: 3 };
+    return order[a.side] - order[b.side];
+  });
+
   return (
     <div className="space-y-4">
-      <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-1">
-        <button type="button" onClick={() => setSub('hits_getnet')} className={cn('h-8 px-3 rounded-md text-[12px] font-semibold transition-colors', sub === 'hits_getnet' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>PMS × Getnet</button>
-        <button type="button" onClick={() => setSub('getnet_bank')} className={cn('h-8 px-3 rounded-md text-[12px] font-semibold transition-colors', sub === 'getnet_bank' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>Getnet × Banco</button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-1">
+          <button type="button" onClick={() => setSub('hits_getnet')} className={cn('h-8 px-3 rounded-md text-[12px] font-semibold transition-colors', sub === 'hits_getnet' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>PMS × Getnet</button>
+          <button type="button" onClick={() => setSub('getnet_bank')} className={cn('h-8 px-3 rounded-md text-[12px] font-semibold transition-colors', sub === 'getnet_bank' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>Getnet × Banco</button>
+        </div>
+        {sub === 'hits_getnet' && pms.length > 0 && getnet.length > 0 && (
+          <p className="text-[11px] text-slate-500">A conciliação prioriza AUT; valor, data, parcelas e bandeira validam o vínculo.</p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {sources.map(([label, kind, count]) => (
-          <div key={label} className="rounded-xl border border-slate-200/80 bg-white p-4 space-y-3 shadow-sm hover:border-slate-300/80 transition-colors">
-            <p className="text-[12px] font-semibold text-slate-700">
-              {label} · <span className="tabular-nums text-slate-500">{count}</span> linha(s)
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <label className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-300 transition-all">
-                <Upload className="w-3.5 h-3.5 text-slate-500" /> {kind === 'getnet' ? 'Arquivos (cartão + Pix)' : 'Arquivo'}
-                <input type="file" multiple={kind === 'getnet'} accept=".pdf,.txt,.csv,text/plain,application/pdf" className="hidden" disabled={busy} onChange={(e) => {
-                  const files = Array.from(e.target.files || []);
-                  e.target.value = '';
-                  if (files.length) onLoadFile(kind, kind === 'getnet' ? files : files[0]);
-                }} />
-              </label>
-              <button type="button" onClick={() => setPasteOpen(kind)} disabled={busy} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-50">
-                Colar texto
-              </button>
+          <div key={label} className="rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[12px] font-semibold text-slate-800">{label}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5"><span className="tabular-nums font-semibold text-slate-600">{count}</span> registro(s) lido(s)</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <label className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-300 transition-all">
+                  <Upload className="w-3.5 h-3.5 text-slate-500" /> {kind === 'getnet' ? 'Arquivos' : 'Arquivo'}
+                  <input type="file" multiple={kind === 'getnet'} accept=".pdf,.txt,.csv,text/plain,application/pdf" className="hidden" disabled={busy} onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    e.target.value = '';
+                    if (files.length) onLoadFile(kind, kind === 'getnet' ? files : files[0]);
+                  }} />
+                </label>
+                <button type="button" onClick={() => setPasteOpen(kind)} disabled={busy} className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-50">Colar texto</button>
+              </div>
             </div>
           </div>
         ))}
       </div>
 
       {sub === 'hits_getnet' && pms.length > 0 && getnet.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
           {[
-            ['Conciliadas', pmsSummary.ok, 'bg-emerald-50 text-emerald-800 border-emerald-100'],
-            ['Divergências', pmsSummary.divergence, 'bg-amber-50 text-amber-900 border-amber-100'],
-            ['Só PMS', pmsSummary.pmsOnly, 'bg-rose-50 text-rose-800 border-rose-100'],
-            ['Só Getnet', pmsSummary.getnetOnly, 'bg-sky-50 text-sky-800 border-sky-100'],
-            ['Total', pmsSummary.total, 'bg-slate-50 text-slate-800 border-slate-100'],
+            ['Conciliadas', pmsSummary.ok, 'bg-emerald-50 text-emerald-800 border-emerald-200'],
+            ['Divergências', pmsSummary.divergence, 'bg-amber-50 text-amber-900 border-amber-200'],
+            ['Somente PMS', pmsSummary.pmsOnly, 'bg-rose-50 text-rose-800 border-rose-200'],
+            ['Somente Getnet', pmsSummary.getnetOnly, 'bg-sky-50 text-sky-800 border-sky-200'],
+            ['Itens exibidos', pmsSummary.total, 'bg-slate-50 text-slate-800 border-slate-200'],
           ].map(([label, value, cls]) => (
             <div key={label} className={cn('rounded-xl border px-3 py-2.5', cls)}>
               <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{label}</p>
-              <p className="text-[18px] font-semibold tabular-nums mt-0.5">{value}</p>
+              <p className="text-[20px] font-semibold tabular-nums mt-0.5">{value}</p>
             </div>
           ))}
         </div>
@@ -162,65 +182,113 @@ export function ConciliationPanel({
         </div>
       )}
 
-      <div className="rounded-xl border border-slate-200/80 bg-white overflow-hidden shadow-sm">
-        <div className="max-h-[520px] overflow-y-auto divide-y divide-slate-100">
-          {(sub === 'hits_getnet' ? pmsMatches : bankMatches).length === 0 && (
-            <p className="px-4 py-12 text-center text-[13px] text-slate-400">Sem dados ainda</p>
+      {sub === 'hits_getnet' && (
+        <div className="space-y-2">
+          {orderedPmsMatches.length === 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-12 text-center text-[13px] text-slate-400">Sem dados ainda</div>
           )}
 
-          {sub === 'hits_getnet' && pmsMatches.map((row) => {
+          {orderedPmsMatches.map((row) => {
             const ok = row.side === 'both';
             const div = row.side === 'divergence';
-            const value = row.pms?.amount ?? row.getnet?.gross ?? 0;
-            const label = row.pms?.guest || row.getnet?.brand || 'Transação';
-            const reservation = row.pms?.reservation ? ` · Reserva ${row.pms.reservation}` : '';
-            const detail = ok
-              ? `Conciliado por ${row.matchedBy}`
+            const pmsOnly = row.side === 'pms_only';
+            const statusLabelText = ok ? 'Conciliado' : div ? 'Divergência' : pmsOnly ? 'Somente PMS' : 'Somente Getnet';
+            const statusClass = ok
+              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
               : div
-                ? row.differences.join(' · ')
-                : row.side === 'pms_only'
-                  ? 'Somente no PMS'
-                  : 'Somente na Getnet';
+                ? 'bg-amber-100 text-amber-900 border-amber-200'
+                : pmsOnly
+                  ? 'bg-rose-100 text-rose-800 border-rose-200'
+                  : 'bg-sky-100 text-sky-800 border-sky-200';
 
             return (
-              <div key={row.id} className="px-4 py-3.5 text-[12px] hover:bg-slate-50/60 transition-colors">
-                <div className="flex items-start gap-2.5">
-                  {ok ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" /> : <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-medium text-slate-800">{label}{reservation}</p>
-                      <span className="font-semibold tabular-nums text-slate-700">{formatBRL(value)}</span>
-                    </div>
-                    <p className="text-slate-500 mt-0.5">{detail}</p>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-[11px] text-slate-400">
-                      {row.pms?.operation && <span>PMS {row.pms.operation}</span>}
-                      {row.pms?.auth && <span>AUT {row.pms.auth}</span>}
-                      {row.getnet?.auth && <span>AUT Getnet {row.getnet.auth}</span>}
-                      {row.pms?.paymentGroup && <span>PMS {row.pms.paymentGroup}</span>}
-                      {row.getnet?.brand && <span>Bandeira {row.getnet.brand}</span>}
-                      {row.getnet?.name && <span>Nome Getnet {row.getnet.name}</span>}
-                      {row.getnet?.cv && <span>CV {row.getnet.cv}</span>}
-                      {row.getnet?.status && <span>{row.getnet.status}</span>}
-                      {row.getnet?.date && <span>Getnet {formatDateBR(row.getnet.date)}{row.getnet.time ? ` ${row.getnet.time}` : ''}</span>}
+              <div key={row.id} className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/60">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {ok ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />}
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-semibold text-slate-900 truncate">{row.pms?.guest || row.getnet?.brand || 'Transação'}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {ok || div ? `Vínculo por ${row.matchedBy}` : pmsOnly ? 'Não encontrado na Getnet' : 'Não encontrado no PMS'}
+                      </p>
                     </div>
                   </div>
+                  <span className={cn('text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border', statusClass)}>{statusLabelText}</span>
                 </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2">
+                  <div className={cn('p-4', row.getnet && 'md:border-r border-slate-100')}>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">PMS</p>
+                      {row.pms?.paymentGroup && <span className="text-[10px] text-slate-400 truncate">{row.pms.paymentGroup}</span>}
+                    </div>
+                    {row.pms ? (
+                      <div>
+                        <DataLine label="Data" value={formatDateBR(row.pms.date)} />
+                        <DataLine label="Operação" value={row.pms.operation ? `#${row.pms.operation}` : '—'} />
+                        <DataLine label="Reserva" value={row.pms.reservation ? `#${row.pms.reservation}` : '—'} />
+                        <DataLine label="AUT" value={row.pms.auth || '—'} strong />
+                        <DataLine label="Parcelas" value={`${row.pms.installments}x`} />
+                        <DataLine label="Bruto" value={formatBRL(row.pms.amount)} strong />
+                        <DataLine label="Taxa" value={formatBRL(row.pms.fee)} />
+                        <DataLine label="Líquido" value={formatBRL(row.pms.net)} />
+                      </div>
+                    ) : <p className="text-[12px] text-slate-400 py-6 text-center">Sem registro correspondente</p>}
+                  </div>
+
+                  <div className="p-4">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Getnet</p>
+                      {row.getnet?.status && <span className="text-[10px] text-slate-400">{row.getnet.status}</span>}
+                    </div>
+                    {row.getnet ? (
+                      <div>
+                        <DataLine label="Data" value={`${formatDateBR(row.getnet.date)}${row.getnet.time ? ` ${row.getnet.time}` : ''}`} />
+                        <DataLine label="Bandeira" value={row.getnet.brand || '—'} />
+                        <DataLine label="Modalidade" value={row.getnet.form || row.getnet.modality || '—'} />
+                        <DataLine label="AUT" value={row.getnet.auth || '—'} strong />
+                        <DataLine label="Parcelas" value={`${row.getnet.installments}x`} />
+                        <DataLine label="Bruto" value={formatBRL(row.getnet.gross)} strong />
+                        <DataLine label="Taxa" value={formatBRL(row.getnet.fee)} />
+                        <DataLine label="Líquido" value={formatBRL(row.getnet.net)} />
+                      </div>
+                    ) : <p className="text-[12px] text-slate-400 py-6 text-center">Sem registro correspondente</p>}
+                  </div>
+                </div>
+
+                {div && row.differences.length > 0 && (
+                  <div className="px-4 py-3 bg-amber-50 border-t border-amber-100">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1.5">Diferenças encontradas</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {row.differences.map((difference, i) => (
+                        <span key={`${row.id}-diff-${i}`} className="text-[11px] text-amber-900 bg-white border border-amber-200 rounded-md px-2 py-1">{difference}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
-
-          {sub === 'getnet_bank' && bankMatches.map((row) => {
-            const ok = row.status === 'ok';
-            return <div key={row.id} className="px-4 py-3 flex items-start gap-2.5 text-[12px] hover:bg-slate-50/60 transition-colors">
-              {ok ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" /> : <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />}
-              <div className="min-w-0 flex-1">
-                <p className="font-medium text-slate-800">Crédito de {formatDateBR(row.settleDate)}</p>
-                <p className="text-slate-500 mt-0.5">{row.detail} · esperado {formatBRL(row.expectedNet)} · banco {formatBRL(row.bankCredit)}</p>
-              </div>
-            </div>;
-          })}
         </div>
-      </div>
+      )}
+
+      {sub === 'getnet_bank' && (
+        <div className="rounded-xl border border-slate-200/80 bg-white overflow-hidden shadow-sm">
+          <div className="max-h-[620px] overflow-y-auto divide-y divide-slate-100">
+            {bankMatches.length === 0 && <p className="px-4 py-12 text-center text-[13px] text-slate-400">Sem dados ainda</p>}
+            {bankMatches.map((row) => {
+              const ok = row.status === 'ok';
+              return <div key={row.id} className="px-4 py-3 flex items-start gap-2.5 text-[12px] hover:bg-slate-50/60 transition-colors">
+                {ok ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" /> : <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />}
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-slate-800">Crédito de {formatDateBR(row.settleDate)}</p>
+                  <p className="text-slate-500 mt-0.5">{row.detail} · esperado {formatBRL(row.expectedNet)} · banco {formatBRL(row.bankCredit)}</p>
+                </div>
+              </div>;
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -280,9 +348,7 @@ export function PendenciasPanel({
       <div className="rounded-2xl border border-dashed border-slate-200 bg-gradient-to-b from-white to-slate-50/80 px-6 py-16 text-center shadow-sm">
         <AlertTriangle className="w-11 h-11 text-slate-300 mx-auto mb-3" />
         <p className="text-[15px] font-semibold text-slate-800">Nenhuma pendência aberta</p>
-        <p className="text-[13px] text-slate-500 mt-1 max-w-md mx-auto">
-          Divergências do checklist aparecem aqui para o hotel resolver e a analista aprovar
-        </p>
+        <p className="text-[13px] text-slate-500 mt-1 max-w-md mx-auto">Divergências do checklist aparecem aqui para o hotel resolver e a analista aprovar</p>
       </div>
     );
   }
@@ -297,40 +363,16 @@ export function PendenciasPanel({
           <div key={k} className="rounded-xl border border-slate-200/80 bg-white p-4 space-y-3 shadow-sm hover:border-slate-300/80 transition-colors">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="text-[14px] font-semibold text-slate-900">
-                  {p.itemId}. {p.itemTitle}
-                </p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  {p.hotelName} · auditoria {formatDateBR(p.auditDate)} · analista {p.analyst || '—'}
-                  {a.pendingAt && <> · enviada {formatDateTimeBR(a.pendingAt)}</>}
-                </p>
+                <p className="text-[14px] font-semibold text-slate-900">{p.itemId}. {p.itemTitle}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">{p.hotelName} · auditoria {formatDateBR(p.auditDate)} · analista {p.analyst || '—'}{a.pendingAt && <> · enviada {formatDateTimeBR(a.pendingAt)}</>}</p>
               </div>
-              <span
-                className={cn(
-                  'text-[10px] font-bold uppercase px-2.5 py-1 rounded-full tracking-wide',
-                  a.pendingState === 'open' && 'bg-rose-100 text-rose-800',
-                  a.pendingState === 'resolved' && 'bg-amber-100 text-amber-900',
-                )}
-              >
+              <span className={cn('text-[10px] font-bold uppercase px-2.5 py-1 rounded-full tracking-wide', a.pendingState === 'open' && 'bg-rose-100 text-rose-800', a.pendingState === 'resolved' && 'bg-amber-100 text-amber-900')}>
                 {a.pendingState === 'open' ? 'Aguardando resolução' : 'Aguardando analista'}
               </span>
             </div>
-            {a.notes && (
-              <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">
-                <span className="font-semibold text-slate-500">Divergência: </span>
-                {a.notes}
-              </div>
-            )}
-            {a.attachmentDataUrl && (
-              <button type="button" onClick={() => openAttachment(a.attachmentDataUrl, a.attachmentName)} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline">
-                <FileText className="w-3.5 h-3.5" /> {a.attachmentName || 'Anexo da analista'}
-              </button>
-            )}
-            {a.analystRejectNote && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-950">
-                <strong>Recusa da analista:</strong> {a.analystRejectNote}
-              </div>
-            )}
+            {a.notes && <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5 text-[12px] text-slate-700"><span className="font-semibold text-slate-500">Divergência: </span>{a.notes}</div>}
+            {a.attachmentDataUrl && <button type="button" onClick={() => openAttachment(a.attachmentDataUrl, a.attachmentName)} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline"><FileText className="w-3.5 h-3.5" /> {a.attachmentName || 'Anexo da analista'}</button>}
+            {a.analystRejectNote && <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-950"><strong>Recusa da analista:</strong> {a.analystRejectNote}</div>}
             {a.pendingState === 'open' && (
               <div className="space-y-2 border-t border-slate-100 pt-3">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Resolução do hotel</p>
@@ -339,57 +381,24 @@ export function PendenciasPanel({
                   <label className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-medium cursor-pointer inline-flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-300 transition-all">
                     <Upload className="w-3.5 h-3.5 text-slate-500" /> {att ? 'Trocar anexo' : 'Anexo (opcional)'}
                     <input type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = '';
-                      if (!f) return;
+                      const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
                       if (f.size > 2_500_000) { toast.error('Arquivo muito grande'); return; }
                       const reader = new FileReader();
-                      reader.onload = () => {
-                        setPendingAtt((prev) => ({ ...prev, [k]: { name: f.name, dataUrl: String(reader.result || '') } }));
-                        toast.message('Anexo pronto — preencha a resolução e clique em Enviar');
-                      };
+                      reader.onload = () => { setPendingAtt((prev) => ({ ...prev, [k]: { name: f.name, dataUrl: String(reader.result || '') } })); toast.message('Anexo pronto — preencha a resolução e clique em Enviar'); };
                       reader.readAsDataURL(f);
                     }} />
                   </label>
-                  {att && (
-                    <>
-                      <button type="button" onClick={() => openAttachment(att.dataUrl, att.name)} className="text-[11px] text-sky-700 font-medium truncate max-w-[160px] hover:underline text-left">{att.name}</button>
-                      <button type="button" onClick={() => setPendingAtt((prev) => { const next = { ...prev }; delete next[k]; return next; })} className="h-7 w-7 rounded-md text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center"><X className="w-3.5 h-3.5" /></button>
-                    </>
-                  )}
-                  <button type="button" onClick={() => {
-                    const text = (drafts[k] || '').trim();
-                    if (!text) { toast.error('Descreva a resolução (obrigatório)'); return; }
-                    onHotelResolve(p.auditId, p.itemId, text, att?.name, att?.dataUrl);
-                    setDrafts((d) => ({ ...d, [k]: '' }));
-                    setPendingAtt((prev) => { const next = { ...prev }; delete next[k]; return next; });
-                  }} className="h-8 px-4 rounded-lg bg-gradient-to-r from-slate-900 to-slate-800 text-white text-[12px] font-semibold hover:from-slate-800 hover:to-slate-700 shadow-sm transition-all">
-                    Enviar resolução
-                  </button>
+                  {att && <><button type="button" onClick={() => openAttachment(att.dataUrl, att.name)} className="text-[11px] text-sky-700 font-medium truncate max-w-[160px] hover:underline text-left">{att.name}</button><button type="button" onClick={() => setPendingAtt((prev) => { const next = { ...prev }; delete next[k]; return next; })} className="h-7 w-7 rounded-md text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center"><X className="w-3.5 h-3.5" /></button></>}
+                  <button type="button" onClick={() => { const text = (drafts[k] || '').trim(); if (!text) { toast.error('Descreva a resolução (obrigatório)'); return; } onHotelResolve(p.auditId, p.itemId, text, att?.name, att?.dataUrl); setDrafts((d) => ({ ...d, [k]: '' })); setPendingAtt((prev) => { const next = { ...prev }; delete next[k]; return next; }); }} className="h-8 px-4 rounded-lg bg-gradient-to-r from-slate-900 to-slate-800 text-white text-[12px] font-semibold hover:from-slate-800 hover:to-slate-700 shadow-sm transition-all">Enviar resolução</button>
                 </div>
               </div>
             )}
             {a.pendingState === 'resolved' && (
               <div className="space-y-2 border-t border-slate-100 pt-3">
-                <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-[12px] text-emerald-900">
-                  <strong>Resolução hotel:</strong> {a.hotelResolution}
-                  {a.hotelResolvedAt && <span className="text-emerald-700"> · {formatDateTimeBR(a.hotelResolvedAt)}</span>}
-                </div>
-                {a.hotelAttachmentDataUrl && (
-                  <button type="button" onClick={() => openAttachment(a.hotelAttachmentDataUrl, a.hotelAttachmentName)} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline">
-                    <FileText className="w-3.5 h-3.5" /> {a.hotelAttachmentName || 'Anexo do hotel'}
-                  </button>
-                )}
-                {!onlyPendencias && (
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => onApprove(p.auditId, p.itemId)} className="h-8 px-4 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold hover:bg-emerald-500 shadow-sm shadow-emerald-600/20 transition-all">Aprovar</button>
-                  <input value={rejectDrafts[k] || ''} onChange={(e) => setRejectDrafts((d) => ({ ...d, [k]: e.target.value }))} placeholder="Justificativa da recusa" className="h-8 flex-1 min-w-[140px] rounded-lg border border-slate-200 px-2.5 text-[12px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400" />
-                  <button type="button" onClick={() => { onReject(p.auditId, p.itemId, rejectDrafts[k] || ''); setRejectDrafts((d) => ({ ...d, [k]: '' })); }} className="h-8 px-4 rounded-lg border border-rose-300 text-rose-700 text-[12px] font-semibold hover:bg-rose-50 transition-all">Recusar</button>
-                </div>
-                )}
-                {onlyPendencias && a.pendingState === 'resolved' && (
-                  <p className="text-[12px] text-amber-800 font-medium">Aguardando aprovação da analista</p>
-                )}
+                <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-[12px] text-emerald-900"><strong>Resolução hotel:</strong> {a.hotelResolution}{a.hotelResolvedAt && <span className="text-emerald-700"> · {formatDateTimeBR(a.hotelResolvedAt)}</span>}</div>
+                {a.hotelAttachmentDataUrl && <button type="button" onClick={() => openAttachment(a.hotelAttachmentDataUrl, a.hotelAttachmentName)} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 hover:underline"><FileText className="w-3.5 h-3.5" /> {a.hotelAttachmentName || 'Anexo do hotel'}</button>}
+                {!onlyPendencias && <div className="flex flex-wrap gap-2"><button type="button" onClick={() => onApprove(p.auditId, p.itemId)} className="h-8 px-4 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold hover:bg-emerald-500 shadow-sm shadow-emerald-600/20 transition-all">Aprovar</button><input value={rejectDrafts[k] || ''} onChange={(e) => setRejectDrafts((d) => ({ ...d, [k]: e.target.value }))} placeholder="Justificativa da recusa" className="h-8 flex-1 min-w-[140px] rounded-lg border border-slate-200 px-2.5 text-[12px] outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400" /><button type="button" onClick={() => { onReject(p.auditId, p.itemId, rejectDrafts[k] || ''); setRejectDrafts((d) => ({ ...d, [k]: '' })); }} className="h-8 px-4 rounded-lg border border-rose-300 text-rose-700 text-[12px] font-semibold hover:bg-rose-50 transition-all">Recusar</button></div>}
+                {onlyPendencias && a.pendingState === 'resolved' && <p className="text-[12px] text-amber-800 font-medium">Aguardando aprovação da analista</p>}
               </div>
             )}
           </div>
@@ -416,13 +425,7 @@ export function AuditDetailModal({ record, onClose }: { record: AuditRecord; onC
             <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Log de alterações</p>
               <ul className="space-y-1.5 max-h-[160px] overflow-y-auto">
-                {logs.map((l, i) => (
-                  <li key={`${l.at}-${i}`} className="text-[12px] text-slate-700 flex flex-wrap gap-x-2 gap-y-0.5">
-                    <span className="tabular-nums text-slate-500 shrink-0">{formatDateTimeBR(l.at)}</span>
-                    <span className="font-medium text-slate-800">{l.user}</span>
-                    <span className="text-slate-600">{l.action}</span>
-                  </li>
-                ))}
+                {logs.map((l, i) => <li key={`${l.at}-${i}`} className="text-[12px] text-slate-700 flex flex-wrap gap-x-2 gap-y-0.5"><span className="tabular-nums text-slate-500 shrink-0">{formatDateTimeBR(l.at)}</span><span className="font-medium text-slate-800">{l.user}</span><span className="text-slate-600">{l.action}</span></li>)}
               </ul>
             </div>
           )}
@@ -435,24 +438,12 @@ export function AuditDetailModal({ record, onClose }: { record: AuditRecord; onC
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[13px] font-medium text-slate-800">{item.id}. {item.title}</p>
                     {a.status === 'conforme' && <span className="text-[10px] font-bold uppercase tracking-wide text-white bg-emerald-600 px-2.5 py-1 rounded-full">Conforme</span>}
-                    {a.status === 'divergencia' && (
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-white bg-rose-600 px-2.5 py-1 rounded-full">
-                        Divergência{a.pendingState === 'approved' && ' · Aprovada'}{a.pendingState === 'resolved' && ' · Aguardando analista'}{a.pendingState === 'open' && ' · Aguardando resolução'}
-                      </span>
-                    )}
+                    {a.status === 'divergencia' && <span className="text-[10px] font-bold uppercase tracking-wide text-white bg-rose-600 px-2.5 py-1 rounded-full">Divergência{a.pendingState === 'approved' && ' · Aprovada'}{a.pendingState === 'resolved' && ' · Aguardando analista'}{a.pendingState === 'open' && ' · Aguardando resolução'}</span>}
                   </div>
                   {a.notes && <p className="text-[12px] text-slate-600 mt-1.5">{a.notes}</p>}
-                  {a.attachmentDataUrl && (
-                    <button type="button" onClick={() => openAttachment(a.attachmentDataUrl, a.attachmentName)} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1.5 hover:underline">
-                      <FileText className="w-3.5 h-3.5" /> {a.attachmentName || 'Anexo'}
-                    </button>
-                  )}
+                  {a.attachmentDataUrl && <button type="button" onClick={() => openAttachment(a.attachmentDataUrl, a.attachmentName)} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1.5 hover:underline"><FileText className="w-3.5 h-3.5" /> {a.attachmentName || 'Anexo'}</button>}
                   {a.hotelResolution && <p className="text-[12px] text-emerald-800 mt-1.5">Resolução hotel: {a.hotelResolution}</p>}
-                  {a.hotelAttachmentDataUrl && (
-                    <button type="button" onClick={() => openAttachment(a.hotelAttachmentDataUrl, a.hotelAttachmentName)} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1 hover:underline">
-                      <FileText className="w-3.5 h-3.5" /> {a.hotelAttachmentName || 'Anexo hotel'}
-                    </button>
-                  )}
+                  {a.hotelAttachmentDataUrl && <button type="button" onClick={() => openAttachment(a.hotelAttachmentDataUrl, a.hotelAttachmentName)} className="text-[12px] text-sky-700 font-medium inline-flex items-center gap-1.5 mt-1 hover:underline"><FileText className="w-3.5 h-3.5" /> {a.hotelAttachmentName || 'Anexo hotel'}</button>}
                 </div>
               );
             })}

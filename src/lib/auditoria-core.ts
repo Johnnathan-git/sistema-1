@@ -94,9 +94,7 @@ export function parseBRNumber(s: string): number {
   const n = parseFloat(t);
   return Number.isFinite(n) ? n : 0;
 }
-export function formatBRL(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
+export function formatBRL(n: number) { return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
 export function toISODate(br: string): string {
   const m = br.trim().match(/(\d{2})\/(\d{2})\/(\d{2,4})/);
   if (!m) return '';
@@ -110,32 +108,17 @@ export function addDaysISO(iso: string, days: number): string {
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 }
-export function formatDateBR(iso: string) {
-  if (!iso) return '—';
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y}`;
-}
-export function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
-export function isFriday(iso: string) {
-  return new Date(iso + 'T12:00:00').getDay() === 5;
-}
-function moneyEq(a: number, b: number, tol = 0.05) {
-  return Math.abs(a - b) <= tol;
-}
+export function formatDateBR(iso: string) { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; }
+export function todayISO() { return new Date().toISOString().slice(0, 10); }
+export function isFriday(iso: string) { return new Date(iso + 'T12:00:00').getDay() === 5; }
+function moneyEq(a: number, b: number, tol = 0.05) { return Math.abs(a - b) <= tol; }
 
 async function pdfToText(file: File): Promise<string> {
   try {
     const pdfjs = await import('pdfjs-dist');
     const data = new Uint8Array(await file.arrayBuffer());
     if (pdfjs.GlobalWorkerOptions) {
-      try {
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-          'pdfjs-dist/build/pdf.worker.min.mjs',
-          import.meta.url,
-        ).toString();
-      } catch {}
+      try { pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString(); } catch {}
     }
     const doc = await pdfjs.getDocument({ data }).promise;
     const parts: string[] = [];
@@ -143,28 +126,15 @@ async function pdfToText(file: File): Promise<string> {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
       const vt = page.getViewport({ scale: 1 }).transform;
-      const items = content.items
-        .map((it: any) => {
-          const t = Array.isArray(it?.transform) ? pdfjs.Util.transform(vt, it.transform) : [0, 0, 0, 0, 0, 0];
-          return {
-            str: typeof it === 'object' && it && 'str' in it ? String(it.str || '') : '',
-            x: Number(t[4]) || 0,
-            y: -(Number(t[5]) || 0),
-            hasEOL: Boolean(it?.hasEOL),
-          };
-        })
-        .filter((it: any) => it.str.trim());
-      items.sort((a: any, b: any) => {
-        if (Math.abs(a.y - b.y) > 2.5) return b.y - a.y;
-        return a.x - b.x;
-      });
+      const items = content.items.map((it: any) => {
+        const t = Array.isArray(it?.transform) ? pdfjs.Util.transform(vt, it.transform) : [0, 0, 0, 0, 0, 0];
+        return { str: typeof it === 'object' && it && 'str' in it ? String(it.str || '') : '', x: Number(t[4]) || 0, y: -(Number(t[5]) || 0), hasEOL: Boolean(it?.hasEOL) };
+      }).filter((it: any) => it.str.trim());
+      items.sort((a: any, b: any) => { if (Math.abs(a.y - b.y) > 2.5) return b.y - a.y; return a.x - b.x; });
       const lines: Array<{ y: number; parts: string[] }> = [];
       for (const item of items) {
         let line = lines.find((candidate) => Math.abs(candidate.y - item.y) <= 2.5);
-        if (!line) {
-          line = { y: item.y, parts: [] };
-          lines.push(line);
-        }
+        if (!line) { line = { y: item.y, parts: [] }; lines.push(line); }
         line.parts.push(item.str);
         if (item.hasEOL) line.parts.push('\n');
       }
@@ -185,23 +155,16 @@ async function pdfToPmsText(file: File): Promise<string> {
   const pdfjs = await import('pdfjs-dist');
   const data = new Uint8Array(await file.arrayBuffer());
   if (pdfjs.GlobalWorkerOptions) {
-    try {
-      pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
-    } catch {}
+    try { pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString(); } catch {}
   }
   const doc = await pdfjs.getDocument({ data }).promise;
   const pages: string[] = [];
   for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
     const page = await doc.getPage(pageNo);
     const content = await page.getTextContent();
-    const items = content.items
-      .map((item: any) => ({ str: typeof item?.str === 'string' ? item.str : '', hasEOL: Boolean(item?.hasEOL) }))
-      .filter((item: any) => item.str.trim());
+    const items = content.items.map((item: any) => ({ str: typeof item?.str === 'string' ? item.str : '', hasEOL: Boolean(item?.hasEOL) })).filter((item: any) => item.str.trim());
     let pageText = '';
-    for (const item of items) {
-      pageText += item.str;
-      pageText += item.hasEOL ? '\n' : ' ';
-    }
+    for (const item of items) { pageText += item.str; pageText += item.hasEOL ? '\n' : ' '; }
     pages.push(pageText);
   }
   const text = pages.join('\n');
@@ -211,12 +174,9 @@ async function pdfToPmsText(file: File): Promise<string> {
 
 export async function pmsFileToText(file: File): Promise<string> {
   const name = file.name.toLowerCase();
-  if (name.endsWith('.pdf') || file.type === 'application/pdf') {
-    return pdfToPmsText(file);
-  }
+  if (name.endsWith('.pdf') || file.type === 'application/pdf') return pdfToPmsText(file);
   return file.text();
 }
-
 export async function fileToText(file: File): Promise<string> {
   const name = file.name.toLowerCase();
   if (name.endsWith('.pdf') || file.type === 'application/pdf') return pdfToText(file);
@@ -225,7 +185,6 @@ export async function fileToText(file: File): Promise<string> {
 
 export function parsePmsText(raw: string): PmsPayment[] {
   const out: PmsPayment[] = [];
-  let idx = 0;
   let paymentGroup = 'Geral';
   const text = raw
     .replace(/\r/g, ' ')
@@ -236,47 +195,66 @@ export function parsePmsText(raw: string): PmsPayment[] {
     .replace(/\$\s*/g, '$')
     .replace(/\s+/g, ' ')
     .trim();
+
   const paymentRe = /(\d{2}\/\d{2}\/\d{2,4})\s+#?(\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})\s+\$?\s*([\d.]+,\d{2})/gi;
-  for (const m of text.matchAll(paymentRe)) {
+  const matches = [...text.matchAll(paymentRe)];
+  let previousEnd = 0;
+
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i];
     const guest = m[5].trim().replace(/\s+/g, ' ');
     if (!guest || /^(Data|Resumo|Resultado|Sub Total|Tipo|Pagamento)/i.test(guest)) continue;
+
     const pos = m.index ?? 0;
-    const before = text.slice(Math.max(0, pos - 180), pos);
-    const groupMatch = before.match(/(Cielo[^\d$]{0,100}|PIX|Getnet|Stone|Rede|Elo|Visa|Master[^\d$]{0,100}|Amex|Hipercard)\s*$/i);
-    if (groupMatch?.[1]) paymentGroup = groupMatch[1].replace(/\s+/g, ' ').trim();
+    const between = text.slice(previousEnd, pos);
+    const groupCandidates = [...between.matchAll(/(?:Cielo\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,90}|PIX\s+Bradesco(?:\s*\([^)]*\))?|PIX|Getnet[^$#]{0,70}|Stone[^$#]{0,70}|Rede[^$#]{0,70})/gi)];
+    if (groupCandidates.length) {
+      paymentGroup = groupCandidates[groupCandidates.length - 1][0]
+        .replace(/^Sub\s+Total\s+/i, '')
+        .replace(/Data\s+Pgto\..*$/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    const nextPos = i + 1 < matches.length ? (matches[i + 1].index ?? text.length) : text.length;
+    const detail = text.slice(pos + m[0].length, Math.min(nextPos, pos + m[0].length + 700));
+    const parcel = detail.match(/Parcelas\s*:\s*(\d+)\s*x\s*\$?\s*([\d.]+,\d{2})/i);
+    const caixa = detail.match(/Caixa\s*:\s*([^\s|]+)/i);
+    const pdv = detail.match(/PDV\s*:\s*([^\s|]+)/i);
+    const auth = detail.match(/AUT\.?\s*:\s*([^\s|]+)/i);
+    const user = detail.match(/Usu[aá]rio\s*:\s*(.+?)(?=\s+\|?\s*Reservas?\s*:|\s+Sub\s+Total|$)/i);
+    const reservation = detail.match(/Reservas?\s*:\s*#?([^\s|]+)/i);
+
     out.push({
-      id: `pms-${++idx}`, date: toISODate(m[1]), operation: m[2], operationType: m[3], due: toISODate(m[4]), guest,
-      amount: parseBRNumber(m[6]), balance: parseBRNumber(m[7]), fee: parseBRNumber(m[8]), net: parseBRNumber(m[9]),
-      paymentGroup, installments: 1, installmentAmount: parseBRNumber(m[6]), cashRegister: '', pdv: '', auth: '', user: '', reservation: '',
+      id: `pms-${out.length + 1}`,
+      date: toISODate(m[1]),
+      operation: m[2],
+      operationType: m[3],
+      due: toISODate(m[4]),
+      guest,
+      amount: parseBRNumber(m[6]),
+      balance: parseBRNumber(m[7]),
+      fee: parseBRNumber(m[8]),
+      net: parseBRNumber(m[9]),
+      paymentGroup,
+      installments: parcel ? Number(parcel[1]) || 1 : 1,
+      installmentAmount: parcel ? parseBRNumber(parcel[2]) : parseBRNumber(m[6]),
+      cashRegister: caixa?.[1] || '',
+      pdv: pdv?.[1] || '',
+      auth: auth?.[1] || '',
+      user: user?.[1]?.trim() || '',
+      reservation: reservation?.[1] || '',
     });
+    previousEnd = pos + m[0].length;
   }
-  const lines = raw.split(/\r?\n/).map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
-  let current: PmsPayment | undefined;
-  let currentIndex = 0;
-  for (const originalLine of lines) {
-    const line = originalLine.replace(/#\s*(?=\d)/g, '#').replace(/\s*\/\s*/g, '/').replace(/\$\s*/g, '$').replace(/\s+/g, ' ').trim();
-    const rowStart = line.match(/^\d{2}\/\d{2}\/\d{2,4}\s+#?\d+\s+[A-Z]{1,3}\s+\d{2}\/\d{2}\/\d{2,4}\b/i);
-    if (rowStart) { current = out[currentIndex++]; continue; }
-    if (!current) continue;
-    const parcel = line.match(/Parcelas:\s*(\d+)x\s*([\d.]+,\d{2})/i);
-    if (parcel) { current.installments = Number(parcel[1]) || 1; current.installmentAmount = parseBRNumber(parcel[2]); }
-    const caixa = line.match(/Caixa:\s*([^\s]+)(?:\s+|$)/i); if (caixa) current.cashRegister = caixa[1];
-    const pdv = line.match(/PDV:\s*([^\s]+)(?:\s+|$)/i); if (pdv) current.pdv = pdv[1];
-    const auth = line.match(/AUT\.?\s*:\s*([^\s]+)/i); if (auth) current.auth = auth[1];
-    const user = line.match(/Usu[aá]rio:\s*(.+?)(?=\s+Reservas?:|$)/i); if (user) current.user = user[1].trim();
-    const reservation = line.match(/Reservas?:\s*(\S+)/i); if (reservation) current.reservation = reservation[1];
-  }
+
   return out;
 }
 
 export function parseHitsText(raw: string): HitsPayment[] {
-  const lines = raw.split(/\r?\n/);
-  const out: HitsPayment[] = [];
-  let method = 'Geral';
-  let idx = 0;
+  const lines = raw.split(/\r?\n/); const out: HitsPayment[] = []; let method = 'Geral'; let idx = 0;
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
+    const trimmed = line.trim(); if (!trimmed) continue;
     if (/^(Cielo|PIX|Dinheiro|Getnet|Stone|Rede|Elo|Visa|Master)/i.test(trimmed) && !/^\d{2}\/\d{2}/.test(trimmed) && !/\$/.test(trimmed)) { method = trimmed.replace(/\s+/g, ' ').trim(); continue; }
     if (/^Sub Total/i.test(trimmed)) continue;
     const m = trimmed.match(/^(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+(\$?[\d.]+,\d{2})\s+(\$?[\d.]+,\d{2})\s+(\$?[\d.]+,\d{2})\s+(\$?[\d.]+,\d{2})\s*$/);
@@ -291,21 +269,15 @@ export function parseHitsText(raw: string): HitsPayment[] {
 }
 
 export function parseGetnetText(raw: string): GetnetSale[] {
-  const out: GetnetSale[] = [];
-  let idx = 0;
-  const flat = raw.replace(/\s+/g, ' ').trim();
+  const out: GetnetSale[] = []; let idx = 0; const flat = raw.replace(/\s+/g, ' ').trim();
   const headerRe = /(?:Comercial\s+)?\d+\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\s+.*?\s+(Mastercard|Visa|Elo|Amex|Hipercard|Cabal)\s+(Crédito|Credito|Débito|Debito)\s+(.+?)\s+(Aprovada|Negada|Autorizada|Cancelada)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\s+(\d{2})(?:\s+(\d{2}\/\d{2}\/\d{4}))?/gi;
   const detailRe = /(\d{6,}\*+\d{4})\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(R\$\s*[\d.]+,\d{2})\s+(-?R\$\s*[\d.]+,\d{2})\s+(R\$\s*[\d.]+,\d{2})\s+(\S+)/gi;
-  const headers: Array<{ index: number; match: RegExpExecArray }> = [];
-  const details: Array<{ index: number; match: RegExpExecArray }> = [];
-  let m: RegExpExecArray | null;
+  const headers: Array<{ index: number; match: RegExpExecArray }> = []; const details: Array<{ index: number; match: RegExpExecArray }> = []; let m: RegExpExecArray | null;
   while ((m = headerRe.exec(flat))) headers.push({ index: m.index, match: m });
   while ((m = detailRe.exec(flat))) details.push({ index: m.index, match: m });
   for (const h of headers) {
-    const d = details.find((candidate) => candidate.index > h.index);
-    if (!d) continue;
-    const nextHeader = headers.find((candidate) => candidate.index > h.index);
-    if (nextHeader && d.index > nextHeader.index) continue;
+    const d = details.find((candidate) => candidate.index > h.index && candidate.match.length > 0); if (!d) continue;
+    const nextHeader = headers.find((candidate) => candidate.index > h.index); if (nextHeader && d.index > nextHeader.index) continue;
     const hm = h.match, dm = d.match;
     out.push({ id: `g-${++idx}`, date: toISODate(hm[5]), time: hm[6], brand: hm[1], modality: hm[2], form: hm[3].trim(), status: hm[4], installments: Number(hm[7]) || 1, settleDate: hm[8] ? toISODate(hm[8]) : toISODate(hm[5]), auth: dm[2] === 'N/A' ? '' : dm[2], cv: dm[3], terminal: dm[5], card: dm[1], gross: Math.abs(parseBRNumber(dm[6])), fee: Math.abs(parseBRNumber(dm[7])), net: Math.abs(parseBRNumber(dm[8])), name: (flat.slice(h.index, nextHeader ? nextHeader.index : h.index + 1500).match(/(?:Nome(?: do (?:Pagador|Portador|Cliente))?|Pagador)\s*:?\s+([A-ZÀ-Ú][A-Za-zÀ-ú' ]{3,60}?)(?=\s+(?:CPF|CNPJ|R\$|\d)|$)/)?.[1] || '').trim() || undefined });
     d.match = [] as unknown as RegExpExecArray;
@@ -315,55 +287,79 @@ export function parseGetnetText(raw: string): GetnetSale[] {
 }
 
 export function parseSantanderText(raw: string): BankLine[] {
-  const out: BankLine[] = [];
-  let idx = 0;
+  const out: BankLine[] = []; let idx = 0;
   const classify = (desc: string, amount: number): BankLine['kind'] => { const d = desc.toLowerCase(); if (d.includes('getnet') || d.includes('antecipacao') || d.includes('antecipação')) return 'getnet'; if (d.includes('cielo')) return 'cielo'; if (d.includes('pix')) return 'pix'; if (amount < 0) return 'debit_out'; return 'other'; };
   const push = (dateBr: string, desc: string, amount: number, ref?: string) => { const date = toISODate(dateBr); if (!date || !Number.isFinite(amount) || amount === 0) return; const description = (desc || 'Crédito').replace(/\s+/g, ' ').trim(); out.push({ id: `b-${++idx}`, date, description, amount, ref, kind: classify(description, amount) }); };
   const lines = raw.split(/\r?\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const skip = (l: string) => /^(Saldo|Posição|Entenda|Central|Página|Santander Empresas|Períodos|Data Histórico|SANTA ELIZA|Agência|A –|B –|C –|D -|E –|F –|G –|H –|I –|J -|Desbloqueio|Juros|IOF|Ouvidoria|SAC)/i.test(l);
-  const fullLine = /^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+(-?[\d.]+,\d{2})\s+([\d.]+,\d{2})$/;
-  const noSaldo = /^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+(-?[\d.]+,\d{2})$/;
-  const onlyDate = /^(\d{2}\/\d{2}\/\d{4})$/;
-  const docVals = /^(?:(\d{6,})\s+)?(-?[\d.]+,\d{2})\s+([\d.]+,\d{2})$/;
-  const onlyVal = /^(-?[\d.]+,\d{2})$/;
-  const used = new Set<number>();
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]; if (skip(line)) continue;
-    let m = line.match(fullLine);
-    if (m) { let mid = m[2].trim(), ref = ''; const parts = mid.split(' '); if (parts.length >= 2 && /^\d{6,}$/.test(parts[parts.length - 1])) { ref = parts[parts.length - 1]; mid = parts.slice(0, -1).join(' '); } push(m[1], mid, parseBRNumber(m[3]), ref); used.add(i); continue; }
-    m = line.match(noSaldo); if (m && !/saldo disponível/i.test(m[2])) { push(m[1], m[2], parseBRNumber(m[3])); used.add(i); }
-  }
+  const fullLine = /^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+(-?[\d.]+,\d{2})\s+([\d.]+,\d{2})$/; const noSaldo = /^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+(-?[\d.]+,\d{2})$/; const onlyDate = /^(\d{2}\/\d{2}\/\d{4})$/; const docVals = /^(?:(\d{6,})\s+)?(-?[\d.]+,\d{2})\s+([\d.]+,\d{2})$/; const onlyVal = /^(-?[\d.]+,\d{2})$/; const used = new Set<number>();
+  for (let i = 0; i < lines.length; i++) { const line = lines[i]; if (skip(line)) continue; let m = line.match(fullLine); if (m) { let mid = m[2].trim(), ref = ''; const parts = mid.split(' '); if (parts.length >= 2 && /^\d{6,}$/.test(parts[parts.length - 1])) { ref = parts[parts.length - 1]; mid = parts.slice(0, -1).join(' '); } push(m[1], mid, parseBRNumber(m[3]), ref); used.add(i); continue; } m = line.match(noSaldo); if (m && !/saldo disponível/i.test(m[2])) { push(m[1], m[2], parseBRNumber(m[3])); used.add(i); } }
   let pendingDate = '', pendingDesc: string[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (used.has(i)) { pendingDate = ''; pendingDesc = []; continue; }
-    const line = lines[i]; if (skip(line)) { pendingDate = ''; pendingDesc = []; continue; }
-    const od = line.match(onlyDate); if (od) { pendingDate = od[1]; pendingDesc = []; continue; }
-    const ds = line.match(/^(\d{2}\/\d{2}\/\d{4})\s+(.*)$/); if (ds && !used.has(i)) { if (line.match(fullLine) || line.match(noSaldo)) continue; pendingDate = ds[1]; pendingDesc = ds[2] ? [ds[2]] : []; continue; }
-    const dv = line.match(docVals); if (dv && pendingDate) { const ref = dv[1] || ''; const amount = parseBRNumber(dv[2]); const desc = pendingDesc.join(' ') || (ref ? `Doc ${ref}` : 'Movimento'); push(pendingDate, desc, amount, ref); pendingDate = ''; pendingDesc = []; continue; }
-    const ov = line.match(onlyVal); if (ov && pendingDate && pendingDesc.length) { push(pendingDate, pendingDesc.join(' '), parseBRNumber(ov[1])); pendingDate = ''; pendingDesc = []; continue; }
-    if (pendingDate && line && !/^\d{2}\/\d{2}/.test(line) && !onlyVal.test(line)) pendingDesc.push(line);
-  }
-  if (out.length === 0) {
-    const flat = raw.replace(/\s+/g, ' '); const re = /(\d{2}\/\d{2}\/\d{4})\s+((?:(?!\d{2}\/\d{2}\/\d{4}).)+?)\s+(-?[\d.]+,\d{2})\s+([\d.]+,\d{2})/g; let mm: RegExpExecArray | null;
-    while ((mm = re.exec(flat))) { let mid = mm[2].trim(); if (/Histórico|Documento|Valor/i.test(mid) && mid.length < 40) continue; let ref = ''; const parts = mid.split(/\s+/); if (parts.length >= 2 && /^\d{6,}$/.test(parts[parts.length - 1])) { ref = parts[parts.length - 1]; mid = parts.slice(0, -1).join(' '); } push(mm[1], mid, parseBRNumber(mm[3]), ref); }
-  }
+  for (let i = 0; i < lines.length; i++) { if (used.has(i)) { pendingDate = ''; pendingDesc = []; continue; } const line = lines[i]; if (skip(line)) { pendingDate = ''; pendingDesc = []; continue; } const od = line.match(onlyDate); if (od) { pendingDate = od[1]; pendingDesc = []; continue; } const ds = line.match(/^(\d{2}\/\d{2}\/\d{4})\s+(.*)$/); if (ds && !used.has(i)) { if (line.match(fullLine) || line.match(noSaldo)) continue; pendingDate = ds[1]; pendingDesc = ds[2] ? [ds[2]] : []; continue; } const dv = line.match(docVals); if (dv && pendingDate) { const ref = dv[1] || ''; const amount = parseBRNumber(dv[2]); const desc = pendingDesc.join(' ') || (ref ? `Doc ${ref}` : 'Movimento'); push(pendingDate, desc, amount, ref); pendingDate = ''; pendingDesc = []; continue; } const ov = line.match(onlyVal); if (ov && pendingDate && pendingDesc.length) { push(pendingDate, pendingDesc.join(' '), parseBRNumber(ov[1])); pendingDate = ''; pendingDesc = []; continue; } if (pendingDate && line && !/^\d{2}\/\d{2}/.test(line) && !onlyVal.test(line)) pendingDesc.push(line); }
+  if (out.length === 0) { const flat = raw.replace(/\s+/g, ' '); const re = /(\d{2}\/\d{2}\/\d{4})\s+((?:(?!\d{2}\/\d{2}\/\d{4}).)+?)\s+(-?[\d.]+,\d{2})\s+([\d.]+,\d{2})/g; let mm: RegExpExecArray | null; while ((mm = re.exec(flat))) { let mid = mm[2].trim(); if (/Histórico|Documento|Valor/i.test(mid) && mid.length < 40) continue; let ref = ''; const parts = mid.split(/\s+/); if (parts.length >= 2 && /^\d{6,}$/.test(parts[parts.length - 1])) { ref = parts[parts.length - 1]; mid = parts.slice(0, -1).join(' '); } push(mm[1], mid, parseBRNumber(mm[3]), ref); } }
   const seen = new Set<string>(); return out.filter((b) => { const k = `${b.date}|${b.amount.toFixed(2)}|${b.description}`; if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
 export function reconcilePmsGetnet(pms: PmsPayment[], getnet: GetnetSale[]): PmsGetnetMatch[] {
   const eligible = getnet.filter((g) => { const st = (g.status || '').toLowerCase(); return !/negada|cancelada|expirado/.test(st) && (g.gross > 0 || g.net > 0); });
   const pool = eligible.map((g) => ({ g, used: false })); const rows: PmsGetnetMatch[] = []; let idx = 0;
-  const normAuth = (v: string) => (v || '').trim().toUpperCase().replace(/\s+/g, '');
+  const normAuth = (v: string) => (v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
   const dayDistance = (a: string, b: string) => { if (!a || !b) return 999; return Math.abs((new Date(a + 'T12:00:00').getTime() - new Date(b + 'T12:00:00').getTime()) / 86400000); };
   const modalityCompatible = (p: PmsPayment, g: GetnetSale) => { const blob = `${g.modality} ${g.form}`.toLowerCase(); if (/pix/.test(p.paymentGroup.toLowerCase()) && /pix/.test(blob)) return true; if (/d[eé]bito/.test(p.paymentGroup.toLowerCase())) return /d[eé]bito/.test(blob); if (p.installments > 1) return /parcel/.test(blob) || g.installments === p.installments; return /cr[eé]dito/.test(blob) || g.installments === 1; };
   const brandOf = (v: string) => { const t = (v || '').toLowerCase(); if (/pix/.test(t)) return 'PIX'; if (/master/.test(t)) return 'Mastercard'; if (/visa/.test(t)) return 'Visa'; if (/\belo\b/.test(t)) return 'Elo'; if (/amex|american/.test(t)) return 'Amex'; if (/hiper/.test(t)) return 'Hipercard'; if (/cabal/.test(t)) return 'Cabal'; return ''; };
   const normName = (v: string) => (v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
   const nameMatch = (a: string, b: string) => { const x = normName(a), y = normName(b); if (!x || !y) return true; if (x === y || x.includes(y) || y.includes(x)) return true; const wa = x.split(' '), wb = new Set(y.split(' ')); return wa[0] === y.split(' ')[0] && wa.filter((w) => w.length > 2 && wb.has(w)).length >= 2; };
+
   for (const p of pms) {
     let best = -1, bestScore = -Infinity, bestReason = '';
-    for (let j = 0; j < pool.length; j++) { if (pool[j].used) continue; const g = pool[j].g; const authMatch = !!normAuth(p.auth) && normAuth(p.auth) === normAuth(g.auth); const amountMatch = moneyEq(p.amount, g.gross); const installmentMatch = p.installments === g.installments; const dateDiff = dayDistance(p.date, g.date); const dateMatch = dateDiff <= 1; const modalityMatch = modalityCompatible(p, g); let score = 0; if (authMatch) score += 100; if (amountMatch) score += 35; if (installmentMatch) score += 15; if (modalityMatch) score += 10; if (dateMatch) score += Math.max(0, 8 - dateDiff * 8); const pb = brandOf(p.paymentGroup), gb = brandOf(`${g.brand} ${g.form}`); if (pb && gb && pb === gb) score += 12; if (g.name && nameMatch(p.guest, g.name)) score += 20; if (score > bestScore) { bestScore = score; best = j; bestReason = authMatch ? 'AUT' : amountMatch && installmentMatch && dateMatch ? 'valor + parcelas + data' : amountMatch && dateMatch ? 'valor + data' : 'critérios secundários'; } }
-    if (best >= 0 && bestScore >= 35) { const g = pool[best].g; pool[best].used = true; const differences: string[] = []; if (!moneyEq(p.amount, g.gross)) differences.push(`Valor bruto: PMS ${formatBRL(p.amount)} × Getnet ${formatBRL(g.gross)}`); if (!moneyEq(p.fee, g.fee)) differences.push(`Taxa: PMS ${formatBRL(p.fee)} × Getnet ${formatBRL(g.fee)}`); if (!moneyEq(p.net, g.net)) differences.push(`Líquido: PMS ${formatBRL(p.net)} × Getnet ${formatBRL(g.net)}`); if (p.installments !== g.installments) differences.push(`Parcelas: PMS ${p.installments} × Getnet ${g.installments}`); if (p.auth && g.auth && normAuth(p.auth) !== normAuth(g.auth)) differences.push(`AUT: PMS ${p.auth} × Getnet ${g.auth}`); else if (!p.auth && g.auth && !/pix/i.test(p.paymentGroup)) differences.push(`AUT: PMS sem AUT × Getnet ${g.auth}`); const pb = brandOf(p.paymentGroup), gb = brandOf(`${g.brand} ${g.form}`); if (pb && gb && pb !== gb) differences.push(`Bandeira: PMS ${pb} × Getnet ${gb}`); if (g.name && !nameMatch(p.guest, g.name)) differences.push(`Nome: PMS ${p.guest} × Getnet ${g.name}`); rows.push({ id: `pm-${++idx}`, side: differences.length ? 'divergence' : 'both', pms: p, getnet: g, score: bestScore, matchedBy: bestReason, differences }); }
-    else rows.push({ id: `pm-${++idx}`, side: 'pms_only', pms: p, score: 0, matchedBy: 'não encontrado', differences: [] });
+    const pAuth = normAuth(p.auth);
+    for (let j = 0; j < pool.length; j++) {
+      if (pool[j].used) continue;
+      const g = pool[j].g;
+      const gAuth = normAuth(g.auth);
+      const authMatch = !!pAuth && !!gAuth && pAuth === gAuth;
+      if (pAuth && gAuth && !authMatch) continue;
+      if (pAuth && !gAuth) continue;
+
+      const amountMatch = moneyEq(p.amount, g.gross);
+      const installmentMatch = p.installments === g.installments;
+      const dateDiff = dayDistance(p.date, g.date);
+      const dateMatch = dateDiff <= 1;
+      const modalityMatch = modalityCompatible(p, g);
+      const pb = brandOf(p.paymentGroup), gb = brandOf(`${g.brand} ${g.form}`);
+      const brandMatch = !!pb && !!gb && pb === gb;
+
+      if (!pAuth && !(amountMatch && dateMatch)) continue;
+
+      let score = 0;
+      if (authMatch) score += 100;
+      if (amountMatch) score += 35;
+      if (installmentMatch) score += 15;
+      if (modalityMatch) score += 10;
+      if (dateMatch) score += 8;
+      if (brandMatch) score += 12;
+      if (g.name && nameMatch(p.guest, g.name)) score += 20;
+      if (score > bestScore) {
+        bestScore = score;
+        best = j;
+        bestReason = authMatch ? 'AUT' : 'valor + data';
+      }
+    }
+
+    if (best >= 0 && bestScore >= 43) {
+      const g = pool[best].g; pool[best].used = true;
+      const differences: string[] = [];
+      if (!moneyEq(p.amount, g.gross)) differences.push(`Valor bruto: PMS ${formatBRL(p.amount)} × Getnet ${formatBRL(g.gross)}`);
+      if (!moneyEq(p.fee, g.fee)) differences.push(`Taxa: PMS ${formatBRL(p.fee)} × Getnet ${formatBRL(g.fee)}`);
+      if (!moneyEq(p.net, g.net)) differences.push(`Líquido: PMS ${formatBRL(p.net)} × Getnet ${formatBRL(g.net)}`);
+      if (p.installments !== g.installments) differences.push(`Parcelas: PMS ${p.installments} × Getnet ${g.installments}`);
+      const pb = brandOf(p.paymentGroup), gb = brandOf(`${g.brand} ${g.form}`);
+      if (pb && gb && pb !== gb) differences.push(`Bandeira: PMS ${pb} × Getnet ${gb}`);
+      if (g.name && !nameMatch(p.guest, g.name)) differences.push(`Nome: PMS ${p.guest} × Getnet ${g.name}`);
+      rows.push({ id: `pm-${++idx}`, side: differences.length ? 'divergence' : 'both', pms: p, getnet: g, score: bestScore, matchedBy: bestReason, differences });
+    } else {
+      rows.push({ id: `pm-${++idx}`, side: 'pms_only', pms: p, score: 0, matchedBy: 'não encontrado', differences: [] });
+    }
   }
   for (const item of pool) if (!item.used) rows.push({ id: `pm-${++idx}`, side: 'getnet_only', getnet: item.g, score: 0, matchedBy: 'não encontrado no PMS', differences: [] });
   return rows;

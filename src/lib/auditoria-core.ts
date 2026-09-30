@@ -217,11 +217,11 @@ export function parsePmsText(raw: string): PmsPayment[] {
     }
 
     const nextPos = i + 1 < matches.length ? (matches[i + 1].index ?? text.length) : text.length;
-    const detail = text.slice(pos + m[0].length, Math.min(nextPos, pos + m[0].length + 700));
+    const detail = text.slice(pos + m[0].length, Math.min(nextPos, pos + m[0].length + 900));
     const parcel = detail.match(/Parcelas\s*:\s*(\d+)\s*x\s*\$?\s*([\d.]+,\d{2})/i);
     const caixa = detail.match(/Caixa\s*:\s*([^\s|]+)/i);
     const pdv = detail.match(/PDV\s*:\s*([^\s|]+)/i);
-    const auth = detail.match(/AUT\.?\s*:\s*([^\s|]+)/i);
+    const auth = detail.match(/AUT\s*\.?\s*:\s*([A-Z0-9]+)/i);
     const user = detail.match(/Usu[aá]rio\s*:\s*(.+?)(?=\s+\|?\s*Reservas?\s*:|\s+Sub\s+Total|$)/i);
     const reservation = detail.match(/Reservas?\s*:\s*#?([^\s|]+)/i);
 
@@ -246,6 +246,47 @@ export function parsePmsText(raw: string): PmsPayment[] {
       reservation: reservation?.[1] || '',
     });
     previousEnd = pos + m[0].length;
+  }
+
+  // Segundo passe: enriquece diretamente pelo bloco da operação no texto original.
+  // Isso evita perder AUT, parcelas ou bandeira quando o PDF quebra a linha em fragmentos.
+  const source = raw
+    .replace(/\r/g, '\n')
+    .replace(/#\s*(?=\d)/g, '#')
+    .replace(/(\d)\s*\/\s*(?=\d)/g, '$1/')
+    .replace(/(\d)\s*\.\s*(?=\d)/g, '$1.')
+    .replace(/(\d)\s*,\s*(?=\d)/g, '$1,');
+  const sourceFlat = source.replace(/\s+/g, ' ');
+
+  for (const payment of out) {
+    const opRe = new RegExp(`#?${payment.operation}\\b`, 'i');
+    const opMatch = opRe.exec(sourceFlat);
+    if (!opMatch) continue;
+
+    const start = opMatch.index;
+    const tail = sourceFlat.slice(start + opMatch[0].length);
+    const nextOp = tail.search(/\s+#?\d{4,}\s+[A-Z]{1,3}\s+\d{2}\/\d{2}\/\d{2,4}\b/i);
+    const block = sourceFlat.slice(start, nextOp >= 0 ? start + opMatch[0].length + nextOp : Math.min(sourceFlat.length, start + 1200));
+
+    if (!payment.auth) {
+      const auth = block.match(/AUT\s*\.?\s*:\s*([A-Z0-9]+)/i);
+      if (auth) payment.auth = auth[1];
+    }
+    const parcel = block.match(/Parcelas\s*:\s*(\d+)\s*x\s*\$?\s*([\d.]+,\d{2})/i);
+    if (parcel) {
+      payment.installments = Number(parcel[1]) || 1;
+      payment.installmentAmount = parseBRNumber(parcel[2]);
+    }
+
+    const before = sourceFlat.slice(Math.max(0, start - 650), start);
+    const headings = [...before.matchAll(/(?:Get\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,80}|Cielo\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,80}|PIX\s+Bradesco(?:\s*\([^)]*\))?)/gi)];
+    if (headings.length) {
+      payment.paymentGroup = headings[headings.length - 1][0]
+        .replace(/^Sub\s+Total\s+/i, '')
+        .replace(/Data\s+Pgto\..*$/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
   }
 
   return out;

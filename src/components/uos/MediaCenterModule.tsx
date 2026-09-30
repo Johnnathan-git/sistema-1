@@ -24,8 +24,68 @@ function webNfcSupported() {
   return typeof window !== 'undefined' && 'NDEFReader' in window;
 }
 
-export async function scanNfcOnce(timeoutMs = 25000): Promise<{ uidHex: string }> {
-  if (!webNfcSupported()) throw new Error('NFC do navegador não disponível. Use Chrome no Android (HTTPS).');
+function usbHidReaderSupported() {
+  return typeof window !== 'undefined' && typeof window.addEventListener === 'function';
+}
+
+function scanUsbHidOnce(timeoutMs = 25000): Promise<{ uidHex: string }> {
+  if (!usbHidReaderSupported()) {
+    return Promise.reject(new Error('Leitor USB não disponível neste navegador.'));
+  }
+
+  return new Promise((resolve, reject) => {
+    let buffer = '';
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      clearTimeout(timeoutTimer);
+      if (idleTimer) clearTimeout(idleTimer);
+    };
+
+    const finish = () => {
+      const uidHex = normalizeUidHex(buffer);
+      if (uidHex.length < 4) return;
+      cleanup();
+      resolve({ uidHex });
+    };
+
+    const scheduleFinish = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        if (buffer.length >= 4) finish();
+      }, 140);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.altKey || event.metaKey) return;
+
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        if (buffer.length >= 4) {
+          event.preventDefault();
+          event.stopPropagation();
+          finish();
+        }
+        return;
+      }
+
+      if (event.key.length !== 1) return;
+      if (!/[0-9a-fA-F]/.test(event.key)) return;
+
+      buffer += event.key;
+      scheduleFinish();
+    };
+
+    const timeoutTimer = setTimeout(() => {
+      cleanup();
+      reject(new Error('Tempo esgotado. Aproxime a mídia do leitor USB novamente.'));
+    }, timeoutMs);
+
+    window.addEventListener('keydown', onKeyDown, true);
+  });
+}
+
+async function scanWebNfcOnce(timeoutMs = 25000): Promise<{ uidHex: string }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const NDEFReaderCtor = (window as any).NDEFReader;
   const reader = new NDEFReaderCtor();
@@ -49,6 +109,17 @@ export async function scanNfcOnce(timeoutMs = 25000): Promise<{ uidHex: string }
       resolve({ uidHex });
     };
   });
+}
+
+export async function scanNfcOnce(timeoutMs = 25000): Promise<{ uidHex: string }> {
+  if (webNfcSupported()) {
+    try {
+      return await scanWebNfcOnce(timeoutMs);
+    } catch (error) {
+      if (!usbHidReaderSupported()) throw error;
+    }
+  }
+  return scanUsbHidOnce(timeoutMs);
 }
 
 function statusBadge(status: NfcCardStatus) {
@@ -91,7 +162,7 @@ export function MediaCenterModule({ mode = 'center' }: { mode?: 'center' | 'vend
   const cards = useMemo(() => listCards(hotel.id), [hotel.id, tick]);
   const logs = useMemo(() => listChargeLogs(80), [tick]);
   const [nfcOk, setNfcOk] = useState(false);
-  useEffect(() => { setNfcOk(webNfcSupported()); }, []);
+  useEffect(() => { setNfcOk(webNfcSupported() || usbHidReaderSupported()); }, []);
 
   const [uidInput, setUidInput] = useState('');
   const [labelInput, setLabelInput] = useState('');

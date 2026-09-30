@@ -207,7 +207,7 @@ export function parsePmsText(raw: string): PmsPayment[] {
 
     const pos = m.index ?? 0;
     const between = text.slice(previousEnd, pos);
-    const groupCandidates = [...between.matchAll(/(?:Cielo\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,90}|PIX\s+Bradesco(?:\s*\([^)]*\))?|PIX|Getnet[^$#]{0,70}|Stone[^$#]{0,70}|Rede[^$#]{0,70})/gi)];
+    const groupCandidates = [...between.matchAll(/(?:Cielo\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,90}|Get\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,90}|Getnet[^$#]{0,70}|PIX\s+Bradesco(?:\s*\([^)]*\))?|PIX|Stone[^$#]{0,70}|Rede[^$#]{0,70})/gi)];
     if (groupCandidates.length) {
       paymentGroup = groupCandidates[groupCandidates.length - 1][0]
         .replace(/^Sub\s+Total\s+/i, '')
@@ -255,7 +255,7 @@ export function parseHitsText(raw: string): HitsPayment[] {
   const lines = raw.split(/\r?\n/); const out: HitsPayment[] = []; let method = 'Geral'; let idx = 0;
   for (const line of lines) {
     const trimmed = line.trim(); if (!trimmed) continue;
-    if (/^(Cielo|PIX|Dinheiro|Getnet|Stone|Rede|Elo|Visa|Master)/i.test(trimmed) && !/^\d{2}\/\d{2}/.test(trimmed) && !/\$/.test(trimmed)) { method = trimmed.replace(/\s+/g, ' ').trim(); continue; }
+    if (/^(Cielo|PIX|Dinheiro|Getnet|Get\s+(?:Master|Visa|Elo|Amex|Hipercard)|Stone|Rede|Elo|Visa|Master)/i.test(trimmed) && !/^\d{2}\/\d{2}/.test(trimmed) && !/\$/.test(trimmed)) { method = trimmed.replace(/\s+/g, ' ').trim(); continue; }
     if (/^Sub Total/i.test(trimmed)) continue;
     const m = trimmed.match(/^(\d{2}\/\d{2}\/\d{2,4})\s+(#?\d+)\s+([A-Z]{1,3})\s+(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+(\$?[\d.]+,\d{2})\s+(\$?[\d.]+,\d{2})\s+(\$?[\d.]+,\d{2})\s+(\$?[\d.]+,\d{2})\s*$/);
     if (m) { out.push({ id: `h-${++idx}`, date: toISODate(m[1]), pgto: m[2], op: m[3], due: toISODate(m[4]), guest: m[5].trim(), method, amount: parseBRNumber(m[6]), fee: parseBRNumber(m[8]), net: parseBRNumber(m[9]) }); continue; }
@@ -345,8 +345,6 @@ export function reconcilePmsGetnet(pms: PmsPayment[], getnet: GetnetSale[]): Pms
       }
     }
 
-    // Só pareia quando há evidência forte: pelo menos 3 dos 4 critérios.
-    // Taxa e líquido não participam da conciliação.
     if (best >= 0 && bestScore >= 3) {
       const g = pool[best].g;
       pool[best].used = true;
@@ -360,23 +358,13 @@ export function reconcilePmsGetnet(pms: PmsPayment[], getnet: GetnetSale[]): Pms
       if (p.installments !== g.installments) differences.push(`Parcelas: PMS ${p.installments} × Getnet ${g.installments}`);
 
       const exact = differences.length === 0;
-      rows.push({
-        id: `pm-${++idx}`,
-        side: exact ? 'both' : 'divergence',
-        pms: p,
-        getnet: g,
-        score: bestScore,
-        matchedBy: exact ? 'valor bruto + AUT + bandeira + parcelas' : '3 de 4 critérios',
-        differences,
-      });
+      rows.push({ id: `pm-${++idx}`, side: exact ? 'both' : 'divergence', pms: p, getnet: g, score: bestScore, matchedBy: exact ? 'valor bruto + AUT + bandeira + parcelas' : '3 de 4 critérios', differences });
     } else {
       rows.push({ id: `pm-${++idx}`, side: 'pms_only', pms: p, score: 0, matchedBy: 'não encontrado', differences: [] });
     }
   }
 
-  for (const item of pool) {
-    if (!item.used) rows.push({ id: `pm-${++idx}`, side: 'getnet_only', getnet: item.g, score: 0, matchedBy: 'não encontrado no PMS', differences: [] });
-  }
+  for (const item of pool) if (!item.used) rows.push({ id: `pm-${++idx}`, side: 'getnet_only', getnet: item.g, score: 0, matchedBy: 'não encontrado no PMS', differences: [] });
   return rows;
 }
 

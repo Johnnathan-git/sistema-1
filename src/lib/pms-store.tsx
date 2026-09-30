@@ -106,6 +106,34 @@ function isActiveReservation(r: Reservation) {
   return r.status !== 'cancelada' && r.status !== 'no_show' && r.status !== 'checkout';
 }
 
+function initialReservationMovements(res: Reservation) {
+  const stamp = chargeTimestamp();
+  const charges: Charge[] =
+    res.totalAmount > 0
+      ? [
+          {
+            id: uid('chg'),
+            description: `Hospedagem · ${res.code}`,
+            amount: res.totalAmount,
+            date: stamp,
+            category: 'hospedagem',
+          },
+        ]
+      : [];
+  const payments =
+    res.paidAmount > 0
+      ? [
+          {
+            id: uid('pay'),
+            amount: res.paidAmount,
+            method: 'Adiantamento da reserva',
+            date: stamp,
+          },
+        ]
+      : [];
+  return { charges, payments };
+}
+
 export type ModuleId =
   | 'recepcao'
   | 'contas'
@@ -148,7 +176,7 @@ interface PmsState {
   setDnd: (roomId: string, dnd: boolean) => void;
   blockRoom: (roomId: string, reason: string) => ActionResult;
   unblockRoom: (roomId: string) => ActionResult;
-  checkIn: (reservationId: string) => ActionResult;
+  checkIn: (reservationId: string, reservationSnapshot?: Reservation) => ActionResult;
   checkOut: (reservationId: string) => ActionResult;
   cancelCheckIn: (reservationId: string) => ActionResult;
   transferRoom: (reservationId: string, newRoomId: string) => ActionResult;
@@ -394,7 +422,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
         const balance = accountBalance(updated);
         return {
           ...updated,
-          status: Math.abs(balance) <= 0.01 ? ('quitada' as const) : ('parcial' as const),
+          status: Math.abs(balance) <= 0.01 ? ('aberta' as const) : ('parcial' as const),
         };
       });
       accountsRef.current = next;
@@ -562,8 +590,8 @@ export function PmsProvider({ children }: { children: ReactNode }) {
   );
 
   const checkIn = useCallback(
-    (reservationId: string): ActionResult => {
-      const res = reservations.find((r) => r.id === reservationId);
+    (reservationId: string, reservationSnapshot?: Reservation): ActionResult => {
+      const res = reservationSnapshot || reservations.find((r) => r.id === reservationId);
       if (!res) return { ok: false, message: 'Reserva não encontrada' };
       if (res.status === 'checkin') return { ok: false, message: 'Já está em check-in' };
       if (res.status !== 'confirmada' && res.status !== 'pendente') {
@@ -598,6 +626,8 @@ export function PmsProvider({ children }: { children: ReactNode }) {
 
       const accId = res.accountId || uid('acc');
       const existingAccount = accountsRef.current.find((a) => a.id === accId);
+      const automatic = initialReservationMovements(res);
+      const shouldSeedFinancials = !existingAccount || (existingAccount.charges.length === 0 && existingAccount.payments.length === 0);
       const account: Account = existingAccount || {
         id: accId,
         type: 'hospede',
@@ -605,15 +635,24 @@ export function PmsProvider({ children }: { children: ReactNode }) {
         guestName: res.guestName,
         reservationId: res.id,
         roomId: res.roomId,
-        status: 'aberta',
-        charges: [],
-        payments: [],
+        status: res.paidAmount > 0 && Math.abs(res.totalAmount - res.paidAmount) > 0.01 ? 'parcial' : 'aberta',
+        charges: automatic.charges,
+        payments: automatic.payments,
         openedAt: hotel.operationalDate,
       };
       const nextAccounts = existingAccount
         ? accountsRef.current.map((a) =>
             a.id === accId
-              ? { ...a, guestName: res.guestName, guestId: res.guestId, reservationId: res.id, roomId: res.roomId, status: 'aberta' as const }
+              ? {
+                  ...a,
+                  guestName: res.guestName,
+                  guestId: res.guestId,
+                  reservationId: res.id,
+                  roomId: res.roomId,
+                  status: 'aberta' as const,
+                  charges: shouldSeedFinancials ? automatic.charges : a.charges,
+                  payments: shouldSeedFinancials ? automatic.payments : a.payments,
+                }
               : a,
           )
         : [...accountsRef.current, account];
@@ -621,11 +660,15 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       setAccounts(nextAccounts);
       saveAccounts(nextAccounts);
 
-      setReservations((prev) =>
-        prev.map((r) =>
-          r.id === reservationId ? { ...r, status: 'checkin' as ReservationStatus, accountId: accId } : r,
-        ),
-      );
+      setReservations((prev) => {
+        const exists = prev.some((r) => r.id === reservationId);
+        if (!exists) return [...prev, { ...res, status: 'checkin' as ReservationStatus, accountId: accId }];
+        return prev.map((r) =>
+          r.id === reservationId
+            ? { ...res, status: 'checkin' as ReservationStatus, accountId: accId }
+            : r,
+        );
+      });
       setRooms((prev) =>
         prev.map((r) => (r.id === res.roomId ? { ...r, occupancy: 'ocupado' as OccupancyStatus } : r)),
       );
@@ -675,11 +718,12 @@ export function PmsProvider({ children }: { children: ReactNode }) {
           r.id === reservationId ? { ...r, status: 'checkout' as ReservationStatus } : r,
         ),
       );
-      setAccounts((prev) =>
-        prev.map((a) =>
-          a.reservationId === reservationId ? { ...a, status: 'quitada' as const } : a,
-        ),
+      const nextAccounts = accountsRef.current.map((a) =>
+        a.reservationId === reservationId ? { ...a, status: 'quitada' as const } : a,
       );
+      accountsRef.current = nextAccounts;
+      setAccounts(nextAccounts);
+      saveAccounts(nextAccounts);
       if (res.roomId) {
         const room = rooms.find((r) => r.id === res.roomId);
         setRooms((prev) =>
@@ -711,9 +755,14 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       if (!res) return { ok: false, message: 'Reserva não encontrada' };
       if (res.status !== 'checkin') return { ok: false, message: 'Não está em check-in' };
       const reservationAccounts = accounts.filter((a) => a.reservationId === reservationId);
-      const hasMovements = reservationAccounts.some((a) => a.charges.length > 0 || a.payments.length > 0);
-      if (hasMovements) {
-        return { ok: false, message: 'Não é possível cancelar o check-in com lançamentos ou pagamentos na conta.' };
+      const hasOperationalMovements = reservationAccounts.some(
+        (a) =>
+          a.charges.some(
+            (charge) => !(charge.category === 'hospedagem' && charge.description.startsWith('Hospedagem ·')),
+          ) || a.payments.some((payment) => payment.method !== 'Adiantamento da reserva'),
+      );
+      if (hasOperationalMovements) {
+        return { ok: false, message: 'Não é possível cancelar o check-in com consumos, serviços ou pagamentos operacionais na conta.' };
       }
       if (listCards().some((card) => card.reservationId === reservationId && card.status === 'ativo')) {
         return { ok: false, message: 'Desvincule as mídias de consumo antes de cancelar o check-in.' };

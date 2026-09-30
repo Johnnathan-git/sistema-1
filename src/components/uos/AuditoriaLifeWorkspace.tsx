@@ -9,7 +9,7 @@ import { TaxasFeeMatrix } from '@/components/uos/TaxasFeeMatrix';
 import {
   parsePmsText, parseGetnetText, parseSantanderText, reconcilePmsGetnet, reconcileGetnetBank,
   formatBRL, formatDateBR, todayISO, isFriday, fileToText, pmsFileToText,
-  type PmsPayment, type GetnetSale, type BankLine, type FeeRule, CHECKLIST,
+  type PmsPayment, type GetnetSale, type BankLine, type FeeRule, type PmsGetnetMatch, CHECKLIST,
 } from '@/lib/auditoria-core';
 import {
   auditStorageKey, defaultFeesForHotel, feesStorageKey, type HotelId,
@@ -102,6 +102,10 @@ function isPmsGetnetPayment(row: PmsPayment): boolean {
   return /^(?:Get(?:net)?\b|PIX\b)/i.test(group);
 }
 
+function isPmsCashPayment(row: PmsPayment): boolean {
+  return /\bdinheiro\b/i.test((row.paymentGroup || '').trim());
+}
+
 export function AuditoriaHotelWorkspace({
   hotelId,
   hotelName,
@@ -182,7 +186,23 @@ export function AuditoriaHotelWorkspace({
   }, [hotelId, tick]);
 
   const pmsForGetnet = useMemo(() => pms.filter(isPmsGetnetPayment), [pms]);
-  const pmsMatches = useMemo(() => reconcilePmsGetnet(pmsForGetnet, getnet), [pmsForGetnet, getnet]);
+  const pmsOtherAcquirers = useMemo(
+    () => pms.filter((row) => !isPmsCashPayment(row) && !isPmsGetnetPayment(row)),
+    [pms],
+  );
+  const pmsVisible = useMemo(() => pms.filter((row) => !isPmsCashPayment(row)), [pms]);
+  const pmsMatches = useMemo(() => {
+    const matched = reconcilePmsGetnet(pmsForGetnet, getnet);
+    const otherRows: PmsGetnetMatch[] = pmsOtherAcquirers.map((row, index) => ({
+      id: `pm-other-${index + 1}-${row.id}`,
+      side: 'divergence',
+      pms: row,
+      score: 0,
+      matchedBy: 'adquirente diferente da Getnet',
+      differences: [`Adquirente no PMS: ${row.paymentGroup || 'não identificada'} — recebimento não pertence à Getnet`],
+    }));
+    return [...otherRows, ...matched];
+  }, [pmsForGetnet, pmsOtherAcquirers, getnet]);
   const bankMatches = useMemo(() => reconcileGetnetBank(getnet, bank, fees), [getnet, bank, fees]);
 
   const setAnswer = useCallback((id: number, patch: Partial<ItemAnswer>) => {
@@ -397,9 +417,10 @@ export function AuditoriaHotelWorkspace({
       if (kind === 'pms') {
         const rows = parsePmsText(text);
         const getnetRows = rows.filter(isPmsGetnetPayment);
-        const ignored = rows.length - getnetRows.length;
+        const otherAcquirers = rows.filter((row) => !isPmsCashPayment(row) && !isPmsGetnetPayment(row));
+        const cashRows = rows.filter(isPmsCashPayment);
         setPms(rows);
-        toast.success(`${getnetRows.length} pagamento(s) Getnet/PIX no PMS${ignored ? ` · ${ignored} fora da Getnet ignorado(s)` : ''}`);
+        toast.success(`${getnetRows.length} Getnet/PIX · ${otherAcquirers.length} outra(s) adquirente(s) com divergência${cashRows.length ? ` · ${cashRows.length} dinheiro ignorado(s)` : ''}`);
       } else {
         const rows = parseSantanderText(text);
         setBank(rows);
@@ -418,9 +439,10 @@ export function AuditoriaHotelWorkspace({
       if (pasteOpen === 'pms') {
         const rows = parsePmsText(pasteText);
         const getnetRows = rows.filter(isPmsGetnetPayment);
-        const ignored = rows.length - getnetRows.length;
+        const otherAcquirers = rows.filter((row) => !isPmsCashPayment(row) && !isPmsGetnetPayment(row));
+        const cashRows = rows.filter(isPmsCashPayment);
         setPms(rows);
-        toast.success(`${getnetRows.length} pagamento(s) Getnet/PIX no PMS${ignored ? ` · ${ignored} fora da Getnet ignorado(s)` : ''}`);
+        toast.success(`${getnetRows.length} Getnet/PIX · ${otherAcquirers.length} outra(s) adquirente(s) com divergência${cashRows.length ? ` · ${cashRows.length} dinheiro ignorado(s)` : ''}`);
       } else if (pasteOpen === 'getnet') {
         const rows = parseGetnetText(pasteText);
         setGetnet((current) => mergeGetnetSales(current, rows));
@@ -698,7 +720,7 @@ export function AuditoriaHotelWorkspace({
         <ConciliationPanel
           sub={conciliacaoSub}
           setSub={setConciliacaoSub}
-          pms={pmsForGetnet}
+          pms={pmsVisible}
           getnet={getnet}
           bank={bank}
           pmsMatches={pmsMatches}

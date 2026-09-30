@@ -12,13 +12,13 @@ import { toast } from 'sonner';
 type MainTab = 'checkins' | 'hospedados' | 'chart';
 
 function addDays(iso: string, n: number): string {
-  const d = new Date(iso + 'T12:00:00');
+  const d = new Date(`${iso}T12:00:00`);
   d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
 }
 
 export function ReceptionModule() {
-  const { hotel, reservations, rooms, cancelCheckIn } = usePms();
+  const { hotel, reservations, rooms, cancelCheckIn, setModule } = usePms();
   const [tab, setTab] = useState<MainTab>('checkins');
   const [q, setQ] = useState('');
   const [selectedResId, setSelectedResId] = useState<string | null>(null);
@@ -44,44 +44,67 @@ export function ReceptionModule() {
   const today = hotel.operationalDate;
   const [filterPeriod, setFilterPeriod] = useState(hotel.operationalDate);
 
-  const arrivals = useMemo(
-    () => reservations.filter((r) => r.checkIn === today && (r.status === 'confirmada' || r.status === 'pendente')),
-    [reservations, today]
+  const pendingArrivals = useMemo(
+    () => reservations.filter((r) => r.status === 'confirmada' || r.status === 'pendente'),
+    [reservations],
+  );
+  const arrivalsToday = useMemo(
+    () => pendingArrivals.filter((r) => r.checkIn === today),
+    [pendingArrivals, today],
   );
   const inHouse = useMemo(() => reservations.filter((r) => r.status === 'checkin'), [reservations]);
   const departuresToday = useMemo(
     () => reservations.filter((r) => r.checkOut === today && r.status === 'checkin'),
-    [reservations, today]
+    [reservations, today],
   );
 
   const dayStats = useMemo(() => {
     const sellable = rooms.filter((r) => r.occupancy !== 'bloqueado').length;
     const occupied = rooms.filter((r) => r.occupancy === 'ocupado').length;
     const pct = sellable > 0 ? ((occupied / sellable) * 100).toFixed(2) : '0.00';
-    const arrAdults = arrivals.reduce((s, r) => s + r.adults, 0);
-    const arrChildren = arrivals.reduce((s, r) => s + r.children, 0);
+    const arrAdults = arrivalsToday.reduce((s, r) => s + r.adults, 0);
+    const arrChildren = arrivalsToday.reduce((s, r) => s + r.children, 0);
     const depAdults = departuresToday.reduce((s, r) => s + r.adults, 0);
     const depChildren = departuresToday.reduce((s, r) => s + r.children, 0);
     const inAdults = inHouse.reduce((s, r) => s + r.adults, 0);
     const inChildren = inHouse.reduce((s, r) => s + r.children, 0);
-    const groupish = arrivals.filter((r) => (r.notes || '').toLowerCase().includes('grupo') || r.adults + r.children > 2).length;
+    const groupish = arrivalsToday.filter(
+      (r) => (r.notes || '').toLowerCase().includes('grupo') || r.adults + r.children > 2,
+    ).length;
     return {
-      sellable, occupied, pct,
-      arrUhs: arrivals.length, arrAdults, arrChildren,
-      depUhs: departuresToday.length, depAdults, depChildren,
-      inAdults, inChildren, totalPax: inAdults + inChildren,
-      groups: groupish, individuais: arrivals.length - groupish,
-      totalRes: arrivals.length, pessoas: arrAdults + arrChildren,
+      sellable,
+      occupied,
+      pct,
+      arrUhs: arrivalsToday.length,
+      arrAdults,
+      arrChildren,
+      depUhs: departuresToday.length,
+      depAdults,
+      depChildren,
+      inAdults,
+      inChildren,
+      totalPax: inAdults + inChildren,
+      groups: groupish,
+      individuais: arrivalsToday.length - groupish,
+      totalRes: arrivalsToday.length,
+      pessoas: arrAdults + arrChildren,
     };
-  }, [rooms, arrivals, departuresToday, inHouse]);
+  }, [rooms, arrivalsToday, departuresToday, inHouse]);
 
   const clearFilters = () => {
-    setQ(''); setFilterGuest(''); setFilterPeriod(today); setFilterRoom(''); setFilterType('');
-    setFilterCanal(''); setFilterGroup(''); setFilterCategory(''); setOnlyPreCI(false);
+    setQ('');
+    setFilterGuest('');
+    setFilterPeriod(today);
+    setFilterRoom('');
+    setFilterType('');
+    setFilterCanal('');
+    setFilterGroup('');
+    setFilterCategory('');
+    setOnlyPreCI(false);
   };
 
   const filteredArrivals = useMemo(() => {
-    let list = arrivals;
+    let list = pendingArrivals;
     if (onlyPreCI) list = list.filter((r) => r.fnrhFilled);
     if (filterPeriod) list = list.filter((r) => r.checkIn === filterPeriod);
     if (filterRoom) list = list.filter((r) => r.roomId === filterRoom || r.roomNumber === filterRoom);
@@ -89,15 +112,27 @@ export function ReceptionModule() {
     if (filterCanal) list = list.filter((r) => r.origin === filterCanal);
     if (filterCategory) list = list.filter((r) => r.roomType === filterCategory);
     const query = (q || filterGuest).trim().toLowerCase();
-    if (query) list = list.filter((r) => r.guestName.toLowerCase().includes(query) || r.code.toLowerCase().includes(query) || (r.roomNumber || '').toLowerCase().includes(query));
+    if (query) {
+      list = list.filter(
+        (r) =>
+          r.guestName.toLowerCase().includes(query) ||
+          r.code.toLowerCase().includes(query) ||
+          (r.roomNumber || '').toLowerCase().includes(query),
+      );
+    }
     if (filterGroup) {
       const g = filterGroup.trim().toLowerCase();
-      list = list.filter((r) => (r.notes || '').toLowerCase().includes(g) || r.guestName.toLowerCase().includes(g));
+      list = list.filter(
+        (r) => (r.notes || '').toLowerCase().includes(g) || r.guestName.toLowerCase().includes(g),
+      );
     }
-    return list;
-  }, [arrivals, q, onlyPreCI, filterPeriod, filterRoom, filterType, filterCanal, filterGuest, filterGroup, filterCategory]);
+    return [...list].sort((a, b) => a.checkIn.localeCompare(b.checkIn) || a.guestName.localeCompare(b.guestName));
+  }, [pendingArrivals, q, onlyPreCI, filterPeriod, filterRoom, filterType, filterCanal, filterGuest, filterGroup, filterCategory]);
 
-  const blocks = useMemo(() => Array.from(new Set(rooms.map((r) => r.block).filter(Boolean) as string[])).sort(), [rooms]);
+  const blocks = useMemo(
+    () => Array.from(new Set(rooms.map((r) => r.block).filter(Boolean) as string[])).sort(),
+    [rooms],
+  );
 
   const filteredInHouse = useMemo(() => {
     let list = inHouse;
@@ -114,10 +149,15 @@ export function ReceptionModule() {
     }
     if (hGroupName.trim()) {
       const qq = hGroupName.trim().toLowerCase();
-      list = list.filter((r) => (r.notes || '').toLowerCase().includes(qq) || r.guestName.toLowerCase().includes(qq));
+      list = list.filter(
+        (r) => (r.notes || '').toLowerCase().includes(qq) || r.guestName.toLowerCase().includes(qq),
+      );
     }
-    if (hGroupFlag === 'sim') list = list.filter((r) => (r.notes || '').toLowerCase().includes('grupo') || r.adults + r.children > 2);
-    else if (hGroupFlag === 'nao') list = list.filter((r) => !(r.notes || '').toLowerCase().includes('grupo') && r.adults + r.children <= 2);
+    if (hGroupFlag === 'sim') {
+      list = list.filter((r) => (r.notes || '').toLowerCase().includes('grupo') || r.adults + r.children > 2);
+    } else if (hGroupFlag === 'nao') {
+      list = list.filter((r) => !(r.notes || '').toLowerCase().includes('grupo') && r.adults + r.children <= 2);
+    }
     if (hVehicle.trim()) {
       const qq = hVehicle.trim().toLowerCase();
       list = list.filter((r) => (r.notes || '').toLowerCase().includes(qq));
@@ -129,61 +169,121 @@ export function ReceptionModule() {
 
   const doCancelCheckIn = (id: string) => {
     if (!window.confirm('Cancelar o check-in deste hóspede? A UH será liberada como suja.')) return;
-    const res = cancelCheckIn(id);
-    if (res.ok) { toast.success(res.message); setSelectedResId(null); }
-    else toast.error(res.message);
+    const result = cancelCheckIn(id);
+    if (result.ok) {
+      toast.success(result.message);
+      setSelectedResId(null);
+    } else {
+      toast.error(result.message);
+    }
   };
 
-  const chartDates = useMemo(() => Array.from({ length: chartDays }, (_, i) => addDays(today, i)), [today, chartDays]);
+  const chartDates = useMemo(
+    () => Array.from({ length: chartDays }, (_, i) => addDays(today, i)),
+    [today, chartDays],
+  );
 
   const cellInfo = (room: Room, date: string) => {
-    if (room.occupancy === 'bloqueado' || room.governance === 'interditado') return { cls: 'bg-orange-400 text-white', label: 'I', title: 'Interditado' };
-    const res = reservations.find((r) => r.roomId === room.id && r.status !== 'cancelada' && r.status !== 'no_show' && r.checkIn <= date && r.checkOut > date);
+    if (room.occupancy === 'bloqueado' || room.governance === 'interditado') {
+      return { cls: 'bg-orange-400 text-white', label: 'I', title: 'Interditado', reservationId: undefined as string | undefined };
+    }
+    const res = reservations.find(
+      (r) =>
+        r.roomId === room.id &&
+        r.status !== 'cancelada' &&
+        r.status !== 'no_show' &&
+        r.checkIn <= date &&
+        r.checkOut > date,
+    );
     if (res) {
       if (res.status === 'checkin') {
-        if (res.checkOut === date) return { cls: 'bg-pink-500 text-white', label: 'CO', title: res.guestName };
-        return { cls: 'bg-blue-600 text-white', label: 'CI', title: res.guestName };
+        return { cls: 'bg-blue-600 text-white', label: 'CI', title: `${res.code} · ${res.guestName}`, reservationId: res.id };
       }
-      if (res.status === 'confirmada') return { cls: 'bg-emerald-500 text-white', label: 'C', title: res.guestName };
-      if (res.status === 'pendente') return { cls: 'bg-sky-300 text-slate-800', label: 'P', title: res.guestName };
+      if (res.status === 'confirmada') {
+        return { cls: 'bg-emerald-500 text-white', label: 'C', title: `${res.code} · ${res.guestName}`, reservationId: res.id };
+      }
+      if (res.status === 'pendente') {
+        return { cls: 'bg-sky-300 text-slate-800', label: 'P', title: `${res.code} · ${res.guestName}`, reservationId: res.id };
+      }
     }
     if (date === today) {
-      if (room.governance === 'sujo') return { cls: 'bg-rose-200 text-rose-900', label: 'S', title: 'Sujo' };
-      if (room.governance === 'limpeza') return { cls: 'bg-amber-200 text-amber-900', label: 'A', title: 'Arrumação' };
-      if (room.governance === 'inspecao') return { cls: 'bg-violet-200 text-violet-900', label: 'Isp', title: 'Inspeção' };
-      if (room.governance === 'limpo') return { cls: 'bg-lime-200 text-lime-900', label: 'L', title: 'Limpo' };
+      if (room.governance === 'sujo') return { cls: 'bg-rose-200 text-rose-900', label: 'S', title: 'Sujo', reservationId: undefined };
+      if (room.governance === 'limpeza') return { cls: 'bg-amber-200 text-amber-900', label: 'A', title: 'Arrumação', reservationId: undefined };
+      if (room.governance === 'inspecao') return { cls: 'bg-violet-200 text-violet-900', label: 'Isp', title: 'Inspeção', reservationId: undefined };
+      if (room.governance === 'limpo') return { cls: 'bg-lime-200 text-lime-900', label: 'L', title: 'Limpo', reservationId: undefined };
     }
-    return { cls: 'bg-slate-50 text-slate-300', label: '·', title: 'Livre' };
+    return { cls: 'bg-slate-50 text-slate-300', label: '·', title: 'Livre', reservationId: undefined };
   };
 
   return (
     <div className="space-y-4 pb-36">
       {modalResId && <ReservationModal reservationId={modalResId} onClose={() => setModalResId(null)} />}
-      {modalAccount && <AccountModal accountId={modalAccount.accountId} reservationId={modalAccount.reservationId} onClose={() => setModalAccount(null)} />}
+      {modalAccount && (
+        <AccountModal
+          accountId={modalAccount.accountId}
+          reservationId={modalAccount.reservationId}
+          onClose={() => setModalAccount(null)}
+        />
+      )}
       {transferOpen && selectedRes && selectedRes.status === 'checkin' && (
         <TransferModal reservation={selectedRes} onClose={() => setTransferOpen(false)} />
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-0">
         <div className="flex flex-wrap items-center gap-1">
-          {([{ id: 'checkins' as const, label: 'Check-ins previstos', icon: LogIn }, { id: 'hospedados' as const, label: 'Hospedados', icon: List }] as const).map(({ id, label, icon: Icon }) => (
-            <button key={id} type="button" onClick={() => setTab(id)} className={cn('px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px inline-flex items-center gap-1.5', tab === id ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800')}>
+          {([
+            { id: 'checkins' as const, label: 'Check-ins previstos', icon: LogIn },
+            { id: 'hospedados' as const, label: 'Hospedados', icon: List },
+          ] as const).map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={cn(
+                'px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px inline-flex items-center gap-1.5',
+                tab === id ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800',
+              )}
+            >
               <Icon className="w-3.5 h-3.5" />{label}
             </button>
           ))}
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-1.5 pb-1">
           <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50/80 p-1">
-            <button type="button" onClick={() => toast.message('Walk-in: use a Central de Reservas com origem Walk-in')} className="h-8 px-2.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-900 text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-emerald-100">
-              <DoorOpen className="w-3.5 h-3.5" /> Walk-in
+            <button
+              type="button"
+              onClick={() => setModule('reservas')}
+              className="h-8 px-2.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-900 text-[12px] font-medium inline-flex items-center gap-1.5 hover:bg-emerald-100"
+            >
+              <DoorOpen className="w-3.5 h-3.5" /> Walk-in / Nova reserva
             </button>
-            <button type="button" disabled={!selectedRes || selectedRes.status !== 'checkin'} onClick={() => { setTransferOpen(true); if (tab !== 'hospedados') setTab('hospedados'); }} className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-medium inline-flex items-center gap-1.5 disabled:opacity-40 hover:bg-slate-50">
+            <button
+              type="button"
+              disabled={!selectedRes || selectedRes.status !== 'checkin'}
+              onClick={() => {
+                setTransferOpen(true);
+                if (tab !== 'hospedados') setTab('hospedados');
+              }}
+              className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-medium inline-flex items-center gap-1.5 disabled:opacity-40 hover:bg-slate-50"
+            >
               <ArrowLeftRight className="w-3.5 h-3.5" /> Transferência
             </button>
-            <button type="button" disabled={!selectedRes || selectedRes.status !== 'checkin'} onClick={() => selectedRes && doCancelCheckIn(selectedRes.id)} className="h-8 px-2.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-[12px] font-medium inline-flex items-center gap-1.5 disabled:opacity-40 hover:bg-amber-100">
+            <button
+              type="button"
+              disabled={!selectedRes || selectedRes.status !== 'checkin'}
+              onClick={() => selectedRes && doCancelCheckIn(selectedRes.id)}
+              className="h-8 px-2.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-[12px] font-medium inline-flex items-center gap-1.5 disabled:opacity-40 hover:bg-amber-100"
+            >
               <Undo2 className="w-3.5 h-3.5" /> Cancelar check-in
             </button>
-            <button type="button" onClick={() => setTab('chart')} className={cn('h-8 px-2.5 rounded-lg border text-[12px] font-medium inline-flex items-center gap-1.5', tab === 'chart' ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}>
+            <button
+              type="button"
+              onClick={() => setTab('chart')}
+              className={cn(
+                'h-8 px-2.5 rounded-lg border text-[12px] font-medium inline-flex items-center gap-1.5',
+                tab === 'chart' ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+              )}
+            >
               <LayoutGrid className="w-3.5 h-3.5" /> Chart
             </button>
           </div>
@@ -198,10 +298,10 @@ export function ReceptionModule() {
               <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Hóspede</span><input value={filterGuest} onChange={(e) => setFilterGuest(e.target.value)} placeholder="Nome" className="w-full h-8 rounded-lg border border-slate-200 px-2" /></label>
               <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Período CI</span><input type="date" value={filterPeriod} onChange={(e) => setFilterPeriod(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white" /></label>
               <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">UH</span><select value={filterRoom} onChange={(e) => setFilterRoom(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option>{rooms.map((r) => <option key={r.id} value={r.id}>{r.number}</option>)}</select></label>
-              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Categoria</span><select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todas</option><option>Standard</option><option>Superior</option><option>Apartamento</option><option>Suite</option></select></label>
-              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Tipo UH</span><select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option><option>Standard</option><option>Superior</option><option>Apartamento</option><option>Suite</option></select></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Categoria</span><select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todas</option><option>Standard</option><option>Superior</option><option>Apartamento</option><option>Suite</option><option>Chalé Master</option><option>Bangalô</option></select></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Tipo UH</span><select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option><option>Standard</option><option>Superior</option><option>Apartamento</option><option>Suite</option><option>Chalé Master</option><option>Bangalô</option></select></label>
               <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Grupos</span><input value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2" /></label>
-              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Canal</span><select value={filterCanal} onChange={(e) => setFilterCanal(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option><option value="direto">Direto</option><option value="booking">Booking</option><option value="walkin">Walk-in</option></select></label>
+              <label className="space-y-0.5"><span className="text-[10px] uppercase text-slate-400 font-semibold">Canal</span><select value={filterCanal} onChange={(e) => setFilterCanal(e.target.value)} className="w-full h-8 rounded-lg border border-slate-200 px-2 bg-white"><option value="">Todos</option><option value="direto">Direto</option><option value="telefone">Telefone</option><option value="booking">Booking</option><option value="expedia">Expedia</option><option value="walkin">Walk-in</option></select></label>
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
               <label className="inline-flex items-center gap-2 text-[12px]"><input type="checkbox" checked={onlyPreCI} onChange={(e) => setOnlyPreCI(e.target.checked)} /> Somente Pré-CI</label>
@@ -216,10 +316,12 @@ export function ReceptionModule() {
               <table className="w-full text-[12px] min-w-max">
                 <thead className="sticky top-0 bg-white z-10"><tr className="text-left text-[10px] uppercase text-slate-400 border-b"><th className="px-3 py-2">Reserva</th><th className="px-3 py-2">Hóspede</th><th className="px-3 py-2">UH</th><th className="px-3 py-2">Check-in</th><th className="px-3 py-2">Check-out</th><th className="px-3 py-2 text-right">Ação</th></tr></thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filteredArrivals.length === 0 ? (<tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">Nenhum check-in previsto</td></tr>) : filteredArrivals.map((r) => (
+                  {filteredArrivals.length === 0 ? (
+                    <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">Nenhum check-in previsto para a data selecionada</td></tr>
+                  ) : filteredArrivals.map((r) => (
                     <tr key={r.id} onClick={() => setSelectedResId(r.id)} onDoubleClick={() => setModalResId(r.id)} className={cn('cursor-pointer', selectedResId === r.id ? 'bg-blue-200 ring-1 ring-inset ring-blue-400' : 'hover:bg-slate-50')}>
-                      <td className="px-3 py-2 font-semibold">{r.code}</td><td className="px-3 py-2">{r.guestName}</td><td className="px-3 py-2">{r.roomNumber || '—'}</td><td className="px-3 py-2">{formatDateBR(r.checkIn)}</td><td className="px-3 py-2">{formatDateBR(r.checkOut)}</td>
-                      <td className="px-3 py-2 text-right"><button type="button" onClick={(e) => { e.stopPropagation(); setModalResId(r.id); }} className="h-7 px-2 rounded-lg bg-blue-600 text-white text-[11px] font-semibold">Check-in</button></td>
+                      <td className="px-3 py-2 font-semibold">{r.code}</td><td className="px-3 py-2">{r.guestName}</td><td className="px-3 py-2">{r.roomNumber || 'A definir'}</td><td className="px-3 py-2">{formatDateBR(r.checkIn)}</td><td className="px-3 py-2">{formatDateBR(r.checkOut)}</td>
+                      <td className="px-3 py-2 text-right"><button type="button" onClick={(e) => { e.stopPropagation(); setModalResId(r.id); }} className="h-7 px-2 rounded-lg bg-blue-600 text-white text-[11px] font-semibold">Abrir / Check-in</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -247,12 +349,12 @@ export function ReceptionModule() {
             <div className="px-4 py-2 border-b bg-slate-50/80 text-[12px] font-semibold">Hospedados · {filteredInHouse.length}</div>
             <div className="overflow-x-auto max-h-[calc(100vh-420px)]">
               <table className="text-[12px] min-w-max w-full">
-                 <thead className="sticky top-0 bg-white z-10"><tr className="text-left text-[10px] uppercase text-slate-400 border-b"><th className="px-3 py-2">UH</th><th className="px-3 py-2">Tipo</th><th className="px-3 py-2">Hóspede</th><th className="px-3 py-2">Reserva</th><th className="px-3 py-2">Check-in</th><th className="px-3 py-2">Check-out</th><th className="px-3 py-2 text-right">Conta</th></tr></thead>
+                <thead className="sticky top-0 bg-white z-10"><tr className="text-left text-[10px] uppercase text-slate-400 border-b"><th className="px-3 py-2">UH</th><th className="px-3 py-2">Tipo</th><th className="px-3 py-2">Hóspede</th><th className="px-3 py-2">Reserva</th><th className="px-3 py-2">Check-in</th><th className="px-3 py-2">Check-out</th><th className="px-3 py-2 text-right">Conta</th></tr></thead>
                 <tbody className="divide-y divide-slate-50">
                   {filteredInHouse.map((r) => (
                     <tr key={r.id} onClick={() => setSelectedResId(r.id)} onDoubleClick={() => setModalResId(r.id)} className={cn('cursor-pointer', selectedResId === r.id ? 'bg-blue-200 ring-1 ring-inset ring-blue-400' : 'hover:bg-slate-50')}>
-                       <td className="px-3 py-2 font-semibold">{r.roomNumber}</td><td className="px-3 py-2">{r.roomType}</td><td className="px-3 py-2">{r.guestName}</td><td className="px-3 py-2">{r.code}</td><td className="px-3 py-2">{formatDateBR(r.checkIn)}</td><td className="px-3 py-2">{formatDateBR(r.checkOut)}</td>
-                       <td className="px-3 py-2 text-right"><button type="button" onClick={(event) => { event.stopPropagation(); setModalAccount({ accountId: r.accountId, reservationId: r.id }); }} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-[11px] font-semibold text-white"><Wallet className="h-3.5 w-3.5" /> Conta</button></td>
+                      <td className="px-3 py-2 font-semibold">{r.roomNumber}</td><td className="px-3 py-2">{r.roomType}</td><td className="px-3 py-2">{r.guestName}</td><td className="px-3 py-2">{r.code}</td><td className="px-3 py-2">{formatDateBR(r.checkIn)}</td><td className="px-3 py-2">{formatDateBR(r.checkOut)}</td>
+                      <td className="px-3 py-2 text-right"><button type="button" onClick={(event) => { event.stopPropagation(); setModalAccount({ accountId: r.accountId, reservationId: r.id }); }} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-[11px] font-semibold text-white"><Wallet className="h-3.5 w-3.5" /> Conta</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -267,20 +369,16 @@ export function ReceptionModule() {
           <div className="px-4 py-2 border-b bg-slate-50/80 flex items-center gap-2 text-[12px]">
             <span className="font-semibold">Chart de ocupação</span>
             <select value={chartDays} onChange={(e) => setChartDays(Number(e.target.value))} className="h-7 rounded border border-slate-200 px-2 text-[12px]">
-              <option value={7}>7 dias</option>
-              <option value={14}>14 dias</option>
-              <option value={21}>21 dias</option>
-              <option value={30}>30 dias</option>
+              <option value={7}>7 dias</option><option value={14}>14 dias</option><option value={21}>21 dias</option><option value={30}>30 dias</option>
             </select>
+            <span className="text-slate-400">Clique em uma reserva para abrir.</span>
           </div>
           <div className="overflow-auto max-h-[calc(100vh-280px)]">
             <table className="text-[11px] min-w-max">
               <thead className="sticky top-0 bg-white z-10">
                 <tr className="border-b">
                   <th className="px-2 py-2 text-left sticky left-0 bg-white">UH</th>
-                  {chartDates.map((d) => (
-                    <th key={d} className="px-1 py-2 text-center min-w-[36px] text-[10px] text-slate-500">{d.slice(8)}</th>
-                  ))}
+                  {chartDates.map((d) => <th key={d} className="px-1 py-2 text-center min-w-[36px] text-[10px] text-slate-500">{d.slice(8)}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -290,7 +388,12 @@ export function ReceptionModule() {
                     {chartDates.map((d) => {
                       const info = cellInfo(room, d);
                       return (
-                        <td key={d} title={info.title} className={cn('px-0.5 py-1 text-center text-[10px] font-semibold', info.cls)}>
+                        <td
+                          key={d}
+                          title={info.title}
+                          onClick={() => info.reservationId && setModalResId(info.reservationId)}
+                          className={cn('px-0.5 py-1 text-center text-[10px] font-semibold', info.cls, info.reservationId && 'cursor-pointer')}
+                        >
                           {info.label}
                         </td>
                       );

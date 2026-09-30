@@ -172,7 +172,6 @@ export function AccountModal({
   const totalCharges = account.charges.reduce((s, c) => s + c.amount, 0);
   const totalPayments = account.payments.reduce((s, p) => s + p.amount, 0);
 
-
   const submitPay = () => {
     const n = Number(payAmount.replace(',', '.'));
     if (!n || n <= 0) {
@@ -198,11 +197,6 @@ export function AccountModal({
 
   const attachCard = async () => {
     if (!account || !res) return;
-
-    if (typeof window === 'undefined' || !('NDEFReader' in window)) {
-      toast.info('Este computador não possui leitura NFC. Abra esta conta em um dispositivo compatível para vincular a mídia.');
-      return;
-    }
 
     setScanningCard(true);
     try {
@@ -332,7 +326,6 @@ export function AccountModal({
           </div>
         )}
 
-
         <div className="px-5 py-3 border-b border-slate-100 grid grid-cols-3 gap-3 shrink-0 bg-slate-50/80">
           <div>
             <p className="text-[10px] uppercase text-slate-400 font-semibold">Lançamentos</p>
@@ -395,12 +388,14 @@ export function AccountModal({
                   )}
                 </div>
               </div>
-              <Button type="button" onClick={attachCard} disabled={scanningCard}>
-                <Nfc /> {scanningCard ? 'Aproxime a mídia…' : 'Aproximar mídia para vincular'}
-              </Button>
+              {linkedCards.length === 0 && (
+                <Button type="button" onClick={attachCard} disabled={scanningCard}>
+                  <Nfc /> {scanningCard ? 'Aproxime a mídia…' : 'Aproximar mídia para vincular'}
+                </Button>
+              )}
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              A vinculação é feita somente por aproximação NFC. Se a mídia for nova, ela será cadastrada automaticamente.
+              A vinculação é feita somente por aproximação. Se a mídia for nova, ela será cadastrada automaticamente.
             </p>
           </div>
         )}
@@ -579,7 +574,6 @@ export function AccountModal({
           </div>
         </div>
       )}
-
     </Overlay>
   );
 }

@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import {
   formatBRL,
   formatDateBR,
+  pmsBrandFromGroup,
+  pmsModalityFromGroup,
   CHECKLIST,
   type BankLine,
   type BankMatchRow,
@@ -126,7 +128,7 @@ export function ConciliationPanel({
           <button type="button" onClick={() => setSub('getnet_bank')} className={cn('h-8 px-3 rounded-md text-[12px] font-semibold transition-colors', sub === 'getnet_bank' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>Getnet × Banco</button>
         </div>
         {sub === 'hits_getnet' && pms.length > 0 && getnet.length > 0 && (
-          <p className="text-[11px] text-slate-500">A conciliação prioriza AUT; valor, data, parcelas e bandeira validam o vínculo.</p>
+          <p className="text-[11px] text-slate-500">Critérios: valor bruto, AUT, bandeira e parcelamento.</p>
         )}
       </div>
 
@@ -201,6 +203,11 @@ export function ConciliationPanel({
                   ? 'bg-rose-100 text-rose-800 border-rose-200'
                   : 'bg-sky-100 text-sky-800 border-sky-200';
 
+            const pmsBrand = row.pms ? pmsBrandFromGroup(row.pms.paymentGroup) : '';
+            const pmsModality = row.pms ? pmsModalityFromGroup(row.pms.paymentGroup, row.pms.installments) : '';
+            const pmsReferenceLabel = row.pms?.account ? 'Conta' : 'Reserva';
+            const pmsReferenceValue = row.pms?.account || row.pms?.reservation || '';
+
             return (
               <div key={row.id} className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/60">
@@ -220,13 +227,13 @@ export function ConciliationPanel({
                   <div className={cn('p-4', row.getnet && 'md:border-r border-slate-100')}>
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">PMS</p>
-                      {row.pms?.paymentGroup && <span className="text-[10px] text-slate-400 truncate">{row.pms.paymentGroup}</span>}
                     </div>
                     {row.pms ? (
                       <div>
                         <DataLine label="Data" value={formatDateBR(row.pms.date)} />
-                        <DataLine label="Operação" value={row.pms.operation ? `#${row.pms.operation}` : '—'} />
-                        <DataLine label="Reserva" value={row.pms.reservation ? `#${row.pms.reservation}` : '—'} />
+                        <DataLine label={pmsReferenceLabel} value={pmsReferenceValue ? (pmsReferenceLabel === 'Reserva' ? `#${pmsReferenceValue}` : pmsReferenceValue) : '—'} />
+                        <DataLine label="Bandeira" value={pmsBrand || '—'} />
+                        <DataLine label="Modalidade" value={pmsModality || '—'} />
                         <DataLine label="AUT" value={row.pms.auth || '—'} strong />
                         <DataLine label="Parcelas" value={`${row.pms.installments}x`} />
                         <DataLine label="Bruto" value={formatBRL(row.pms.amount)} strong />

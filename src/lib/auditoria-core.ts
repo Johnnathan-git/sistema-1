@@ -235,7 +235,7 @@ export function parsePmsText(raw: string): PmsPayment[] {
 
     const pos = m.index ?? 0;
     const between = text.slice(previousEnd, pos);
-    const groupCandidates = [...between.matchAll(/(?:Cielo\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,90}|Get\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,90}|Getnet[^$#]{0,70}|PIX\s+Bradesco(?:\s*\([^)]*\))?|PIX|Stone[^$#]{0,70}|Rede[^$#]{0,70})/gi)];
+    const groupCandidates = [...between.matchAll(/(?:Cielo\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,90}|Dinheiro|Get\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,90}|Getnet[^$#]{0,70}|PIX\s+Bradesco(?:\s*\([^)]*\))?|PIX|Stone[^$#]{0,70}|Rede[^$#]{0,70})/gi)];
     if (groupCandidates.length) paymentGroup = cleanPmsGroup(groupCandidates[groupCandidates.length - 1][0]);
 
     const nextPos = i + 1 < matches.length ? (matches[i + 1].index ?? text.length) : text.length;
@@ -309,7 +309,7 @@ export function parsePmsText(raw: string): PmsPayment[] {
     }
 
     const before = sourceFlat.slice(Math.max(0, start - 650), start);
-    const headings = [...before.matchAll(/(?:Get\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,80}|Cielo\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,80}|PIX\s+Bradesco(?:\s*\([^)]*\))?)/gi)];
+    const headings = [...before.matchAll(/(?:Get\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,80}|Cielo\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,80}|Dinheiro|PIX\s+Bradesco(?:\s*\([^)]*\))?)/gi)];
     if (headings.length) payment.paymentGroup = cleanPmsGroup(headings[headings.length - 1][0]);
   }
 

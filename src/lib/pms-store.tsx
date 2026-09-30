@@ -29,6 +29,7 @@ const K_ROOMS = 'uos-pms-rooms-v1';
 const K_RES = 'uos-pms-reservations-v1';
 const K_LOGS = 'uos-pms-roomlogs-v1';
 const K_CASH = 'uos-pms-cash-v1';
+const ACCOUNTS_STORAGE_KEY = 'uos-pms-accounts-v1';
 
 function loadKey<T>(key: string, fallback: T): T {
   try {
@@ -39,85 +40,12 @@ function loadKey<T>(key: string, fallback: T): T {
     return fallback;
   }
 }
+
 function saveKey(key: string, v: unknown) {
   try {
     localStorage.setItem(key, JSON.stringify(v));
   } catch {}
 }
-
-export type ModuleId =
-  | 'recepcao'
-  | 'contas'
-  | 'reservas'
-  | 'governanca'
-  | 'fiscal'
-  | 'auditoria'
-  | 'aprovacao'
-  | 'cartoes'
-  | 'venda'
-  | 'produtos'
-  | 'acessos';
-
-export const GOVERNANCE_STATUSES: GovernanceStatus[] = [
-  'limpo',
-  'sujo',
-  'limpeza',
-  'inspecao',
-  'interditado',
-];
-
-interface PmsState {
-  hotel: Hotel;
-  rooms: Room[];
-  guests: Guest[];
-  reservations: Reservation[];
-  accounts: Account[];
-  roomLogs: RoomStatusLog[];
-  module: ModuleId;
-  setModule: (m: ModuleId) => void;
-  updateGovernance: (
-    roomIds: string[],
-    governance: GovernanceStatus,
-    notes?: string
-  ) => { ok: number; fail: number; message: string };
-  assignHousekeeper: (roomIds: string[], housekeeper: string | undefined) => void;
-  setRoomNotes: (roomId: string, notes: string) => void;
-  setDnd: (roomId: string, dnd: boolean) => void;
-  blockRoom: (roomId: string, reason: string) => { ok: boolean; message: string };
-  unblockRoom: (roomId: string) => { ok: boolean; message: string };
-  checkIn: (reservationId: string) => { ok: boolean; message: string };
-  checkOut: (reservationId: string) => { ok: boolean; message: string };
-  cancelCheckIn: (reservationId: string) => { ok: boolean; message: string };
-  transferRoom: (
-    reservationId: string,
-    newRoomId: string
-  ) => { ok: boolean; message: string };
-  upsertReservation: (res: Reservation) => void;
-  cancelReservation: (id: string) => void;
-  markFnrh: (id: string) => void;
-  addPayment: (accountId: string, amount: number, method: string) => void;
-  addCharge: (
-    accountId: string,
-    description: string,
-    amount: number,
-    category: Charge['category']
-  ) => { ok: boolean; message: string };
-  addCharges: (
-    accountId: string,
-    charges: { description: string; amount: number; category: Charge['category'] }[]
-  ) => { ok: boolean; message: string };
-  createAvulsaAccount: (guestName: string) => void;
-  createCompanionAccount: (reservationId: string, companionId: string) => { ok: boolean; message: string; accountId?: string };
-  cashOpen: boolean;
-  cashFundo: number;
-  cashOpenedAt: string | null;
-  openCashRegister: (fundo: number) => { ok: boolean; message: string };
-  closeCashRegister: () => { ok: boolean; message: string };
-}
-
-const PmsContext = createContext<PmsState | null>(null);
-
-const ACCOUNTS_STORAGE_KEY = 'uos-pms-accounts-v1';
 
 function loadAccounts(): Account[] {
   try {
@@ -132,10 +60,9 @@ function loadAccounts(): Account[] {
         typeof a === 'object' &&
         typeof (a as Account).id === 'string' &&
         Array.isArray((a as Account).charges) &&
-        Array.isArray((a as Account).payments)
+        Array.isArray((a as Account).payments),
     );
-    if (!valid) return INITIAL_ACCOUNTS;
-    return parsed as Account[];
+    return valid ? (parsed as Account[]) : INITIAL_ACCOUNTS;
   } catch {
     return INITIAL_ACCOUNTS;
   }
@@ -159,7 +86,7 @@ function nowStamp(opDate: string) {
   return `${opDate} ${hh}:${mm}`;
 }
 
-function chargeTimestamp(_opDate: string) {
+function chargeTimestamp() {
   const now = new Date();
   const yyyy = now.getFullYear();
   const mon = String(now.getMonth() + 1).padStart(2, '0');
@@ -170,6 +97,88 @@ function chargeTimestamp(_opDate: string) {
   const ms = String(now.getMilliseconds()).padStart(3, '0');
   return `${yyyy}-${mon}-${dd}T${hh}:${mm}:${ss}.${ms}`;
 }
+
+function overlaps(aIn: string, aOut: string, bIn: string, bOut: string) {
+  return aIn < bOut && aOut > bIn;
+}
+
+function isActiveReservation(r: Reservation) {
+  return r.status !== 'cancelada' && r.status !== 'no_show' && r.status !== 'checkout';
+}
+
+export type ModuleId =
+  | 'recepcao'
+  | 'contas'
+  | 'reservas'
+  | 'governanca'
+  | 'fiscal'
+  | 'auditoria'
+  | 'aprovacao'
+  | 'cartoes'
+  | 'venda'
+  | 'produtos'
+  | 'acessos';
+
+export const GOVERNANCE_STATUSES: GovernanceStatus[] = [
+  'limpo',
+  'sujo',
+  'limpeza',
+  'inspecao',
+  'interditado',
+];
+
+type ActionResult = { ok: boolean; message: string };
+
+interface PmsState {
+  hotel: Hotel;
+  rooms: Room[];
+  guests: Guest[];
+  reservations: Reservation[];
+  accounts: Account[];
+  roomLogs: RoomStatusLog[];
+  module: ModuleId;
+  setModule: (m: ModuleId) => void;
+  updateGovernance: (
+    roomIds: string[],
+    governance: GovernanceStatus,
+    notes?: string,
+  ) => { ok: number; fail: number; message: string };
+  assignHousekeeper: (roomIds: string[], housekeeper: string | undefined) => void;
+  setRoomNotes: (roomId: string, notes: string) => void;
+  setDnd: (roomId: string, dnd: boolean) => void;
+  blockRoom: (roomId: string, reason: string) => ActionResult;
+  unblockRoom: (roomId: string) => ActionResult;
+  checkIn: (reservationId: string) => ActionResult;
+  checkOut: (reservationId: string) => ActionResult;
+  cancelCheckIn: (reservationId: string) => ActionResult;
+  transferRoom: (reservationId: string, newRoomId: string) => ActionResult;
+  upsertReservation: (res: Reservation) => ActionResult;
+  cancelReservation: (id: string) => void;
+  markFnrh: (id: string) => void;
+  addPayment: (accountId: string, amount: number, method: string) => ActionResult;
+  addCharge: (
+    accountId: string,
+    description: string,
+    amount: number,
+    category: Charge['category'],
+  ) => ActionResult;
+  addCharges: (
+    accountId: string,
+    charges: { description: string; amount: number; category: Charge['category'] }[],
+  ) => ActionResult;
+  createAvulsaAccount: (guestName: string) => void;
+  createCompanionAccount: (
+    reservationId: string,
+    companionId: string,
+  ) => { ok: boolean; message: string; accountId?: string };
+  cashOpen: boolean;
+  cashFundo: number;
+  cashOpenedAt: string | null;
+  openCashRegister: (fundo: number) => ActionResult;
+  closeCashRegister: () => ActionResult;
+}
+
+const PmsContext = createContext<PmsState | null>(null);
 
 export function PmsProvider({ children }: { children: ReactNode }) {
   const [hotel] = useState(HOTEL);
@@ -183,9 +192,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
   const [module, setModule] = useState<ModuleId>('recepcao');
   const [cashOpen, setCashOpen] = useState(true);
   const [cashFundo, setCashFundo] = useState(200);
-  const [cashOpenedAt, setCashOpenedAt] = useState<string | null>(() =>
-    nowStamp(HOTEL.operationalDate)
-  );
+  const [cashOpenedAt, setCashOpenedAt] = useState<string | null>(() => nowStamp(HOTEL.operationalDate));
   const [ready, setReady] = useState(false);
 
   const reloadFromStorage = useCallback((key?: string) => {
@@ -215,11 +222,21 @@ export function PmsProvider({ children }: { children: ReactNode }) {
     return () => off?.();
   }, [reloadFromStorage]);
 
-  useEffect(() => { accountsRef.current = accounts; }, [accounts]);
-  useEffect(() => { if (ready) saveAccounts(accounts); }, [accounts, ready]);
-  useEffect(() => { if (ready) saveKey(K_ROOMS, rooms); }, [rooms, ready]);
-  useEffect(() => { if (ready) saveKey(K_RES, reservations); }, [reservations, ready]);
-  useEffect(() => { if (ready) saveKey(K_LOGS, roomLogs); }, [roomLogs, ready]);
+  useEffect(() => {
+    accountsRef.current = accounts;
+  }, [accounts]);
+  useEffect(() => {
+    if (ready) saveAccounts(accounts);
+  }, [accounts, ready]);
+  useEffect(() => {
+    if (ready) saveKey(K_ROOMS, rooms);
+  }, [rooms, ready]);
+  useEffect(() => {
+    if (ready) saveKey(K_RES, reservations);
+  }, [reservations, ready]);
+  useEffect(() => {
+    if (ready) saveKey(K_LOGS, roomLogs);
+  }, [roomLogs, ready]);
   useEffect(() => {
     if (ready) saveKey(K_CASH, { open: cashOpen, fundo: cashFundo, openedAt: cashOpenedAt });
   }, [cashOpen, cashFundo, cashOpenedAt, ready]);
@@ -235,10 +252,31 @@ export function PmsProvider({ children }: { children: ReactNode }) {
             ...entry,
           },
           ...prev,
-        ].slice(0, 200)
+        ].slice(0, 200),
       );
     },
-    [hotel.operationalDate]
+    [hotel.operationalDate],
+  );
+
+  const reservationForAccount = useCallback(
+    (account: Account) =>
+      account.reservationId ? reservations.find((r) => r.id === account.reservationId) : undefined,
+    [reservations],
+  );
+
+  const ensureGuestAccountOpen = useCallback(
+    (account: Account): ActionResult => {
+      if (account.type !== 'hospede') return { ok: true, message: 'OK' };
+      const res = reservationForAccount(account);
+      if (!res || res.status !== 'checkin') {
+        return {
+          ok: false,
+          message: 'A conta do hóspede só pode ser movimentada depois do check-in.',
+        };
+      }
+      return { ok: true, message: 'OK' };
+    },
+    [reservationForAccount],
   );
 
   const openCashRegister = useCallback(
@@ -249,12 +287,9 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       setCashOpen(true);
       setCashFundo(fundo);
       setCashOpenedAt(nowStamp(hotel.operationalDate));
-      return {
-        ok: true,
-        message: `Caixa aberto · fundo R$ ${fundo.toFixed(2).replace('.', ',')}`,
-      };
+      return { ok: true, message: `Caixa aberto · fundo R$ ${fundo.toFixed(2).replace('.', ',')}` };
     },
-    [cashOpen, hotel.operationalDate]
+    [cashOpen, hotel.operationalDate],
   );
 
   const closeCashRegister = useCallback(() => {
@@ -265,79 +300,69 @@ export function PmsProvider({ children }: { children: ReactNode }) {
   }, [cashOpen]);
 
   const addCharge = useCallback(
-    (
-      accountId: string,
-      description: string,
-      amount: number,
-      category: Charge['category']
-    ): { ok: boolean; message: string } => {
+    (accountId: string, description: string, amount: number, category: Charge['category']): ActionResult => {
       if (!accountId) return { ok: false, message: 'Conta não informada' };
       if (!description.trim()) return { ok: false, message: 'Informe a descrição' };
       if (!(amount > 0)) return { ok: false, message: 'Valor inválido' };
       const persisted = loadAccounts();
       const prev = persisted.length ? persisted : accountsRef.current;
-      accountsRef.current = prev;
       const exists = prev.find((a) => a.id === accountId);
       if (!exists) return { ok: false, message: 'Conta não encontrada' };
+      const access = ensureGuestAccountOpen(exists);
+      if (!access.ok) return access;
       if (exists.status === 'quitada') return { ok: false, message: 'Conta já quitada' };
 
       const charge: Charge = {
         id: uid('chg'),
         description: description.trim(),
         amount,
-        date: chargeTimestamp(hotel.operationalDate),
+        date: chargeTimestamp(),
         category: category || 'consumo',
       };
       const next = prev.map((a) =>
         a.id === accountId
-          ? {
-              ...a,
-              status: 'aberta' as const,
-              charges: [...a.charges, charge],
-            }
-          : a
+          ? { ...a, status: 'aberta' as const, charges: [...a.charges, charge] }
+          : a,
       );
       accountsRef.current = next;
       setAccounts(next);
       saveAccounts(next);
       return { ok: true, message: 'Lançamento adicionado à conta' };
     },
-    [hotel.operationalDate]
+    [ensureGuestAccountOpen],
   );
 
   const addCharges = useCallback(
     (
       accountId: string,
-      items: { description: string; amount: number; category: Charge['category'] }[]
-    ): { ok: boolean; message: string } => {
+      items: { description: string; amount: number; category: Charge['category'] }[],
+    ): ActionResult => {
       if (!accountId) return { ok: false, message: 'Conta não informada' };
       if (!items.length) return { ok: false, message: 'Nenhum item para lançar' };
-      for (const it of items) {
-        if (!it.description.trim()) return { ok: false, message: 'Informe a descrição' };
-        if (!(it.amount > 0)) return { ok: false, message: 'Valor inválido' };
+      for (const item of items) {
+        if (!item.description.trim()) return { ok: false, message: 'Informe a descrição' };
+        if (!(item.amount > 0)) return { ok: false, message: 'Valor inválido' };
       }
       const persisted = loadAccounts();
       const prev = persisted.length ? persisted : accountsRef.current;
-      accountsRef.current = prev;
       const exists = prev.find((a) => a.id === accountId);
       if (!exists) return { ok: false, message: 'Conta não encontrada' };
+      const access = ensureGuestAccountOpen(exists);
+      if (!access.ok) return access;
       if (exists.status === 'quitada') return { ok: false, message: 'Conta já quitada' };
 
-      const newCharges: Charge[] = items.map((it) => ({
+      const stamp = chargeTimestamp();
+      const newCharges: Charge[] = items.map((item, index) => ({
         id: uid('chg'),
-        description: it.description.trim(),
-        amount: it.amount,
-        date: chargeTimestamp(hotel.operationalDate),
-        category: it.category || 'consumo',
+        description: item.description.trim(),
+        amount: item.amount,
+        date: index === 0 ? stamp : `${stamp}-${index}`,
+        category: item.category || 'consumo',
       }));
       const next = prev.map((a) =>
         a.id === accountId
-          ? {
-              ...a,
-              status: 'aberta' as const,
-              charges: [...a.charges, ...newCharges],
-            }
-          : a
+          ? { ...a, status: 'aberta' as const, charges: [...a.charges, ...newCharges] }
+          : a,
       );
       accountsRef.current = next;
       setAccounts(next);
@@ -350,18 +375,44 @@ export function PmsProvider({ children }: { children: ReactNode }) {
             : `${newCharges.length} lançamentos adicionados à conta`,
       };
     },
-    [hotel.operationalDate]
+    [ensureGuestAccountOpen],
+  );
+
+  const addPayment = useCallback(
+    (accountId: string, amount: number, method: string): ActionResult => {
+      if (!accountId) return { ok: false, message: 'Conta não informada' };
+      if (!(amount > 0)) return { ok: false, message: 'Valor inválido' };
+      const prev = accountsRef.current;
+      const exists = prev.find((a) => a.id === accountId);
+      if (!exists) return { ok: false, message: 'Conta não encontrada' };
+      const access = ensureGuestAccountOpen(exists);
+      if (!access.ok) return access;
+      const payment = { id: uid('pay'), amount, method, date: chargeTimestamp() };
+      const next = prev.map((a) => {
+        if (a.id !== accountId) return a;
+        const updated = { ...a, payments: [...a.payments, payment] };
+        const balance = accountBalance(updated);
+        return {
+          ...updated,
+          status: Math.abs(balance) <= 0.01 ? ('quitada' as const) : ('parcial' as const),
+        };
+      });
+      accountsRef.current = next;
+      setAccounts(next);
+      saveAccounts(next);
+      return { ok: true, message: 'Pagamento registrado' };
+    },
+    [ensureGuestAccountOpen],
   );
 
   const updateGovernance = useCallback(
     (roomIds: string[], governance: GovernanceStatus, notes?: string) => {
-      const ocupados = rooms.filter(
-        (r) => roomIds.includes(r.id) && r.occupancy === 'ocupado'
+      const occupiedCount = rooms.filter(
+        (r) => roomIds.includes(r.id) && r.occupancy === 'ocupado',
       ).length;
       setRooms((prev) =>
         prev.map((r) => {
-          if (!roomIds.includes(r.id)) return r;
-          if (r.occupancy === 'ocupado') return r;
+          if (!roomIds.includes(r.id) || r.occupancy === 'ocupado') return r;
           let occupancy: OccupancyStatus = r.occupancy;
           let blockedReason = r.blockedReason;
           if (governance === 'interditado' || governance === 'manutencao') {
@@ -389,19 +440,19 @@ export function PmsProvider({ children }: { children: ReactNode }) {
             notes: notes !== undefined ? notes : r.notes,
             blockedReason,
           };
-        })
+        }),
       );
-      const ok = roomIds.length - ocupados;
+      const ok = roomIds.length - occupiedCount;
       return {
         ok,
-        fail: ocupados,
+        fail: occupiedCount,
         message:
-          ocupados > 0
-            ? `${ok} alterada(s), ${ocupados} bloqueada(s) (hóspede in-house)`
+          occupiedCount > 0
+            ? `${ok} alterada(s), ${occupiedCount} bloqueada(s) (hóspede in-house)`
             : `${ok} UH(s) atualizada(s)`,
       };
     },
-    [pushLog, rooms]
+    [pushLog, rooms],
   );
 
   const assignHousekeeper = useCallback((roomIds: string[], housekeeper: string | undefined) => {
@@ -417,11 +468,10 @@ export function PmsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const blockRoom = useCallback(
-    (roomId: string, reason: string) => {
+    (roomId: string, reason: string): ActionResult => {
       const room = rooms.find((r) => r.id === roomId);
       if (!room) return { ok: false, message: 'UH não encontrada' };
-      if (room.occupancy === 'ocupado')
-        return { ok: false, message: 'Não bloqueia UH com hóspede' };
+      if (room.occupancy === 'ocupado') return { ok: false, message: 'Não bloqueia UH com hóspede' };
       setRooms((prev) =>
         prev.map((r) =>
           r.id === roomId
@@ -431,23 +481,17 @@ export function PmsProvider({ children }: { children: ReactNode }) {
                 blockedReason: reason,
                 notes: reason || r.notes,
               }
-            : r
-        )
+            : r,
+        ),
       );
-      pushLog({
-        roomId,
-        roomNumber: room.number,
-        occupancy: 'bloqueado',
-        note: reason,
-        source: 'governanca',
-      });
+      pushLog({ roomId, roomNumber: room.number, occupancy: 'bloqueado', note: reason, source: 'governanca' });
       return { ok: true, message: `${room.number} bloqueada` };
     },
-    [rooms, pushLog]
+    [rooms, pushLog],
   );
 
   const unblockRoom = useCallback(
-    (roomId: string) => {
+    (roomId: string): ActionResult => {
       const room = rooms.find((r) => r.id === roomId);
       if (!room) return { ok: false, message: 'UH não encontrada' };
       if (room.occupancy !== 'bloqueado') return { ok: false, message: 'UH não está bloqueada' };
@@ -463,78 +507,149 @@ export function PmsProvider({ children }: { children: ReactNode }) {
                     ? ('sujo' as GovernanceStatus)
                     : r.governance,
               }
-            : r
-        )
+            : r,
+        ),
       );
-      pushLog({
-        roomId,
-        roomNumber: room.number,
-        occupancy: 'livre',
-        note: 'Desbloqueio',
-        source: 'governanca',
-      });
+      pushLog({ roomId, roomNumber: room.number, occupancy: 'livre', note: 'Desbloqueio', source: 'governanca' });
       return { ok: true, message: `${room.number} desbloqueada` };
     },
-    [rooms, pushLog]
+    [rooms, pushLog],
+  );
+
+  const upsertReservation = useCallback(
+    (res: Reservation): ActionResult => {
+      if (!res.guestName.trim()) return { ok: false, message: 'Informe o nome do hóspede.' };
+      if (!res.checkIn || !res.checkOut || res.checkOut <= res.checkIn) {
+        return { ok: false, message: 'O check-out deve ser posterior ao check-in.' };
+      }
+      if (res.adults < 1) return { ok: false, message: 'A reserva precisa de pelo menos 1 adulto.' };
+      if (res.children < 0) return { ok: false, message: 'Quantidade de crianças inválida.' };
+      if (res.totalAmount < 0) return { ok: false, message: 'Valor total inválido.' };
+
+      if (res.roomId && isActiveReservation(res)) {
+        const room = rooms.find((r) => r.id === res.roomId);
+        if (!room) return { ok: false, message: 'UH selecionada não encontrada.' };
+        if (room.occupancy === 'bloqueado' || room.governance === 'interditado' || room.governance === 'manutencao') {
+          return { ok: false, message: `A UH ${room.number} está indisponível para reserva.` };
+        }
+        const conflict = reservations.find(
+          (other) =>
+            other.id !== res.id &&
+            other.roomId === res.roomId &&
+            isActiveReservation(other) &&
+            overlaps(res.checkIn, res.checkOut, other.checkIn, other.checkOut),
+        );
+        if (conflict) {
+          return {
+            ok: false,
+            message: `A UH ${room.number} já está reservada para ${conflict.guestName} (${conflict.code}) nesse período.`,
+          };
+        }
+      }
+
+      setReservations((prev) => {
+        const index = prev.findIndex((r) => r.id === res.id);
+        if (index >= 0) {
+          const next = [...prev];
+          next[index] = res;
+          return next;
+        }
+        return [...prev, res];
+      });
+      return { ok: true, message: 'Reserva salva' };
+    },
+    [reservations, rooms],
   );
 
   const checkIn = useCallback(
-    (reservationId: string) => {
+    (reservationId: string): ActionResult => {
       const res = reservations.find((r) => r.id === reservationId);
       if (!res) return { ok: false, message: 'Reserva não encontrada' };
       if (res.status === 'checkin') return { ok: false, message: 'Já está em check-in' };
-      if (res.status === 'checkout' || res.status === 'cancelada')
-        return { ok: false, message: 'Reserva não pode fazer check-in' };
-      const room = res.roomId ? rooms.find((r) => r.id === res.roomId) : undefined;
-      if (room && !isRoomReadyForCheckIn(room)) {
+      if (res.status !== 'confirmada' && res.status !== 'pendente') {
+        return { ok: false, message: 'Reserva não está apta para check-in' };
+      }
+      if (!res.roomId) return { ok: false, message: 'Selecione uma UH antes do check-in.' };
+      if (hotel.operationalDate < res.checkIn) {
+        return { ok: false, message: `Check-in previsto para ${res.checkIn.split('-').reverse().join('/')}.` };
+      }
+      if (hotel.operationalDate >= res.checkOut) {
+        return { ok: false, message: 'A data prevista de check-out já foi alcançada. Ajuste a reserva antes do check-in.' };
+      }
+
+      const room = rooms.find((r) => r.id === res.roomId);
+      if (!room) return { ok: false, message: 'UH não encontrada' };
+      const conflictingReservation = reservations.find(
+        (other) =>
+          other.id !== res.id &&
+          other.roomId === res.roomId &&
+          isActiveReservation(other) &&
+          overlaps(res.checkIn, res.checkOut, other.checkIn, other.checkOut),
+      );
+      if (conflictingReservation) {
+        return {
+          ok: false,
+          message: `A UH ${room.number} possui conflito com ${conflictingReservation.code}.`,
+        };
+      }
+      if (!isRoomReadyForCheckIn(room)) {
         return { ok: false, message: roomNotReadyReason(room) || 'UH não pronta' };
       }
+
       const accId = res.accountId || uid('acc');
+      const existingAccount = accountsRef.current.find((a) => a.id === accId);
+      const account: Account = existingAccount || {
+        id: accId,
+        type: 'hospede',
+        guestId: res.guestId,
+        guestName: res.guestName,
+        reservationId: res.id,
+        roomId: res.roomId,
+        status: 'aberta',
+        charges: [],
+        payments: [],
+        openedAt: hotel.operationalDate,
+      };
+      const nextAccounts = existingAccount
+        ? accountsRef.current.map((a) =>
+            a.id === accId
+              ? { ...a, guestName: res.guestName, guestId: res.guestId, reservationId: res.id, roomId: res.roomId, status: 'aberta' as const }
+              : a,
+          )
+        : [...accountsRef.current, account];
+      accountsRef.current = nextAccounts;
+      setAccounts(nextAccounts);
+      saveAccounts(nextAccounts);
+
       setReservations((prev) =>
         prev.map((r) =>
-          r.id === reservationId
-            ? { ...r, status: 'checkin' as ReservationStatus, accountId: accId }
-            : r
-        )
+          r.id === reservationId ? { ...r, status: 'checkin' as ReservationStatus, accountId: accId } : r,
+        ),
       );
-      if (res.roomId) {
-        setRooms((prev) =>
-          prev.map((r) =>
-            r.id === res.roomId ? { ...r, occupancy: 'ocupado' as OccupancyStatus } : r
-          )
-        );
-      }
-      setAccounts((prev) => {
-        if (prev.some((a) => a.id === accId)) return prev;
-        return [
-          ...prev,
-          {
-            id: accId,
-            type: 'hospede' as const,
-            guestId: res.guestId,
-            guestName: res.guestName,
-            reservationId: res.id,
-            roomId: res.roomId,
-            status: 'aberta' as const,
-            charges: [],
-            payments: [],
-            openedAt: hotel.operationalDate,
-          },
-        ];
+      setRooms((prev) =>
+        prev.map((r) => (r.id === res.roomId ? { ...r, occupancy: 'ocupado' as OccupancyStatus } : r)),
+      );
+      pushLog({
+        roomId: room.id,
+        roomNumber: room.number,
+        occupancy: 'ocupado',
+        governance: room.governance,
+        note: `Check-in ${res.code} · ${res.guestName}`,
+        source: 'checkin',
       });
       return { ok: true, message: `Check-in ${res.guestName}` };
     },
-    [reservations, rooms, hotel.operationalDate]
+    [reservations, rooms, hotel.operationalDate, pushLog],
   );
 
   const checkOut = useCallback(
-    (reservationId: string) => {
+    (reservationId: string): ActionResult => {
       const res = reservations.find((r) => r.id === reservationId);
       if (!res) return { ok: false, message: 'Reserva não encontrada' };
       if (res.status !== 'checkin') return { ok: false, message: 'Hóspede não está in-house' };
 
       const reservationAccounts = accounts.filter(
-        (a) => a.reservationId === reservationId && a.type === 'hospede'
+        (a) => a.reservationId === reservationId && a.type === 'hospede',
       );
       const openAccounts = reservationAccounts.filter((a) => Math.abs(accountBalance(a)) > 0.01);
       if (openAccounts.length) {
@@ -546,7 +661,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       }
 
       const linkedCards = listCards().filter(
-        (card) => card.reservationId === reservationId && card.status === 'ativo'
+        (card) => card.reservationId === reservationId && card.status === 'ativo',
       );
       if (linkedCards.length) {
         return {
@@ -557,133 +672,132 @@ export function PmsProvider({ children }: { children: ReactNode }) {
 
       setReservations((prev) =>
         prev.map((r) =>
-          r.id === reservationId ? { ...r, status: 'checkout' as ReservationStatus } : r
-        )
+          r.id === reservationId ? { ...r, status: 'checkout' as ReservationStatus } : r,
+        ),
+      );
+      setAccounts((prev) =>
+        prev.map((a) =>
+          a.reservationId === reservationId ? { ...a, status: 'quitada' as const } : a,
+        ),
       );
       if (res.roomId) {
+        const room = rooms.find((r) => r.id === res.roomId);
         setRooms((prev) =>
           prev.map((r) =>
             r.id === res.roomId
-              ? {
-                  ...r,
-                  occupancy: 'livre' as OccupancyStatus,
-                  governance: 'sujo' as GovernanceStatus,
-                }
-              : r
-          )
+              ? { ...r, occupancy: 'livre' as OccupancyStatus, governance: 'sujo' as GovernanceStatus }
+              : r,
+          ),
         );
+        if (room) {
+          pushLog({
+            roomId: room.id,
+            roomNumber: room.number,
+            occupancy: 'livre',
+            governance: 'sujo',
+            note: `Check-out ${res.code} · ${res.guestName}`,
+            source: 'checkout',
+          });
+        }
       }
       return { ok: true, message: `Check-out ${res.guestName}` };
     },
-    [reservations, accounts]
+    [reservations, accounts, rooms, pushLog],
   );
 
   const cancelCheckIn = useCallback(
-    (reservationId: string) => {
+    (reservationId: string): ActionResult => {
       const res = reservations.find((r) => r.id === reservationId);
       if (!res) return { ok: false, message: 'Reserva não encontrada' };
       if (res.status !== 'checkin') return { ok: false, message: 'Não está em check-in' };
+      const reservationAccounts = accounts.filter((a) => a.reservationId === reservationId);
+      const hasMovements = reservationAccounts.some((a) => a.charges.length > 0 || a.payments.length > 0);
+      if (hasMovements) {
+        return { ok: false, message: 'Não é possível cancelar o check-in com lançamentos ou pagamentos na conta.' };
+      }
+      if (listCards().some((card) => card.reservationId === reservationId && card.status === 'ativo')) {
+        return { ok: false, message: 'Desvincule as mídias de consumo antes de cancelar o check-in.' };
+      }
       setReservations((prev) =>
         prev.map((r) =>
-          r.id === reservationId ? { ...r, status: 'confirmada' as ReservationStatus } : r
-        )
+          r.id === reservationId
+            ? { ...r, status: 'confirmada' as ReservationStatus, accountId: undefined }
+            : r,
+        ),
       );
+      const nextAccounts = accountsRef.current.filter((a) => a.reservationId !== reservationId);
+      accountsRef.current = nextAccounts;
+      setAccounts(nextAccounts);
+      saveAccounts(nextAccounts);
       if (res.roomId) {
         setRooms((prev) =>
           prev.map((r) =>
             r.id === res.roomId
-              ? {
-                  ...r,
-                  occupancy: 'livre' as OccupancyStatus,
-                  governance: 'sujo' as GovernanceStatus,
-                }
-              : r
-          )
+              ? { ...r, occupancy: 'livre' as OccupancyStatus, governance: 'sujo' as GovernanceStatus }
+              : r,
+          ),
         );
       }
       return { ok: true, message: 'Check-in cancelado' };
     },
-    [reservations]
+    [reservations, accounts],
   );
 
   const transferRoom = useCallback(
-    (reservationId: string, newRoomId: string) => {
+    (reservationId: string, newRoomId: string): ActionResult => {
       const res = reservations.find((r) => r.id === reservationId);
       const newRoom = rooms.find((r) => r.id === newRoomId);
       if (!res || !newRoom) return { ok: false, message: 'Dados inválidos' };
       if (res.status !== 'checkin') return { ok: false, message: 'Só transferir hóspede in-house' };
-      if (!isRoomReadyForCheckIn(newRoom))
+      if (!isRoomReadyForCheckIn(newRoom)) {
         return { ok: false, message: roomNotReadyReason(newRoom) || 'UH destino não pronta' };
+      }
+      const conflict = reservations.find(
+        (other) =>
+          other.id !== res.id &&
+          other.roomId === newRoomId &&
+          isActiveReservation(other) &&
+          overlaps(hotel.operationalDate, res.checkOut, other.checkIn, other.checkOut),
+      );
+      if (conflict) return { ok: false, message: `UH destino reservada para ${conflict.code}.` };
+
       const oldId = res.roomId;
       setReservations((prev) =>
         prev.map((r) =>
-          r.id === reservationId
-            ? { ...r, roomId: newRoomId, roomNumber: newRoom.number }
-            : r
-        )
+          r.id === reservationId ? { ...r, roomId: newRoomId, roomNumber: newRoom.number } : r,
+        ),
       );
       setRooms((prev) =>
         prev.map((r) => {
           if (r.id === oldId)
-            return {
-              ...r,
-              occupancy: 'livre' as OccupancyStatus,
-              governance: 'sujo' as GovernanceStatus,
-            };
+            return { ...r, occupancy: 'livre' as OccupancyStatus, governance: 'sujo' as GovernanceStatus };
           if (r.id === newRoomId) return { ...r, occupancy: 'ocupado' as OccupancyStatus };
           return r;
-        })
+        }),
       );
-      if (res.accountId) {
-        setAccounts((prev) =>
-          prev.map((a) => (a.id === res.accountId ? { ...a, roomId: newRoomId } : a))
-        );
-      }
+      setAccounts((prev) =>
+        prev.map((a) =>
+          a.reservationId === reservationId ? { ...a, roomId: newRoomId } : a,
+        ),
+      );
       return { ok: true, message: `Transferido para UH ${newRoom.number}` };
     },
-    [reservations, rooms]
+    [reservations, rooms, hotel.operationalDate],
   );
-
-  const upsertReservation = useCallback((res: Reservation) => {
-    setReservations((prev) => {
-      const i = prev.findIndex((r) => r.id === res.id);
-      if (i >= 0) {
-        const next = [...prev];
-        next[i] = res;
-        return next;
-      }
-      return [...prev, res];
-    });
-  }, []);
 
   const cancelReservation = useCallback((id: string) => {
     setReservations((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: 'cancelada' as ReservationStatus } : r))
+      prev.map((r) =>
+        r.id === id && r.status !== 'checkin' && r.status !== 'checkout'
+          ? { ...r, status: 'cancelada' as ReservationStatus }
+          : r,
+      ),
     );
   }, []);
 
   const markFnrh = useCallback((id: string) => {
     setReservations((prev) => prev.map((r) => (r.id === id ? { ...r, fnrhFilled: true } : r)));
   }, []);
-
-  const addPayment = useCallback(
-    (accountId: string, amount: number, method: string) => {
-      if (!(amount > 0)) return;
-      setAccounts((prev) =>
-        prev.map((a) => {
-          if (a.id !== accountId) return a;
-          return {
-            ...a,
-            payments: [
-              ...a.payments,
-              { id: uid('pay'), amount, method, date: chargeTimestamp(hotel.operationalDate) },
-            ],
-          };
-        })
-      );
-    },
-    [hotel.operationalDate]
-  );
 
   const createAvulsaAccount = useCallback(
     (guestName: string) => {
@@ -701,7 +815,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
         },
       ]);
     },
-    [hotel.operationalDate]
+    [hotel.operationalDate],
   );
 
   const createCompanionAccount = useCallback(
@@ -709,28 +823,35 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       const res = reservations.find((r) => r.id === reservationId);
       const companion = res?.companions?.find((c) => c.id === companionId);
       if (!res || !companion) return { ok: false, message: 'Acompanhante não encontrado' };
-      if (res.status !== 'checkin') return { ok: false, message: 'A conta do acompanhante só pode ser criada após o check-in' };
-      if (companion.accountId) return { ok: true, message: 'Conta do acompanhante já existe', accountId: companion.accountId };
+      if (res.status !== 'checkin') {
+        return { ok: false, message: 'A conta do acompanhante só pode ser criada após o check-in' };
+      }
+      if (companion.accountId) {
+        return { ok: true, message: 'Conta do acompanhante já existe', accountId: companion.accountId };
+      }
       const existing = accounts.find(
-        (a) => a.reservationId === reservationId && a.guestId === companion.id
+        (a) => a.reservationId === reservationId && a.guestId === companion.id,
       );
       const accountId = existing?.id || uid('acc');
       if (!existing) {
-        setAccounts((prev) => [
-          ...prev,
+        const nextAccounts = [
+          ...accountsRef.current,
           {
             id: accountId,
-            type: 'hospede',
+            type: 'hospede' as const,
             guestId: companion.id,
             guestName: companion.name,
             reservationId,
             roomId: res.roomId,
-            status: 'aberta',
+            status: 'aberta' as const,
             charges: [],
             payments: [],
             openedAt: hotel.operationalDate,
           },
-        ]);
+        ];
+        accountsRef.current = nextAccounts;
+        setAccounts(nextAccounts);
+        saveAccounts(nextAccounts);
       }
       setReservations((prev) =>
         prev.map((r) =>
@@ -738,15 +859,15 @@ export function PmsProvider({ children }: { children: ReactNode }) {
             ? {
                 ...r,
                 companions: (r.companions || []).map((c) =>
-                  c.id === companionId ? { ...c, accountId } : c
+                  c.id === companionId ? { ...c, accountId } : c,
                 ),
               }
-            : r
-        )
+            : r,
+        ),
       );
       return { ok: true, message: 'Conta do acompanhante criada', accountId };
     },
-    [reservations, accounts, hotel.operationalDate]
+    [reservations, accounts, hotel.operationalDate],
   );
 
   const value = useMemo(
@@ -814,7 +935,7 @@ export function PmsProvider({ children }: { children: ReactNode }) {
       addCharges,
       createAvulsaAccount,
       createCompanionAccount,
-    ]
+    ],
   );
 
   if (!ready) {

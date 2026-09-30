@@ -64,6 +64,55 @@ export function uidHexToDec(hex: string): string {
   }
 }
 
+function reverseHexBytes(hex: string): string {
+  const clean = normalizeUidHex(hex);
+  if (!clean || clean.length % 2 !== 0) return '';
+  return clean.match(/.{2}/g)?.reverse().join('') || '';
+}
+
+/**
+ * Alguns leitores USB 125 kHz enviam o mesmo UID como decimal e com a ordem
+ * dos bytes invertida. Ex.: 2664975069 = 0x9ED84ADD => DD4AD89E invertido.
+ * Esta função gera as representações equivalentes para impedir que a mesma
+ * mídia física seja cadastrada/vinculada duas vezes.
+ */
+function uidIdentityCandidates(raw: string): Set<string> {
+  const out = new Set<string>();
+  const value = String(raw || '').trim();
+  const hex = normalizeUidHex(value);
+
+  if (hex) {
+    out.add(hex);
+    const reversed = reverseHexBytes(hex);
+    if (reversed) out.add(reversed);
+  }
+
+  const digits = value.replace(/\D/g, '');
+  if (/^\d{8,12}$/.test(digits)) {
+    try {
+      let decimalHex = BigInt(digits).toString(16).toUpperCase();
+      if (decimalHex.length % 2 !== 0) decimalHex = `0${decimalHex}`;
+      if (decimalHex.length <= 8) decimalHex = decimalHex.padStart(8, '0');
+      out.add(decimalHex);
+      const reversedDecimal = reverseHexBytes(decimalHex);
+      if (reversedDecimal) out.add(reversedDecimal);
+    } catch {
+      // Mantém apenas as representações já obtidas acima.
+    }
+  }
+
+  return out;
+}
+
+function samePhysicalMedia(a: string, b: string): boolean {
+  const aa = uidIdentityCandidates(a);
+  const bb = uidIdentityCandidates(b);
+  for (const candidate of aa) {
+    if (bb.has(candidate)) return true;
+  }
+  return false;
+}
+
 function loadCards(): NfcCard[] {
   if (typeof localStorage === 'undefined') return [];
   try {
@@ -104,10 +153,22 @@ export function listCards(hotelId?: string): NfcCard[] {
   return filtered.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
+function getEquivalentCards(rawUid: string): NfcCard[] {
+  if (!rawUid) return [];
+  return loadCards().filter((card) =>
+    samePhysicalMedia(rawUid, card.uidHex) ||
+    (!!card.uidDec && samePhysicalMedia(rawUid, card.uidDec)),
+  );
+}
+
 export function getCardByUid(uidHex: string): NfcCard | null {
-  const hex = normalizeUidHex(uidHex);
-  if (!hex) return null;
-  return loadCards().find((c) => c.uidHex === hex) || null;
+  const matches = getEquivalentCards(uidHex);
+  if (!matches.length) return null;
+  return matches.sort((a, b) => {
+    if (a.status === 'ativo' && b.status !== 'ativo') return -1;
+    if (b.status === 'ativo' && a.status !== 'ativo') return 1;
+    return b.updatedAt.localeCompare(a.updatedAt);
+  })[0] || null;
 }
 
 export function getCardById(id: string): NfcCard | null {
@@ -122,7 +183,18 @@ export function registerCard(input: {
 }): { ok: true; card: NfcCard } | { ok: false; message: string } {
   const hex = normalizeUidHex(input.uidHex);
   if (hex.length < 4) return { ok: false, message: 'UID inválido (mín. 4 caracteres hex)' };
-  if (getCardByUid(hex)) return { ok: false, message: 'Este UID já está cadastrado' };
+
+  const existing = getEquivalentCards(input.uidHex);
+  if (existing.length) {
+    const linked = existing.find((card) => card.status === 'ativo' && card.accountId);
+    return {
+      ok: false,
+      message: linked
+        ? `Esta mídia já está cadastrada e vinculada a ${linked.guestName || 'outra conta'}`
+        : 'Esta mídia já está cadastrada',
+    };
+  }
+
   const now = new Date().toISOString();
   const card: NfcCard = {
     id: uid('nfc'),
@@ -173,9 +245,30 @@ export function linkCard(input: {
   const i = cards.findIndex((c) => c.id === input.cardId);
   if (i < 0) return { ok: false, message: 'Cartão não encontrado' };
   const c = cards[i];
+
   if (c.status === 'bloqueado' || c.status === 'perdido') {
     return { ok: false, message: 'Cartão bloqueado — desbloqueie antes de vincular' };
   }
+
+  const equivalentActive = cards.find((other) => {
+    if (other.id === c.id || other.status !== 'ativo') return false;
+    const sameMedia =
+      samePhysicalMedia(c.uidHex, other.uidHex) ||
+      (!!c.uidDec && samePhysicalMedia(c.uidDec, other.uidHex)) ||
+      (!!other.uidDec && samePhysicalMedia(c.uidHex, other.uidDec));
+    if (!sameMedia) return false;
+    return other.accountId !== input.accountId ||
+      other.reservationId !== input.reservationId ||
+      other.guestId !== input.guestId;
+  });
+
+  if (equivalentActive) {
+    return {
+      ok: false,
+      message: `Esta mídia física já está vinculada a ${equivalentActive.guestName || 'outra conta'}. Desvincule-a antes de vincular novamente.`,
+    };
+  }
+
   if (c.status === 'ativo') {
     const sameOwner =
       c.accountId === input.accountId &&
@@ -188,6 +281,7 @@ export function linkCard(input: {
       };
     }
   }
+
   cards[i] = {
     ...c,
     status: 'ativo',
@@ -235,7 +329,20 @@ export function lookupByUid(uidHex: string): {
   canCharge: boolean;
   message: string;
 } {
-  const card = getCardByUid(uidHex);
+  const equivalent = getEquivalentCards(uidHex);
+  if (!equivalent.length) return { card: null, canCharge: false, message: 'Pulseira não cadastrada' };
+
+  const active = equivalent.filter((card) => card.status === 'ativo' && card.accountId);
+  const activeOwners = new Set(active.map((card) => `${card.accountId}|${card.reservationId || ''}|${card.guestId || ''}`));
+  if (activeOwners.size > 1) {
+    return {
+      card: active[0] || equivalent[0],
+      canCharge: false,
+      message: 'Conflito: esta mesma mídia está vinculada a mais de uma conta. Desvincule a duplicidade antes de usar.',
+    };
+  }
+
+  const card = active[0] || getCardByUid(uidHex);
   if (!card) return { card: null, canCharge: false, message: 'Pulseira não cadastrada' };
   if (card.status === 'bloqueado') return { card, canCharge: false, message: 'Pulseira bloqueada' };
   if (card.status === 'perdido') return { card, canCharge: false, message: 'Pulseira marcada como perdida' };

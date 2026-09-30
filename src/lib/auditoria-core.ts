@@ -20,6 +20,7 @@ export interface PmsPayment {
   auth: string;
   user: string;
   reservation: string;
+  account: string;
 }
 export type PmsGetnetMatchSide = 'both' | 'pms_only' | 'getnet_only' | 'divergence';
 export interface PmsGetnetMatch {
@@ -183,6 +184,33 @@ export async function fileToText(file: File): Promise<string> {
   return file.text();
 }
 
+function cleanPmsGroup(value: string): string {
+  return (value || '')
+    .replace(/^Sub\s+Total\s+/i, '')
+    .split(/\s+Data\s+Pgto\.?\s+/i)[0]
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function pmsBrandFromGroup(value: string): string {
+  const t = (value || '').toLowerCase();
+  if (/master/.test(t)) return 'Mastercard';
+  if (/visa/.test(t)) return 'Visa';
+  if (/\belo\b/.test(t)) return 'Elo';
+  if (/amex|american/.test(t)) return 'Amex';
+  if (/hiper/.test(t)) return 'Hipercard';
+  if (/cabal/.test(t)) return 'Cabal';
+  return '';
+}
+
+export function pmsModalityFromGroup(value: string, installments = 1): string {
+  const t = (value || '').toLowerCase();
+  if (/d[eé]bito/.test(t)) return 'Débito';
+  if (/cr[eé]dito/.test(t)) return installments > 1 ? `Crédito ${installments}x` : 'Crédito à vista';
+  if (installments > 1) return `Parcelado ${installments}x`;
+  return '';
+}
+
 export function parsePmsText(raw: string): PmsPayment[] {
   const out: PmsPayment[] = [];
   let paymentGroup = 'Geral';
@@ -208,13 +236,7 @@ export function parsePmsText(raw: string): PmsPayment[] {
     const pos = m.index ?? 0;
     const between = text.slice(previousEnd, pos);
     const groupCandidates = [...between.matchAll(/(?:Cielo\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,90}|Get\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,90}|Getnet[^$#]{0,70}|PIX\s+Bradesco(?:\s*\([^)]*\))?|PIX|Stone[^$#]{0,70}|Rede[^$#]{0,70})/gi)];
-    if (groupCandidates.length) {
-      paymentGroup = groupCandidates[groupCandidates.length - 1][0]
-        .replace(/^Sub\s+Total\s+/i, '')
-        .replace(/Data\s+Pgto\..*$/i, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-    }
+    if (groupCandidates.length) paymentGroup = cleanPmsGroup(groupCandidates[groupCandidates.length - 1][0]);
 
     const nextPos = i + 1 < matches.length ? (matches[i + 1].index ?? text.length) : text.length;
     const detail = text.slice(pos + m[0].length, Math.min(nextPos, pos + m[0].length + 900));
@@ -222,8 +244,9 @@ export function parsePmsText(raw: string): PmsPayment[] {
     const caixa = detail.match(/Caixa\s*:\s*([^\s|]+)/i);
     const pdv = detail.match(/PDV\s*:\s*([^\s|]+)/i);
     const auth = detail.match(/AUT\s*\.?\s*:\s*([A-Z0-9]+)/i);
-    const user = detail.match(/Usu[aá]rio\s*:\s*(.+?)(?=\s+\|?\s*Reservas?\s*:|\s+Sub\s+Total|$)/i);
+    const user = detail.match(/Usu[aá]rio\s*:\s*(.+?)(?=\s+\|?\s*(?:Reservas?|Contas?)\s*:|\s+Sub\s+Total|$)/i);
     const reservation = detail.match(/Reservas?\s*:\s*#?([^\s|]+)/i);
+    const account = detail.match(/Contas?\s*:\s*#?([^\s|]+)/i);
 
     out.push({
       id: `pms-${out.length + 1}`,
@@ -244,12 +267,11 @@ export function parsePmsText(raw: string): PmsPayment[] {
       auth: auth?.[1] || '',
       user: user?.[1]?.trim() || '',
       reservation: reservation?.[1] || '',
+      account: account?.[1] || '',
     });
     previousEnd = pos + m[0].length;
   }
 
-  // Segundo passe: enriquece diretamente pelo bloco da operação no texto original.
-  // Isso evita perder AUT, parcelas ou bandeira quando o PDF quebra a linha em fragmentos.
   const source = raw
     .replace(/\r/g, '\n')
     .replace(/#\s*(?=\d)/g, '#')
@@ -277,16 +299,18 @@ export function parsePmsText(raw: string): PmsPayment[] {
       payment.installments = Number(parcel[1]) || 1;
       payment.installmentAmount = parseBRNumber(parcel[2]);
     }
+    if (!payment.account) {
+      const account = block.match(/Contas?\s*:\s*#?([^\s|]+)/i);
+      if (account) payment.account = account[1];
+    }
+    if (!payment.reservation) {
+      const reservation = block.match(/Reservas?\s*:\s*#?([^\s|]+)/i);
+      if (reservation) payment.reservation = reservation[1];
+    }
 
     const before = sourceFlat.slice(Math.max(0, start - 650), start);
     const headings = [...before.matchAll(/(?:Get\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,80}|Cielo\s+(?:Master|Visa|Elo|Amex|Hipercard)[^$#]{0,80}|PIX\s+Bradesco(?:\s*\([^)]*\))?)/gi)];
-    if (headings.length) {
-      payment.paymentGroup = headings[headings.length - 1][0]
-        .replace(/^Sub\s+Total\s+/i, '')
-        .replace(/Data\s+Pgto\..*$/i, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-    }
+    if (headings.length) payment.paymentGroup = cleanPmsGroup(headings[headings.length - 1][0]);
   }
 
   return out;
@@ -351,16 +375,7 @@ export function reconcilePmsGetnet(pms: PmsPayment[], getnet: GetnetSale[]): Pms
   let idx = 0;
 
   const normAuth = (v: string) => (v || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const brandOf = (v: string) => {
-    const t = (v || '').toLowerCase();
-    if (/master/.test(t)) return 'Mastercard';
-    if (/visa/.test(t)) return 'Visa';
-    if (/\belo\b/.test(t)) return 'Elo';
-    if (/amex|american/.test(t)) return 'Amex';
-    if (/hiper/.test(t)) return 'Hipercard';
-    if (/cabal/.test(t)) return 'Cabal';
-    return '';
-  };
+  const brandOf = (v: string) => pmsBrandFromGroup(v);
 
   for (const p of pms) {
     const pAuth = normAuth(p.auth);
